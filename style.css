@@ -421,3 +421,34 @@ details.guide > summary { font-size:12px; }
 
 .pn .nmu { display:flex; flex-direction:column; line-height:1.2; white-space:normal; }
 .pn .nmu .mem { font-size:11.5px; color: var(--muted); font-weight:500; }
+
+/* ===== Kad perlawanan (papan skor) ===== */
+.mc { display:block; text-decoration:none; color:inherit; padding:10px 4px 10px; border-radius:12px; }
+.mc + .mc { border-top:1px solid var(--line); }
+.mc:active { background: var(--w); }
+.mc-h { display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:11.5px; color: var(--muted); }
+.mc-code { font-family: var(--num); font-weight:800; font-size:12px; color: var(--tb); background: var(--w); padding:1px 7px; border-radius:6px; }
+.mc-ctx { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mc-st { font-weight:700; white-space:nowrap; display:inline-flex; align-items:center; gap:5px; }
+.mc-st.ok { color: var(--win); }
+.mc-st.on { color:#16a34a; }
+.mc-r { display:grid; grid-template-columns: var(--cols, 28px minmax(0,1fr) 40px); align-items:center; column-gap:6px; padding:3px 0; }
+.mc-r .av { width:26px; height:26px; }
+.av-ph { background: var(--line) !important; }
+.mc-n { min-width:0; display:flex; flex-direction:column; line-height:1.15; }
+.mc-n b { font-weight:700; font-size:14.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mc-n small { font-size:11px; color: var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mc-n.ph { color: var(--muted); font-style:italic; font-weight:600; font-size:13.5px; }
+.mc-g { text-align:center; font-family: var(--num); font-variant-numeric: tabular-nums; font-size:14px; color: var(--muted); }
+.mc-g.gw { color: var(--ink); font-weight:800; }
+.mc-t { justify-self:end; min-width:34px; text-align:center; font-family: var(--num); font-variant-numeric: tabular-nums; font-size:18px; font-weight:800;
+  border-radius:8px; padding:2px 0; color: var(--muted); background: var(--bg); }
+.mc-t:empty { background: transparent; }
+.mc-r.w .mc-t { background:#0f172a; color:#ffb02e; }
+.mc-r.w .mc-n b { color: var(--ink); }
+.mc-r.w .mc-n b::after { content:' ●'; color: var(--or); font-size:9px; vertical-align:middle; }
+.mc-r.l .mc-n b { color: var(--muted); font-weight:600; }
+.mc.live .mc-t { background: color-mix(in srgb, #22c55e 14%, transparent); color:#15803d; }
+.mc-f { margin:6px 0 0 34px; font-size:11.5px; color: var(--muted); }
+@media (prefers-color-scheme: dark) { .mc-r.w .mc-t { background:#020617; } }
+.mc.live .mc-t:empty { background: transparent; }

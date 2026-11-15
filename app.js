@@ -4,7 +4,7 @@ import { playDeal } from './draw-anim.js';
 import * as cloud from './cloud.js';
 import * as LV from './live.js';
 
-const VERSION = '2.8.0';
+const VERSION = '2.8.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -114,7 +114,7 @@ document.getElementById('acct').onclick = () => showAccount();
 document.getElementById('bell').onclick = () => { if (_cur) { location.hash = `#/t/${_cur}/keputusan`; setTimeout(() => document.getElementById('pendBox')?.scrollIntoView({ behavior: 'smooth' }), 200); } };
 document.addEventListener('click', e => {
   const p = e.target.closest('[data-pid]');
-  if (p && !e.target.closest('a.mrow, a.bm, input, select, button')) { const t = current(); if (t) showProfile(t, p.dataset.pid); }
+  if (p && !e.target.closest('a.mrow, a.mc, a.bm, input, select, button')) { const t = current(); if (t) showProfile(t, p.dataset.pid); }
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') document.getElementById('modal').hidden = true; });
 let _cur = null, _back = 'keputusan';
@@ -596,19 +596,54 @@ function chipsHtml(t, m) {
   return m.rubbers.map((r, i) => `<div class="chips">${E.isTeam(t) ? `<span class="muted small" style="align-self:center">${i ? 'Regu' : 'Single'}</span>` : ''}${r.sets.map(([x, y]) =>
     `<span class="chip ${(x > y && wa) || (y > x && wb) ? 'w' : ''}">${x}-${y}</span>`).join('')}</div>`).join('');
 }
+// Kad perlawanan gaya papan skor: dua baris (satu setiap pihak), skor setiap game dalam lajur, jumlah set di kanan.
+function sideName(t, id, src) {
+  if (!id) return `<span class="mc-n ph">${esc(E.placeholderLabel(src) || 'Menunggu')}</span>`;
+  if (id === 'BYE') return '<span class="mc-n ph">BYE</span>';
+  const p = E.pobj(t, id) || {}, mem = p.members || [], draw = E.usesDraw(t);
+  if (mem.length > 1 && draw) {
+    const i = t.participants.indexOf(p) + 1, label = E.isTeam(t) ? p.name : `Regu ${i}`;
+    return `<span class="mc-n" data-pid="${id}"><b>${esc(label)}</b><small>${mem.map(esc).join(' · ')}</small></span>`;
+  }
+  return `<span class="mc-n" data-pid="${id}"><b>${esc(E.pname(t, id))}</b>${p.unit ? `<small>${esc(p.unit)}</small>` : ''}</span>`;
+}
+function sideAv(t, id) {
+  if (!id || id === 'BYE') return '<span class="av av-ph"></span>';
+  const p = E.pobj(t, id) || {}, n = E.pname(t, id);
+  if ((p.members || []).length > 1 && E.usesDraw(t)) {
+    const i = t.participants.indexOf(p) + 1, tag = E.isTeam(t) ? E.teamWord(t)[0] + ((n.match(/\d+/) || [i])[0]) : 'R' + i;
+    return `<span class="av av-n" style="background:${avColor(n)}">${esc(tag)}</span>`;
+  }
+  return av(n);
+}
 function matchRow(t, m, no) {
-  const r = E.evaluateMatch(t, m);
-  const has = m.rubbers.some(x => x.sets.length);
-  const sc = m.status === 'done' ? `<span class="sc">${E.isTeam(t) ? `${r.ra}-${r.rb}` : `${r.sa}-${r.sb}`}</span>`
-    : has || m.lt ? `<span class="sc live">${m.lt ? 'M' + m.lt : 'LANGSUNG'}</span>` : `<span class="sc v">v</span>`;
+  const r = E.evaluateMatch(t, m), team = E.isTeam(t);
+  const has = m.rubbers.some(x => x.sets.length), done = m.status === 'done', live = !done && (m.lt || has);
+  // lajur: game (single/regu) atau pertemuan (trio: Single, Regu → set dimenangi)
+  const cols = team
+    ? m.rubbers.map((rb, i) => { const a = rb.sets.filter(([x, y]) => x > y).length, b = rb.sets.filter(([x, y]) => y > x).length; return { a: rb.sets.length ? a : '', b: rb.sets.length ? b : '', lab: i ? 'R' : 'P' }; })
+    : (m.rubbers[0] || { sets: [] }).sets.map(([x, y]) => ({ a: x, b: y }));
+  const ta = team ? r.ra : r.sa, tb = team ? r.rb : r.sb;
   const h = E.handicapInfo(t, m.a, m.b);
-  const meta = [m.lt && m.status !== 'done' ? `🟢 Sedang dimainkan · Meja ${m.lt}` : m.table && m.table.replace(/ \(.*\)/, ''), m.session && `Sesi ${m.session} · ${E.sessionTime(t, m.session)}`, m.stage !== 'group' ? E.stageLabel(t, m) : (t.format === 'rr' ? '' : `Kumpulan ${m.group}`)]
-    .filter(Boolean).join(' · ');
-  return `<a class="mrow" href="#/t/${t.id}/m/${m.id}">
-    <span class="no">${no ?? (E.matchCode(m) || '')}</span>
-    <span><span class="vs">${pn(t, m.a, m.winner === m.a ? 'w' : '', E.placeholderLabel(m.srcA))}${sc}${pn(t, m.b, m.winner === m.b ? 'w' : '', E.placeholderLabel(m.srcB))}</span>
-    ${chipsHtml(t, m)}
-    <div class="meta">${esc(meta)}${h && h.n ? ` · HC: ${esc(E.pname(t, h.to))} +${h.n}` : ''}${ls.get('pingpong:draft:' + m.id) && m.status !== 'done' ? ' · <span class="draft">✏️ draf</span>' : ''}${ls.get('pingpong:sent:' + m.id) && m.status !== 'done' ? ' · <span class="draft">⏳ menunggu pengesahan</span>' : ''}${_cur && pendingFor(_cur).some(x => x.matchId === m.id) ? ' · <span class="role-chip">🔔 skor dihantar</span>' : ''}</div></span>
+  const ctx = m.stage !== 'group' ? E.stageLabel(t, m) : (t.format === 'rr' ? 'Liga' : `Kumpulan ${m.group}`);
+  const status = done ? '<span class="mc-st ok">✓ Selesai</span>'
+    : m.lt ? `<span class="mc-st on"><i class="pulse"></i>Meja ${m.lt}</span>`
+    : has ? '<span class="mc-st on">Sedang dimainkan</span>'
+    : `<span class="mc-st">${[m.table ? esc(m.table.replace(/ \(.*\)/, '')) : '', m.session ? esc(E.sessionTime(t, m.session)) : ''].filter(Boolean).join(' · ')}</span>`;
+  const side = (id, src, mine, other, key) => {
+    const win = done && m.winner && m.winner === id;
+    return `<div class="mc-r ${win ? 'w' : done ? 'l' : ''}">${sideAv(t, id)}${sideName(t, id, src)}
+      ${cols.map(c => `<span class="mc-g ${c[key] !== '' && c[key] > c[key === 'a' ? 'b' : 'a'] ? 'gw' : ''}">${c[key]}</span>`).join('')}
+      <span class="mc-t">${has || done ? mine : ''}</span></div>`;
+  };
+  const notes = [h && h.n ? `HC: ${esc(E.pname(t, h.to))} +${h.n}` : '',
+    ls.get('pingpong:draft:' + m.id) && !done ? '<span class="draft">✏️ draf</span>' : '',
+    ls.get('pingpong:sent:' + m.id) && !done ? '<span class="draft">⏳ menunggu pengesahan</span>' : '',
+    _cur && pendingFor(_cur).some(x => x.matchId === m.id) ? '<span class="role-chip">🔔 skor dihantar</span>' : ''].filter(Boolean).join(' · ');
+  return `<a class="mc ${done ? 'done' : live ? 'live' : ''}" href="#/t/${t.id}/m/${m.id}" style="--cols:28px minmax(0,1fr) ${'24px '.repeat(cols.length)}40px">
+    <div class="mc-h"><span class="mc-code">${esc(no ?? (E.matchCode(m) || ''))}</span><span class="mc-ctx">${esc(ctx)}</span>${status}</div>
+    ${side(m.a, m.srcA, ta, tb, 'a')}${side(m.b, m.srcB, tb, ta, 'b')}
+    ${notes ? `<div class="mc-f">${notes}</div>` : ''}
   </a>`;
 }
 
@@ -1406,7 +1441,7 @@ function showProfile(t, id) {
     <div class="section-title">Perlawanan</div><div class="mlist">${ms.map(m => matchRow(t, m)).join('') || '<p class="muted">Tiada.</p>'}</div>
   </div>`;
   md.hidden = false;
-  md.onclick = e => { if (e.target === md || e.target.id === 'mx' || e.target.closest('a.mrow')) md.hidden = true; };
+  md.onclick = e => { if (e.target === md || e.target.id === 'mx' || e.target.closest('a.mrow, a.mc')) md.hidden = true; };
 }
 
 // ---------- PWA ----------
