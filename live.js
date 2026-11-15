@@ -104,8 +104,9 @@ export function allocate(t) {
 // Tangguh: keluarkan dari meja, letak di hujung giliran, kemudian agih semula
 export function defer(t, mid) {
   const m = t.matches.find(x => x.id === mid); if (!m) return;
+  const active = t.matches.some(x => x.lt && x.status !== 'done');
   m.lt = 0; m.tg = Date.now(); m.ump = '';
-  allocate(t);
+  if (active) allocate(t);
 }
 // Selepas skor disimpan: kosongkan meja perlawanan yang tamat dan agih semula jika sistem langsung sedang aktif
 export function afterScore(t) {

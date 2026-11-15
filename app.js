@@ -4,7 +4,7 @@ import { playDeal } from './draw-anim.js';
 import * as cloud from './cloud.js';
 import * as LV from './live.js';
 
-const VERSION = '2.6.0';
+const VERSION = '2.7.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -71,8 +71,8 @@ const AV = ['#1f3a8a', '#7c2d5a', '#0f766e', '#6d28d9', '#b45309', '#15803d', '#
 const initials = n => n.split(/\s+|&/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const avColor = n => AV[[...n].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % AV.length];
 const av = n => `<span class="av" style="background:${avColor(n)}">${esc(initials(n) || '?')}</span>`;
-function pn(t, id, cls = '') {
-  if (!id) return `<span class="pn ${cls}"><span class="nm muted">…</span></span>`;
+function pn(t, id, cls = '', ph = '') {
+  if (!id) return `<span class="pn ${cls}"><span class="nm muted">${ph ? esc(ph) : '…'}</span></span>`;
   if (id === 'BYE') return `<span class="pn ${cls}"><span class="nm muted">BYE</span></span>`;
   const n = E.pname(t, id), p = E.pobj(t, id) || {}, mem = p.members || [];
   if (mem.length > 1) {
@@ -146,6 +146,7 @@ function render(keep = false) {
     const views = { tetapan: viewSetup, langsung: viewLive, jadual: viewJadual, kumpulan: viewGroups, keputusan: viewResults, kalahmati: viewKnockout, pool: viewPool, laporan: viewReport, ranking: viewRanking, peraturan: viewRules };
     updateTop();
     if (page === 'm') viewMatch(t, parts[3]); else if (views[page]) views[page](t); else { location.hash = '#/'; return; }
+    guideCard(t, page);
     if (page !== 'langsung') myStrip(t);
     if (keep) window.scrollTo(0, y);
     return;
@@ -161,7 +162,7 @@ function renderHead(t, page) {
   document.getElementById('brand-title').textContent = '← Semua pertandingan';
   $head.hidden = false;
   const f = E.SET_FORMATS[t.groupFormat];
-  const play = t.matches.filter(m => m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE' && m.status !== 'bye');
+  const play = t.matches.filter(m => m.status !== 'bye' && m.a !== 'BYE' && m.b !== 'BYE');
   const done = play.filter(m => m.status === 'done').length, pct = play.length ? Math.round(done / play.length * 100) : 0;
   const nT = E.numTablesOf(t), onT = LV.liveState(t).live.length;
   const stg = t.stage === 'setup' ? 'Persediaan' : t.stage === 'done' ? 'Tamat' : t.stage === 'group' ? (t.format === 'rr' ? 'Liga' : 'Kumpulan') : 'Kalah mati';
@@ -599,7 +600,7 @@ function matchRow(t, m, no) {
     .filter(Boolean).join(' · ');
   return `<a class="mrow" href="#/t/${t.id}/m/${m.id}">
     <span class="no">${no ?? (E.matchCode(m) || '')}</span>
-    <span><span class="vs">${pn(t, m.a, m.winner === m.a ? 'w' : '')}${sc}${pn(t, m.b, m.winner === m.b ? 'w' : '')}</span>
+    <span><span class="vs">${pn(t, m.a, m.winner === m.a ? 'w' : '', E.placeholderLabel(m.srcA))}${sc}${pn(t, m.b, m.winner === m.b ? 'w' : '', E.placeholderLabel(m.srcB))}</span>
     ${chipsHtml(t, m)}
     <div class="meta">${esc(meta)}${h && h.n ? ` · HC: ${esc(E.pname(t, h.to))} +${h.n}` : ''}${ls.get('pingpong:draft:' + m.id) && m.status !== 'done' ? ' · <span class="draft">✏️ draf</span>' : ''}${ls.get('pingpong:sent:' + m.id) && m.status !== 'done' ? ' · <span class="draft">⏳ menunggu pengesahan</span>' : ''}${_cur && pendingFor(_cur).some(x => x.matchId === m.id) ? ' · <span class="role-chip">🔔 skor dihantar</span>' : ''}</div></span>
   </a>`;
@@ -681,7 +682,7 @@ function viewResults(t) {
       <div id="lpr"></div>
       <button class="pill-btn orange small" id="plap" style="margin-top:8px"><span class="dot"></span>Proses laporan</button>
     </details>` : ''}
-    ${t.groups.some(g => g.name === jsel) ? `<details class="card fold" ${ls.get('pingpong:mx:' + jsel) === '1' ? 'open' : ''} id="mxBox"><summary>🔢 Matriks keputusan · ${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(jsel)}</summary>${matrixHtml(t, t.groups.find(g => g.name === jsel))}</details>` : ''}
+    ${t.groups.some(g => g.name === jsel) ? `<details class="card fold" ${ls.get('pingpong:mx:' + jsel) === '0' ? '' : 'open'} id="mxBox"><summary>🔢 Matriks keputusan · ${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(jsel)}</summary>${matrixHtml(t, t.groups.find(g => g.name === jsel))}</details>` : ''}
     <div class="card">${shown.length ? shown.map(m => {
       const head = m.session !== lastS ? `<div class="sess">Sesi ${m.session} · ${E.sessionTime(t, m.session)}</div>` : '';
       lastS = m.session; return head + matchRow(t, m);
@@ -746,6 +747,7 @@ function viewMatch(t, mid) {
       ${edit ? `<div class="btn-stack" style="margin-top:12px">
         <button class="pill-btn brand" id="save"><span class="dot"></span>Simpan markah</button>
         ${t.waEnabled && m.status !== 'done' ? `<button class="pill-btn" id="wa" style="background:#25d366"><span class="dot" style="background:#fff"></span>📲 Lapor via WhatsApp</button>` : ''}
+        ${m.status !== 'done' ? `<button class="pill-btn light small" id="tgh">↩️ Tangguh${m.lt ? ` (keluarkan dari Meja ${m.lt})` : ''}</button>` : ''}
         <button class="pill-btn light small" id="clear">Kosongkan</button>
       </div>` : m.status === 'done' ? '' : `
       <div class="section-title">Hantar skor kepada penganjur</div>
@@ -822,6 +824,11 @@ function viewMatch(t, mid) {
     const num = t.waMode === 'N' && t.waNumber ? t.waNumber : '';
     window.open(`https://wa.me/${num}?text=${encodeURIComponent(text)}`, '_blank');
     if (t.waMode !== 'N' && t.waGroup) toast(`Pilih group "${t.waGroup}" dalam WhatsApp`, 4000);
+  };
+  const tgh = document.getElementById('tgh');
+  if (tgh) tgh.onclick = () => {
+    if (!confirm('Tangguh perlawanan ini? Ia diletak di hujung giliran' + (m.lt ? ' dan meja diberi kepada perlawanan seterusnya.' : '.'))) return;
+    LV.defer(t, m.id); save(t); toast('Ditangguh ke hujung giliran'); location.hash = `#/t/${t.id}/${_back}`;
   };
   const cl = document.getElementById('clear');
   if (cl) cl.onclick = () => {
@@ -943,9 +950,9 @@ function bracketHtml(t, b) {
       const e = E.evaluateMatch(t, m), team = E.isTeam(t);
       const has = m.rubbers.some(x => x.sets.length);
       const playable = m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE';
-      const line = (id, s) => `<div class="ln ${m.winner === id && id && id !== 'BYE' && m.status === 'done' ? 'w' : ''}"><span>${id && id !== 'BYE' ? `<span class="sd">${esc(E.seedLabel(t, id))}</span>` : ''}${esc(id ? E.pname(t, id) : '…')}</span><span class="s">${has ? s : ''}</span></div>`;
+      const line = (id, s, src) => `<div class="ln ${m.winner === id && id && id !== 'BYE' && m.status === 'done' ? 'w' : ''}"><span>${id && id !== 'BYE' ? `<span class="sd">${esc(E.seedLabel(t, id))}</span>` : ''}${id ? esc(E.pname(t, id)) : src ? `<i class="ph">${esc(E.placeholderLabel(src))}</i>` : '…'}</span><span class="s">${has ? s : ''}</span></div>`;
       const meta = playable && m.status !== 'done' && m.session ? `<div class="bmeta">${esc(E.matchCode(m))} · Sesi ${m.session} · ${esc((m.table || '').replace(/ \(.*\)/, ''))}</div>` : '';
-      const inner = line(m.a, team ? e.ra : e.sa) + line(m.b, team ? e.rb : e.sb) + meta;
+      const inner = line(m.a, team ? e.ra : e.sa, m.srcA) + line(m.b, team ? e.rb : e.sb, m.srcB) + meta;
       return playable ? `<a class="bm" href="#/t/${t.id}/m/${m.id}">${inner}</a>` : `<div class="bm">${inner}</div>`;
     }).join('')}</div></div>`);
   }
@@ -974,8 +981,9 @@ function viewBrackets(t) {
   $app.innerHTML = `${section('Kalah mati', 'Carta Kalah Mati')}
     <div class="row noprint" style="margin-bottom:10px"><button class="pill-btn" data-play="ko"><span class="dot"></span>▶ Tonton undian</button>
 </div>
+    ${!E.groupStageComplete(t) ? `<div class="notice small">⚡ Carta cermin dijana bersama jadual kumpulan. Nama diisi sebaik kedudukan kumpulan <b>pasti</b> (tiada keputusan baki yang boleh mengubahnya), jadi perlawanan kalah mati boleh bermula sebelum semua kumpulan tamat.</div>` : ''}
     <div class="card">${bracketHtml(t, 'ko')}</div>
-    <p class="muted small">Ketik perlawanan untuk isi markah. Label A1, H2 = asal kumpulan.</p>
+    <p class="muted small">Ketik perlawanan untuk isi markah. Label A1, H2 = asal kumpulan (kedudukan pasti).</p>
     ${t.format === 'group_ko' && canAdmin(t) ? '<button class="pill-btn light small noprint" id="regen">Jana semula carta</button>' : ''}`;
   $app.querySelectorAll('[data-play]').forEach(b => (b.onclick = () => playBracketDraw(t, b.dataset.play)));
   const rg = document.getElementById('regen');
@@ -987,7 +995,13 @@ function viewBrackets(t) {
 
 function viewPool(t) {
   if (!t.rounds.pool) {
-    $app.innerHTML = `${section('Pool kalah', 'Carta Pool Kalah')}<div class="card"><p class="muted">${t.pool === '0' ? 'Pool kalah tidak diadakan.' : 'Carta pool kalah akan dijana bersama carta kalah mati selepas peringkat kumpulan.'}</p></div>`;
+    const ready = t.pool !== '0' && t.rounds.ko && E.poolReady(t), early = ready && !E.groupStageComplete(t);
+    $app.innerHTML = `${section('Pool kalah', 'Carta Pool Kalah')}<div class="card"><p class="muted">${t.pool === '0' ? 'Pool kalah tidak diadakan.'
+      : early ? '✅ Semua peserta pool kalah sudah pasti kedudukannya walaupun ada perlawanan kumpulan yang belum tamat. Pool kalah boleh dijana sekarang.'
+      : ready ? 'Peringkat kumpulan tamat. Pool kalah boleh dijana.' : 'Pool kalah dijana selepas kedudukan tempat ke-3' + (t.pool === '34' ? '/ke-4' : '') + ' setiap kumpulan pasti.'}</p>
+      ${ready && canAdmin(t) ? '<button class="pill-btn brand" id="genPool"><span class="dot"></span>Jana pool kalah</button>' : ''}</div>`;
+    const gp = document.getElementById('genPool');
+    if (gp) gp.onclick = () => { try { E.buildPool(t); save(t); viewPool(t); playBracketDraw(t, 'pool'); } catch (err) { toast(err.message); } };
     return;
   }
   $app.innerHTML = `${section('Pool kalah', 'Carta Pool Kalah')}
@@ -1054,6 +1068,28 @@ function viewRules(t) { $app.innerHTML = section('Pertandingan', 'Peraturan') + 
 function viewSetup(t) {
   viewSetupCore(t);
   $app.insertAdjacentHTML('beforeend', `<details class="card fold" style="margin-top:14px"><summary>📜 Peraturan &amp; panduan peserta</summary>${rulesHtml(t)}</details>`);
+}
+
+// ---------- Panduan peserta (kad lipat di atas setiap tab) ----------
+const GUIDE = {
+  tetapan: t => canAdmin(t) ? 'Isi maklumat pertandingan, tambah atau undi peserta, pilih format, kemudian tekan <b>Jana</b>. Peraturan pertandingan ada di bahagian bawah tab ini.' : 'Semak nama dan unit anda dalam senarai. Peraturan dan cara melapor skor ada di bahagian bawah tab ini.',
+  langsung: () => 'Pilih nama anda di <b>👤 Saya</b>. 🔴 bermain sekarang · 🟡 sila bersedia · 🟣 anda pengadil · ⏳ menunggu giliran. Meja tidak tetap: perlawanan diberi ke meja yang kosong dahulu.',
+  jadual: () => 'Sesi dan masa ialah anggaran. Semasa pertandingan, ikut meja sebenar di tab 🟢 Langsung. Ketik baris untuk buka kad perlawanan.',
+  kumpulan: () => 'Kedudukan: mata → beza menang-kalah perlawanan → beza set → bersemuka → beza mata. Baris berjalur jingga layak ke kalah mati. Ketik nama untuk melihat profil.',
+  keputusan: () => 'Ketik perlawanan, isi skor setiap game (disimpan sebagai draf di telefon), masukkan <b>PIN acara</b> dan tekan <b>📤 Hantar skor</b>. Skor rasmi selepas disahkan penganjur.',
+  kalahmati: () => 'Carta cermin terisi sebaik kedudukan kumpulan pasti, jadi kalah mati boleh bermula lebih awal. Kalah mati: salah seorang pemain melapor skor.',
+  pool: () => 'Pool kalah untuk peserta yang tidak layak ke kalah mati utama. Salah seorang pemain melapor skor.',
+  laporan: () => 'Tekan <b>🖨️ Cetak / Simpan PDF</b>, kemudian pilih <b>Simpan sebagai PDF</b>.',
+};
+function guideCard(t, page) {
+  const f = GUIDE[page];
+  if (!f) return;
+  const open = ls.get('pingpong:guide') === '1';
+  const html = `<details class="card fold guide noprint" ${open ? 'open' : ''}><summary>📖 Panduan</summary><p class="small" style="margin:6px 0 0">${f(t)}</p></details>`;
+  const h = $app.querySelector('.h-big');
+  h ? h.insertAdjacentHTML('afterend', html) : $app.insertAdjacentHTML('afterbegin', html);
+  const d = $app.querySelector('details.guide');
+  d.ontoggle = () => ls.set('pingpong:guide', d.open ? '1' : '0');
 }
 
 // ---------- Langsung (agihan meja, pengadil, status peribadi) ----------
@@ -1134,7 +1170,7 @@ function viewJadual(t) {
   if (!all.length) { $app.innerHTML = head + `<div class="card"><p class="muted">Jadual belum dijana.${canAdmin(t) ? ' Jana kumpulan dan jadual di tab ⚙️ Tetapan.' : ''}</p></div>`; return; }
   const opts = [...t.groups.map(g => [g.name, t.format === 'rr' ? 'Liga' : `Kumpulan ${g.name}`]),
     ...(t.rounds.ko ? [['K', 'Kalah mati']] : []), ...(t.rounds.pool ? [['L', 'Pool kalah']] : []), ['ALL', 'Semua perlawanan']];
-  if (!jdSel || !opts.some(o => o[0] === jdSel)) jdSel = 'ALL';
+  if (!jdSel || !opts.some(o => o[0] === jdSel)) jdSel = opts[0][0];
   const inSel = m => jdSel === 'ALL' || (jdSel === 'K' ? m.bracket === 'ko' : jdSel === 'L' ? m.bracket === 'pool' : m.stage === 'group' && m.group === jdSel);
   const NS = E.lastSession(t), U = LV.umpirePlan(t);
   const rows = all.filter(inSel).filter(m => !jdSes || m.session === +jdSes)
@@ -1148,7 +1184,7 @@ function viewJadual(t) {
     <div class="card tw" style="padding:6px"><table class="jd"><thead><tr><th>Game</th><th>Sesi</th><th>Masa</th><th>Meja</th><th class="l">${UNIT(t)}</th><th class="l">Pengadil</th>${t.handicap ? '<th>HC</th>' : ''}<th>Skor</th></tr></thead><tbody>
     ${rows.map(m => { const r = E.evaluateMatch(t, m), u = LV.umpireOf(t, m, U), h = t.handicap && m.a && m.b ? E.handicapInfo(t, m.a, m.b) : null;
       return `<tr class="${m.lt && m.status !== 'done' ? 'onlive' : ''}" data-go="${m.a && m.b ? m.id : ''}"><td>${esc(E.matchCode(m) || '')}</td><td>${m.session || '-'}</td><td>${m.session ? esc(E.sessionTime(t, m.session)) : '-'}</td><td>${tno(m) || '-'}${m.lt && m.status !== 'done' ? ' 🟢' : ''}</td>
-        <td class="l">${m.a ? esc(E.pname(t, m.a)) : '<i class="muted">Menunggu</i>'} <small class="muted">lwn</small> ${m.b ? esc(E.pname(t, m.b)) : '<i class="muted">Menunggu</i>'}</td>
+        <td class="l">${m.a ? esc(E.pname(t, m.a)) : `<i class="muted">${esc(E.placeholderLabel(m.srcA) || 'Menunggu')}</i>`} <small class="muted">lwn</small> ${m.b ? esc(E.pname(t, m.b)) : `<i class="muted">${esc(E.placeholderLabel(m.srcB) || 'Menunggu')}</i>`}</td>
         <td class="l">${u ? esc(E.pname(t, u)) : '-'}</td>${t.handicap ? `<td>${h && h.n ? esc(E.pname(t, h.to)).split(' ')[0] + ' +' + h.n : '-'}</td>` : ''}
         <td>${m.status === 'done' ? (E.isTeam(t) ? `${r.ra}-${r.rb}` : `${r.sa}-${r.sb}`) + ' ✅' : '-'}</td></tr>`; }).join('')}
     </tbody></table></div>
@@ -1162,6 +1198,15 @@ function viewJadual(t) {
 function viewKnockout(t) {
   viewBrackets(t);
   if (t.stage === 'done') $app.insertAdjacentHTML('beforeend', rankingHtml(t));
+  const ko = t.matches.filter(m => m.bracket === 'ko' && m.status !== 'bye' && m.a !== 'BYE' && m.b !== 'BYE');
+  if (t.rounds.ko && ko.some(m => m.a || m.b)) {
+    let h = '';
+    for (let r = t.rounds.ko; r >= 1; r--) {
+      const ms = ko.filter(m => m.round === r).sort((x, y) => x.slot - y.slot);
+      if (ms.length) h += `<div class="sess">${esc(E.roundName(t, 'ko', r))}</div>${ms.map(m => matchRow(t, m)).join('')}`;
+    }
+    $app.insertAdjacentHTML('beforeend', `<div class="section-title">Keputusan kalah mati</div><div class="card mlist">${h}</div>`);
+  }
 }
 
 // ---------- Laporan (PDF melalui cetak) ----------
@@ -1246,7 +1291,7 @@ function wireTestTools(t) {
     t.matches = t.matches.filter(m => m.stage === 'group');
     t.matches.forEach(m => { m.rubbers.forEach(r => (r.sets = [])); m.winner = null; m.override = null; m.lt = 0; m.tg = 0; m.ump = undefined; if (m.status !== 'bye') m.status = 'pending'; });
     t.rounds = {}; t.stage = t.groups.length ? 'group' : 'setup';
-    E.planSchedule(t); save(t); toast('Semua skor dikosongkan'); render(true);
+    E.earlyBracket(t); E.planSchedule(t); save(t); toast('Semua skor dikosongkan'); render(true);
   });
 }
 
@@ -1314,6 +1359,8 @@ function showProfile(t, id) {
   if (t.stage === 'done') for (const tr of E.finalRanking(t)) if (tr.ids.includes(id)) place = `${tr.ids.length > 1 ? `${tr.place}–${tr.place + tr.ids.length - 1}` : tr.place} (${tr.rows.find(r => r.id === id).label})`;
   const ms = t.matches.filter(m => (m.a === id || m.b === id) && m.status !== 'bye' && m.a !== 'BYE' && m.b !== 'BYE')
     .sort((x, y) => (x.session || 0) - (y.session || 0));
+  const U = LV.umpirePlan(t), duty = t.matches.filter(m => m.stage === 'group' && LV.umpireOf(t, m, U) === id);
+  const dutyDone = duty.filter(m => m.status === 'done').length;
   const md = document.getElementById('modal');
   md.innerHTML = `<div class="sheet">
     <div class="row" style="justify-content:space-between"><div class="row">${av(p.name)}<h2 style="margin:0">${esc(p.name)}</h2></div><button class="pill-btn light small" id="mx">✕</button></div>
@@ -1322,6 +1369,7 @@ function showProfile(t, id) {
       <div class="stat"><b>${st.p}</b><span>Main</span></div><div class="stat"><b>${st.w}</b><span>Menang</span></div><div class="stat"><b>${st.l}</b><span>Kalah</span></div>
       <div class="stat"><b>${st.p ? Math.round(st.w / st.p * 100) : 0}%</b><span>% menang</span></div><div class="stat"><b>${st.sf}-${st.sa}</b><span>Set</span></div><div class="stat"><b>${(st.pf - st.pa > 0 ? '+' : '') + (st.pf - st.pa)}</b><span>Beza mata</span></div>
     </div>
+    ${duty.length ? `<div class="section-title">🟣 Tugas pengadil: ${duty.length} perlawanan${dutyDone ? ` (${dutyDone} selesai)` : ''}</div><div class="mlist">${duty.map(m => matchRow(t, m)).join('')}</div>` : ''}
     <div class="section-title">Perlawanan</div><div class="mlist">${ms.map(m => matchRow(t, m)).join('') || '<p class="muted">Tiada.</p>'}</div>
   </div>`;
   md.hidden = false;

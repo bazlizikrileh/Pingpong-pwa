@@ -192,6 +192,7 @@ export function recordScore(t, matchId, rubberSets, extra = {}) {
   const any = m.rubbers.some(x => x.sets.length);
   m.status = (r.complete && (r.winner || r.draw)) ? 'done' : any ? 'live' : 'pending';
   if (m.stage !== 'group') propagate(t, m.bracket);
+  else resolvePlaceholders(t);
   updateStage(t);
   return m;
 }
@@ -272,6 +273,7 @@ function setGroups(t, groups) {
   });
   t.matches = matches; t.rounds = {};
   t.stage = 'group';
+  earlyBracket(t);
   planSchedule(t);
 }
 
@@ -436,17 +438,21 @@ export function mainSlots(t) {
     return bracketOrder(nextPow2(ids.length)).map(s => ids[s - 1] || 'BYE');
   }
   const G = t.groups;
-  if (t.koMode !== 'U' && canMirror(t)) return G.flatMap((g, i) => [placeOf(t, g, 1), placeOf(t, G[G.length - 1 - i], 2)]).map(x => x || 'BYE');
+  if (t.koMode !== 'U' && canMirror(t)) return G.flatMap((g, i) => [`P:${g.name}:1`, `P:${G[G.length - 1 - i].name}:2`]);
   return drawBracket(t, koQualifiers(t));
 }
 
-export function poolSlots(t) {
-  const ent = poolEntrants(t);
-  if (ent.length < 2) return null;
+export const poolMirror = t => {
   const G = t.groups, full = k => G.every(g => g.members.length >= k);
+  return t.format === 'group_ko' && t.pool !== '0' && t.poolMode !== 'U' && canMirror(t) && (t.pool === '3' ? full(3) : full(4));
+};
+export function poolSlots(t) {
+  const G = t.groups, full = k => G.every(g => g.members.length >= k);
+  const ent = poolMirror(t) ? [1, 2] : poolEntrants(t);
+  if (ent.length < 2) return null;
   if (t.poolMode !== 'U' && canMirror(t)) {
-    if (t.pool === '3' && full(3)) return G.slice(0, G.length / 2).flatMap((g, i) => [placeOf(t, g, 3), placeOf(t, G[G.length - 1 - i], 3)]);
-    if (t.pool === '34' && full(4)) return G.flatMap((g, i) => [placeOf(t, g, 3), placeOf(t, G[G.length - 1 - i], 4)]);
+    if (t.pool === '3' && full(3)) return G.slice(0, G.length / 2).flatMap((g, i) => [`P:${g.name}:3`, `P:${G[G.length - 1 - i].name}:3`]);
+    if (t.pool === '34' && full(4)) return G.flatMap((g, i) => [`P:${g.name}:3`, `P:${G[G.length - 1 - i].name}:4`]);
   }
   return drawBracket(t, ent);
 }
@@ -459,12 +465,16 @@ export function buildBracket(t, bracket, slots) {
     const count = size / 2 ** r;
     for (let i = 0; i < count; i++) {
       const m = blankMatch(t, { stage: bracket, bracket, round: r, slot: i, a: null, b: null });
-      if (r === 1) { m.a = slots[2 * i]; m.b = slots[2 * i + 1]; }
+      if (r === 1) {
+        const isP = x => typeof x === 'string' && x.startsWith('P:');
+        [['a', slots[2 * i]], ['b', slots[2 * i + 1]]].forEach(([s, v]) => { if (isP(v)) { m['src' + s.toUpperCase()] = v; m[s] = null; } else m[s] = v; });
+      }
       list.push(m);
     }
   }
   t.matches = t.matches.filter(m => m.bracket !== bracket).concat(list);
   t.rounds[bracket] = rounds;
+  resolvePlaceholders(t);
   propagate(t, bracket);
 }
 
@@ -522,7 +532,7 @@ const bracketDone = (t, b) => {
 };
 function updateStage(t) {
   if (t.format === 'rr') { t.stage = groupStageComplete(t) ? 'done' : 'group'; return; }
-  if (!t.rounds.ko) { if (t.stage !== 'setup') t.stage = 'group'; return; }
+  if (!t.rounds.ko || (t.groups.length && !groupStageComplete(t))) { if (t.stage !== 'setup') t.stage = 'group'; return; }
   t.stage = bracketDone(t, 'ko') && bracketDone(t, 'pool') ? 'done' : 'ko';
 }
 
@@ -534,12 +544,11 @@ export function roundName(t, bracket, r) {
 
 // Label asal kumpulan (A1, H2, C3)
 export function seedLabel(t, id) {
-  if (!groupStageComplete(t)) return '';
-  for (const g of t.groups) {
-    const i = groupStandings(t, g.name).findIndex(r => r.id === id);
-    if (i >= 0) return `${g.name}${i + 1}`;
-  }
-  return '';
+  if (!id || id === 'BYE') return '';
+  const g = t.groups.find(x => x.members.includes(id));
+  if (!g) return '';
+  const fx = groupFixed(t, g.name), k = Object.keys(fx).find(k => fx[k] === id);
+  return k ? `${g.name}${k}` : '';
 }
 
 // ---------- Jadual sesi & meja ----------
@@ -775,4 +784,81 @@ export function seedTest24(t) {
   t.participants = Array.from({ length: 12 }, (_, i) => ({ id: uid(), name: `${N[2 * i]} & ${N[2 * i + 1]}`, unit: '', hc: 0, members: [N[2 * i], N[2 * i + 1]] }));
   t.individuals = [];
   return '12 pasangan ujian diisi (24 pemain).';
+}
+
+// ---------- Kedudukan pasti (clinched) & pemegang tempat P:<kump>:<tempat> ----------
+// Kedudukan pemain dianggap pasti bila dia sudah tamat semua perlawanan kumpulan dan, walau apa pun
+// keputusan baki, setiap pemain lain pasti di atas atau pasti di bawahnya (had mata, beza perlawanan,
+// beza set, beza mata). Kumpulan yang tamat: semua kedudukan pasti.
+const _fxCache = new WeakMap();
+export function groupFixed(t, gName) {
+  let c = _fxCache.get(t);
+  const sig = t.matches.reduce((s, m) => s + (m.stage === 'group' ? (m.status === 'done' ? 1 : 0) + m.rubbers.map(r => r.sets.join()).join('|') : ''), '');
+  if (!c || c.sig !== sig) { c = { sig, m: {} }; _fxCache.set(t, c); }
+  if (c.m[gName]) return c.m[gName];
+  const ms = t.matches.filter(m => m.stage === 'group' && m.group === gName && m.status !== 'bye');
+  const o = {};
+  c.m[gName] = o;
+  if (!ms.length) return o;
+  const st = groupStandings(t, gName);
+  if (ms.every(m => m.status === 'done')) { st.forEach((r, i) => (o[i + 1] = r.id)); return o; }
+  if (isTeam(t)) return o;
+  const rem = ms.filter(m => m.status !== 'done'), f = fmtFor(t, 'group'), nd = f.full ? f.bo : Math.ceil(f.bo / 2);
+  const B = st.map(r => {
+    const k = rem.filter(m => m.a === r.id || m.b === r.id).length, md = r.w - r.l, sd = r.sf - r.sa, pd = r.pf - r.pa;
+    return { id: r.id, k, lo: [r.pts, md - k, sd - nd * k, pd - 11 * nd * k], hi: [r.pts + 3 * k, md + k, sd + nd * k, pd + 11 * nd * k] };
+  });
+  const gt = (a, b) => { for (let i = 0; i < 4; i++) if (a[i] !== b[i]) return a[i] > b[i]; return false; };
+  B.forEach(p => {
+    if (p.k) return;
+    let A = 0, L = 0;
+    B.forEach(q => { if (q === p) return; if (gt(q.lo, p.hi)) A++; else if (gt(p.lo, q.hi)) L++; });
+    if (A + L === B.length - 1) o[A + 1] = p.id;
+  });
+  return o;
+}
+export const placeholderLabel = src => {
+  if (!src) return '';
+  const [, g, k] = src.split(':');
+  return (['', 'Johan ', 'Naib ', 'Ke-3 ', 'Ke-4 '][+k] || `Ke-${k} `) + g;
+};
+export function resolvePlaceholders(t) {
+  let changed = false;
+  for (const m of t.matches) {
+    for (const s of ['a', 'b']) {
+      const src = m['src' + s.toUpperCase()];
+      if (!src) continue;
+      const [, g, k] = src.split(':'), id = groupFixed(t, g)[+k] || null;
+      if (m[s] !== id) {
+        m[s] = id; m.winner = null; m.status = 'pending'; m.override = null; m.lineup = null; m.lt = 0;
+        m.rubbers.forEach(x => (x.sets = []));
+        changed = true;
+      }
+    }
+  }
+  if (changed) for (const b of ['ko', 'pool']) if (t.rounds[b]) propagate(t, b);
+  return changed;
+}
+// Bracket cermin dijana bersama jadual kumpulan (pemegang tempat), supaya kalah mati boleh bermula
+// sebaik kedudukan pasti diketahui.
+export function earlyBracket(t) {
+  if (t.format !== 'group_ko' || t.koMode === 'U' || !canMirror(t)) return false;
+  buildBracket(t, 'ko', mainSlots(t));
+  if (poolMirror(t)) buildBracket(t, 'pool', poolSlots(t));
+  numberKO(t);
+  return true;
+}
+// Pool kalah (undian) boleh dijana awal bila semua peserta pool sudah pasti kedudukannya
+export function poolReady(t) {
+  if (t.format !== 'group_ko' || t.pool === '0') return false;
+  if (groupStageComplete(t)) return true;
+  if (Number(t.bestThirds)) return false;
+  const need = t.pool === '34' ? [3, 4] : [3];
+  return t.groups.every(g => { const fx = groupFixed(t, g.name); return need.filter(k => k <= g.members.length).every(k => fx[k]); });
+}
+export function buildPool(t) {
+  const ps = poolSlots(t);
+  if (!ps) throw new Error('Tiada peserta pool kalah');
+  buildBracket(t, 'pool', ps);
+  numberKO(t); planSchedule(t); updateStage(t);
 }
