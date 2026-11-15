@@ -452,3 +452,5 @@ details.guide > summary { font-size:12px; }
 .mc-f { margin:6px 0 0 34px; font-size:11.5px; color: var(--muted); }
 @media (prefers-color-scheme: dark) { .mc-r.w .mc-t { background:#020617; } }
 .mc.live .mc-t:empty { background: transparent; }
+
+.test-bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:10px 12px; margin-bottom:10px; }

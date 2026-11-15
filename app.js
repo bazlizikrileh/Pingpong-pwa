@@ -4,7 +4,7 @@ import { playDeal } from './draw-anim.js';
 import * as cloud from './cloud.js';
 import * as LV from './live.js';
 
-const VERSION = '2.8.1';
+const VERSION = '2.8.2';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -706,6 +706,7 @@ function viewResults(t) {
   let lastS = null;
   $app.innerHTML = `
     ${section('Keputusan', 'Skor Perlawanan')}
+    ${store.isLocal(t.id) && t.matches.length ? testBar(t) : ''}
     <div class="card soft noprint">
       <div class="grid2">
         <div><label style="margin-top:0">Pilih</label><select id="jsel">${opt(Object.fromEntries(opts), jsel)}</select></div>
@@ -731,6 +732,7 @@ function viewResults(t) {
     ${t.format === 'group_ko' && E.groupStageComplete(t) && !t.rounds.ko && canAdmin(t) ? `<div class="notice">Semua perlawanan kumpulan selesai. <a href="#/t/${t.id}/kalahmati"><b>Jana kalah mati →</b></a></div>` : ''}`;
   document.getElementById('jsel').onchange = e => { jsel = e.target.value; viewResults(t); };
   document.getElementById('jses').onchange = e => { jses = e.target.value; viewResults(t); };
+  wireTestTools(t);
   $app.querySelectorAll('[data-f]').forEach(b => (b.onclick = () => { jst = b.dataset.f; viewResults(t); }));
   const mxb = document.getElementById('mxBox'); if (mxb) mxb.ontoggle = () => ls.set('pingpong:mx:' + jsel, mxb.open ? '1' : '0');
   wirePending(t);
@@ -1308,6 +1310,13 @@ function viewReport(t) {
 }
 
 // ---------- Mod ujian ----------
+// Bar ringkas alat ujian di atas tab Keputusan
+function testBar(t) {
+  const ready = t.matches.filter(m => m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE' && m.status !== 'done' && m.status !== 'bye').length;
+  return `<div class="card test-card test-bar noprint"><b>🧪 Ujian</b>
+    <button class="pill-btn orange small" id="tOne" ${ready ? '' : 'disabled'}><span class="dot"></span>🎲 Isi 1</button>
+    <button class="pill-btn light small" id="tAll" ${ready ? '' : 'disabled'}>🎲 Isi semua (${ready})</button></div>`;
+}
 function testTools(t) {
   if (store.isCloud(t.id)) return `<div class="card soft"><div class="section-title" style="margin-top:0">🧪 Ujian</div>
     <p class="muted small">Buat salinan pertandingan ini di telefon anda untuk dicuba (undian, skor, agihan meja) tanpa menjejaskan pertandingan sebenar.</p>
