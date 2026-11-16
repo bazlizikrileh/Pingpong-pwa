@@ -566,3 +566,14 @@ body.tv main#app { max-width:none; padding:0; margin:0; }
 .lv-sc { flex-wrap:wrap; }
 .lv-by { flex-basis:100%; display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; opacity:.9; border-top:1px solid rgba(255,255,255,.15); padding-top:5px; margin-top:2px; }
 .lv-rel { border:0; border-radius:999px; padding:3px 10px; background:#fff; color:#1b1f2e; font-weight:600; font-size:12px; }
+/* skor terus di atas meja */
+.tt-h small .lv-dot, .tv-sub .lv-dot { display:inline-block; vertical-align:middle; margin-right:2px; }
+.tt.on { box-shadow: 0 0 0 2px #ef4444, var(--sh, 0 1px 3px rgba(0,0,0,.08)); }
+.tt-top.live { min-height:118px; }
+.cs { display:flex; flex-direction:column; align-items:center; gap:2px; }
+.cs-nm { font-size:13px; font-weight:700; line-height:1.15; }
+.cs-pt { font-family:var(--mono); font-size:44px; font-weight:800; line-height:1; color:#ffd166; text-shadow:0 2px 6px rgba(0,0,0,.35); }
+.cs-g { font-size:11px; opacity:.85; }
+.lv-by2 { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px; font-size:12px; color:var(--mut, #64748b); }
+.tv-court.live { min-height:9vw; }
+.tv-court .cs-nm { font-size:1.3vw; } .tv-court .cs-pt { font-size:4.2vw; } .tv-court .cs-g { font-size:.9vw; font-weight:600; }
