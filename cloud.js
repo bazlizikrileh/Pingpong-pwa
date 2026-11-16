@@ -176,8 +176,8 @@ export async function claimScorer(tid, pin) {
   const u = await ensureAnon();
   await F.setDoc(F.doc(db, 'tournaments', tid, 'scorers', u.uid), { pin: String(pin), at: F.serverTimestamp() });
 }
-export async function setLive(tid, mid, { rs, cur, ri, by, tb }) {
+export async function setLive(tid, mid, { rs, cur, ri, by, tb, sw }) {
   const u = await ensureAnon();
-  await F.setDoc(F.doc(db, 'tournaments', tid, 'live', mid), { uid: u.uid, rs: encodeRubbers(rs), cur: `${cur[0]}-${cur[1]}`, ri: ri | 0, by: String(by || '').slice(0, 50), tb: String(tb || '').slice(0, 15), at: F.serverTimestamp() });
+  await F.setDoc(F.doc(db, 'tournaments', tid, 'live', mid), { uid: u.uid, rs: encodeRubbers(rs), cur: `${cur[0]}-${cur[1]}`, ri: ri | 0, by: String(by || '').slice(0, 50), tb: String(tb || '').slice(0, 15), sw: !!sw, at: F.serverTimestamp() });
 }
 export async function clearLive(tid, mid) { await init(); await F.deleteDoc(F.doc(db, 'tournaments', tid, 'live', mid)); }

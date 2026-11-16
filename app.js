@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.4.8';
+const VERSION = '3.4.9';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1654,7 +1654,7 @@ function viewLiveScore(t, mid) {
     const sets = remote.rs[remote.ri] || [], wa = sets.filter(g => g[0] > g[1]).length, wb = sets.filter(g => g[1] > g[0]).length;
     $app.innerHTML = `${back}${eyebrow}
       <div class="notice">🔒 Perlawanan ini sedang dijaga oleh <b>${esc(remote.by || 'penjaga lain')}</b>. Anda boleh menonton sahaja.<br><small>Jika perlu ambil alih (contoh bateri habis), minta penganjur tekan 🔓 Lepaskan di tab Langsung. Kunci juga terlepas sendiri selepas 10 minit tiada kemas kini.</small></div>
-      <div class="sb">${[[A, 0, wa], [B, 1, wb]].map(([nm, k, g]) => `<div class="sb-side s${k}" style="min-height:30vh"><div class="sb-nm">${esc(nm)}</div><div class="sb-pt">${remote.cur[k]}</div><div class="sb-g">Set menang <b>${g}</b></div></div>`).join('')}</div>`;
+      <div class="sb${remote.sw ? ' sw' : ''}">${[[A, 0, wa], [B, 1, wb]].map(([nm, k, g]) => `<div class="sb-side s${k}" style="min-height:30vh"><div class="sb-nm">${esc(nm)}</div><div class="sb-pt">${remote.cur[k]}</div><div class="sb-g">Set menang <b>${g}</b></div></div>`).join('')}</div>`;
     _lsOnLive = () => viewLiveScore(load(t.id) || t, mid);
     return;
   }
@@ -1662,7 +1662,7 @@ function viewLiveScore(t, mid) {
   let S = null; try { S = JSON.parse(ls.get(key) || 'null'); } catch {}
   let takeNote = other && edit ? `<div class="notice">🎯 Sedang dijaga oleh <b>${esc(remote.by || 'penjaga lain')}</b>. Jika anda tekan mata di sini, anda mengambil alih.</div>` : '';
   if (other && edit) S = null;
-  if (!S && remote) S = { ri: remote.ri, rs: remote.rs.map(r => r.map(g => [...g])), cur: [...remote.cur], swap: false };
+  if (!S && remote) S = { ri: remote.ri, rs: remote.rs.map(r => r.map(g => [...g])), cur: [...remote.cur], swap: !!remote.sw };
   if (!S) { const rs = m.rubbers.map(r => r.sets.map(g => [...g])); let ri = rs.findIndex(s => !lsRubberDone(t, m, s)); if (ri < 0) ri = nR - 1; S = { ri, rs, cur: lsStart(t, m, ri), swap: false }; }
   while (S.rs.length < nR) S.rs.push([]);
   const H = (_lsHist[m.id] = _lsHist[m.id] || []);
@@ -1672,7 +1672,7 @@ function viewLiveScore(t, mid) {
     ls.set(key, JSON.stringify(S));
     if (!cloudOn) return;
     clearTimeout(_lsTimer);
-    _lsTimer = setTimeout(() => cloud.setLive(t.id, m.id, { rs: S.rs, cur: S.cur, ri: S.ri, by: ls.get('pingpong:myname') || (edit ? 'Penganjur' : ''), tb: m.lt || m.table || '' }).catch(err => {
+    _lsTimer = setTimeout(() => cloud.setLive(t.id, m.id, { rs: S.rs, cur: S.cur, ri: S.ri, sw: !!S.swap, by: ls.get('pingpong:myname') || (edit ? 'Penganjur' : ''), tb: m.lt || m.table || '' }).catch(err => {
       if (err.code === 'permission-denied') { ls.set(key, null); toast('🔒 Perlawanan ini kini dijaga oleh orang lain', 4000); viewLiveScore(load(t.id) || t, mid); }
       else toast('Skor langsung tidak dapat dihantar: ' + (err.code || err.message), 3500);
     }), 250);
@@ -1725,7 +1725,7 @@ function viewLiveScore(t, mid) {
     document.getElementById('sbUndo').onclick = () => { if (!H.length) return; S = JSON.parse(H.pop()); push(); draw(); };
     document.getElementById('sbSnd').onclick = () => { ls.set('pingpong:lsSound', ls.get('pingpong:lsSound') === '0' ? null : '0'); tick('up'); draw(); };
     document.getElementById('sbVib').onclick = () => { const order = ['soft', 'strong', 'off']; ls.set('pingpong:lsVib', order[(order.indexOf(vibMode()) + 1) % 3]); buzz(); draw(); };
-    document.getElementById('sbSwap').onclick = () => { S.swap = !S.swap; ls.set(key, JSON.stringify(S)); draw(); };
+    document.getElementById('sbSwap').onclick = () => { S.swap = !S.swap; push(); draw(); };
     document.getElementById('sbStop').onclick = async () => {
       if (!confirm('Henti skor langsung untuk perlawanan ini? Skor di telefon ini akan dipadam.')) return;
       ls.set(key, null); delete _lsHist[m.id]; clearTimeout(_lsTimer);
@@ -1779,7 +1779,7 @@ function viewLive(t) {
     const m = occ[k], mine = m && me && (m.a === me || m.b === me || m.ump === me), u = m ? LV.umpireOf(t, m, U) : '';
     const x = m ? liveOf(t, m) : null, iUmp = m && me && u === me;
     return `<div class="tt${mine ? ' me' : ''}${m ? '' : ' free'}${x ? ' on' : ''}"><div class="tt-h"><b>MEJA ${k}</b>${m ? `<small>${x ? `<span class="lv-dot"></span> <b class="lv-set">${setTag(t, x)}</b> · ` : ''}${esc(E.matchCode(m) || '')} · ${esc(E.stageLabel(t, m))}</small>` : ''}</div>
-      ${m ? `<a class="tt-top${x ? ' live' : ''}" href="#/t/${t.id}/m/${m.id}">${courtSide(t, m, 0, x)}<div class="tt-net"></div>${courtSide(t, m, 1, x)}</a>
+      ${m ? `<a class="tt-top${x ? ' live' : ''}" href="#/t/${t.id}/m/${m.id}">${x && x.sw ? courtSide(t, m, 1, x) : courtSide(t, m, 0, x)}<div class="tt-net"></div>${x && x.sw ? courtSide(t, m, 0, x) : courtSide(t, m, 1, x)}</a>
         ${x && edit ? `<div class="lv-by2">🎯 Dijaga oleh <b>${esc(x.by || 'tanpa nama')}</b><button type="button" class="pill-btn small light" data-rel="${m.id}">🔓 Lepaskan</button></div>` : ''}
         ${u ? `<div class="tt-u">🟣 Pengadil: <b>${esc(E.pname(t, u))}</b></div>` : ''}
         ${scoreMode(t) || iUmp ? `<div class="row tt-act"><a class="pill-btn small ${x ? 'light' : 'orange'}" href="#/t/${t.id}/ls/${m.id}">🎯 Jaga skor</a>${edit ? `<a class="pill-btn small light" href="#/t/${t.id}/m/${m.id}">📝 Skor</a><button class="pill-btn small light" data-tgh="${m.id}">⏸️</button>` : ''}</div>` : ''}`
@@ -1845,7 +1845,7 @@ function tvSlideHtml(t, sl) {
     return `<h2 class="tv-h">🟢 Sedang berlangsung</h2><div class="tv-tables">${LV.tableList(t).map(({ k }) => {
       const m = occ[k], u = m ? LV.umpireOf(t, m, U) : '', x = m ? liveOf(t, m) : null;
       return `<div class="tv-tt ${m ? '' : 'free'}"><div class="tv-tno">MEJA ${k}</div>
-        ${m ? `<div class="tv-court${x ? ' live' : ''}">${courtSide(t, m, 0, x)}<i></i>${courtSide(t, m, 1, x)}</div>
+        ${m ? `<div class="tv-court${x ? ' live' : ''}">${x && x.sw ? courtSide(t, m, 1, x) : courtSide(t, m, 0, x)}<i></i>${x && x.sw ? courtSide(t, m, 0, x) : courtSide(t, m, 1, x)}</div>
           <div class="tv-sub">${x ? `<span class="lv-dot"></span> <b class="lv-set">${setTag(t, x)}</b> · ` : ''}${esc(E.stageLabel(t, m))}${u ? ` · 🟣 ${esc(E.pname(t, u))}` : ''}</div>` : '<div class="tv-court empty"><div>Kosong</div></div>'}
         ${nx[k] ? `<div class="tv-next">⏭️ ${esc(E.pname(t, nx[k].a))} lwn ${esc(E.pname(t, nx[k].b))}</div>` : ''}</div>`;
     }).join('')}</div>`;
