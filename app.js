@@ -3,8 +3,9 @@ import { store } from './store.js';
 import { playDeal } from './draw-anim.js';
 import * as cloud from './cloud.js';
 import * as LV from './live.js';
+import * as PUSH from './push.js';
 
-const VERSION = '3.2.0';
+const VERSION = '3.3.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -25,7 +26,39 @@ function toast(msg, ms = 2600) {
   clearTimeout(toast._t); toast._t = setTimeout(() => (el.hidden = true), ms);
 }
 const load = id => { const t = store.get(id); return t ? E.migrate(t) : null; };
-const save = (t, opts) => { try { store.save(t, opts); } catch (e) { toast(e.message, 4000); } };
+const save = (t, opts) => {
+  let before = null;
+  try { if (store.isCloud(t.id) && PUSH.pushAvailable()) before = store.get(t.id); } catch {}
+  try { store.save(t, opts); } catch (e) { toast(e.message, 4000); return; }
+  if (before) try { pushStatusDiff(E.migrate(before), t); } catch (e) { console.warn(e); }
+};
+// Hantar push kepada peserta yang statusnya berubah (bermain / pengadil / bersedia) selepas meja diagih
+function pushStatusDiff(a, b) {
+  const key = (t, pid) => { const st = LV.myStatus(t, pid); return st && ['play', 'ump', 'ready'].includes(st.kind) ? `${st.kind}:${st.table}:${st.m.id}` : ''; };
+  const TXT = { play: '🔴 Anda bermain SEKARANG', ump: '🟣 Anda pengadil SEKARANG', ready: '🟡 Sila bersedia: anda seterusnya' };
+  for (const p of b.participants) {
+    const kb = key(b, p.id);
+    if (!kb || kb === key(a, p.id)) continue;
+    const st = LV.myStatus(b, p.id);
+    PUSH.send([`me:${b.id}:${p.id}`], `${TXT[st.kind]} · Meja ${st.table}`, `${E.pname(b, st.m.a)} lwn ${E.pname(b, st.m.b)} · ${b.name}`, `#/t/${b.id}/langsung`, 'me-' + b.id);
+  }
+}
+// Topik push peranti ini: penganjur (adm), nama dipilih (me), pendaftaran (reg)
+let _pushT = null;
+function pushSync() {
+  clearTimeout(_pushT);
+  _pushT = setTimeout(async () => {
+    if (!PUSH.pushAvailable() || !notifOn()) return;
+    const T = [];
+    for (const x of store.list()) {
+      if (!store.isCloud(x.id)) continue;
+      if (store.canEdit(x.id)) T.push('adm:' + x.id);
+      const me = ls.get('pingpong:me:' + x.id); if (me) T.push(`me:${x.id}:${me}`);
+      if (ls.get('pingpong:regd:' + x.id) && cloud.myUid()) T.push(`reg:${x.id}:${cloud.myUid()}`);
+    }
+    try { await PUSH.syncTopics(T.slice(0, 30)); } catch (e) { console.warn('push', e); }
+  }, 800);
+}
 const canAdmin = t => store.canAdmin(t.id);
 const canEdit = t => store.canEdit(t.id);
 const ls = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} } };
@@ -101,6 +134,7 @@ function softRender() {
 document.addEventListener('focusout', () => setTimeout(() => { if (_dirty && !busy()) softRender(); }, 150));
 cloud.onChange(what => {
   try { checkNotify(); } catch (e) { console.warn(e); }
+  if (what === 'role' || what === 'tournaments' || what === 'auth') pushSync();
   updateTop();
   if (_cur && cloud.isVerifier()) cloud.watchSubmissions(_cur);
   if (['pending', 'tournaments', 'role', 'auth', 'error', 'regs'].includes(what)) softRender();
@@ -115,11 +149,14 @@ async function notify(title, body, tag, url) {
 }
 async function askNotif() {
   if (!('Notification' in window)) return toast('Pelayar ini tidak menyokong notifikasi. Pasang app ke skrin utama dahulu.', 4000);
-  if (Notification.permission === 'granted' && ls.get('pingpong:notif') !== '0') { ls.set('pingpong:notif', '0'); toast('🔕 Notifikasi dimatikan'); return; }
+  if (Notification.permission === 'granted' && ls.get('pingpong:notif') !== '0') { ls.set('pingpong:notif', '0'); PUSH.unsubscribe().catch(() => {}); toast('🔕 Notifikasi dimatikan'); return; }
   const p = await Notification.requestPermission();
   ls.set('pingpong:notif', p === 'granted' ? '1' : '0');
   toast(p === 'granted' ? '🔔 Notifikasi dihidupkan' : 'Notifikasi tidak dibenarkan. Benarkan dalam tetapan pelayar.', 4000);
-  if (p === 'granted') notify('🔔 Notifikasi Pingpong Portal', 'Notifikasi berfungsi.', 'test');
+  if (p === 'granted') {
+    if (PUSH.pushAvailable()) { try { await PUSH.subscribe(); pushSync(); } catch (e) { console.warn('push', e); toast('Push tidak dapat diaktifkan: ' + (e.message || e), 4000); } }
+    notify('🔔 Notifikasi Pingpong Portal', PUSH.pushAvailable() ? 'Notifikasi akan sampai walaupun app ditutup.' : 'Notifikasi berfungsi.', 'test');
+  }
 }
 const notifBtn = (label = '🔔 Hidupkan notifikasi') => !('Notification' in window) || notifOn() ? '' : `<button type="button" class="pill-btn light small" data-notif="1">${label}</button>`;
 document.addEventListener('click', e => { if (e.target.closest('[data-notif]')) { askNotif().then(() => render(true)); } });
@@ -960,6 +997,7 @@ function viewMatch(t, mid) {
     send.disabled = true;
     try {
       await cloud.submitScore(t.id, { pin, matchId: m.id, a: m.a, b: m.b, rubbers: rs, lineup: readLineup(), by, role });
+      PUSH.send(['adm:' + t.id], '🔔 Skor menunggu pengesahan', `${E.matchCode(m)} · ${E.pname(t, m.a)} lwn ${E.pname(t, m.b)} · oleh ${by || '-'}`, `#/t/${t.id}/keputusan`, 'pend-' + t.id);
       ls.set('pingpong:sent:' + m.id, '1');
       toast('📤 Dihantar. Menunggu pengesahan penganjur.', 3500);
       viewMatch(t, mid);
@@ -1356,12 +1394,16 @@ function wireReg(t) {
     if ($('rgPartner') && !$('rgPartner').value.trim()) return toast('Isi nama pasangan');
     $('rgSave').disabled = true;
     try {
+      const isNew = !(cloud.state.regs[t.id] || []).some(r => r.uid === cloud.myUid());
       await cloud.register(t.id, { name, unit: $('rgUnit').value.trim(), level: $('rgLv') ? $('rgLv').value : '', partner: $('rgPartner') ? $('rgPartner').value.trim() : '', note: $('rgNote').value.trim() });
+      if (isNew) PUSH.send(['adm:' + t.id], '🏓 Pendaftaran baharu', `${name} · ${t.name}`, `#/t/${t.id}/pemain`, 'reg-' + t.id);
+      pushSync();
       ls.set('pingpong:regd:' + t.id, '1'); toast('✅ Pendaftaran dihantar. Menunggu pengesahan penganjur.', 3500);
     } catch (e) { $('rgSave').disabled = false; toast(e.code === 'permission-denied' ? 'Pendaftaran sudah ditutup' : 'Gagal: ' + (e.code || e.message), 4000); }
   };
   $app.querySelectorAll('[data-rok],[data-rno]').forEach(b => (b.onclick = async () => {
-    try { await cloud.setRegStatus(t.id, b.dataset.rok || b.dataset.rno, b.dataset.rok ? 'ok' : 'no'); } catch (e) { toast('Gagal: ' + (e.code || e.message)); }
+    const uid = b.dataset.rok || b.dataset.rno, ok = !!b.dataset.rok;
+    try { await cloud.setRegStatus(t.id, uid, ok ? 'ok' : 'no'); PUSH.send([`reg:${t.id}:${uid}`], ok ? '✅ Pendaftaran disahkan' : '✕ Pendaftaran ditolak', t.name, `#/daftar/${t.id}`, 'myreg-' + t.id); } catch (e) { toast('Gagal: ' + (e.code || e.message)); }
   }));
   $app.querySelectorAll('[data-rdel]').forEach(b => (b.onclick = async () => { if (confirm('Padam pendaftaran ini?')) try { await cloud.unregister(t.id, b.dataset.rdel); } catch (e) { toast('Gagal: ' + (e.code || e.message)); } }));
   if ($('rgImport')) $('rgImport').onclick = () => {
@@ -1531,7 +1573,7 @@ function viewLive(t) {
     ${queued.length && !allDone ? `<div class="section-title">Giliran seterusnya</div><div class="card q-list">${queued.slice(0, 10).map((m, i) => `<a class="q-row" href="#/t/${t.id}/m/${m.id}"><span class="no">${i + 1}</span><span>${vsTxt(t, m)}<br><small class="muted">${esc(E.matchCode(m) || '')} · ${esc(E.stageLabel(t, m))}${m.tg ? ' · ⏸️ ditangguh' : ''}</small></span></a>`).join('')}
       ${queued.length > 10 ? `<p class="muted small">+ ${queued.length - 10} lagi</p>` : ''}</div>` : ''}
     <p class="muted small">📌 Meja tidak tetap. Bila satu perlawanan tamat dan skornya disahkan, meja itu terus diagih kepada perlawanan seterusnya yang pemainnya bebas (keutamaan kepada meja asal kumpulan). Pengadil peringkat kumpulan ialah rakan sekumpulan yang tidak bermain.</p>`;
-  document.getElementById('meSel').onchange = e => { ls.set(meKey(t), e.target.value || null); viewLive(t); };
+  document.getElementById('meSel').onchange = e => { ls.set(meKey(t), e.target.value || null); pushSync(); viewLive(t); };
   const setTb = () => { t.numTables = Number(document.getElementById('ntSel').value) || 0; t.venue = document.getElementById('vnSel').value; E.planSchedule(t); save(t); toast(`${E.numTablesOf(t)} meja digunakan`); render(true); };
   ['ntSel', 'vnSel'].forEach(id => { const el = document.getElementById(id); if (el) el.onchange = setTb; });
   const ag = document.getElementById('agih');

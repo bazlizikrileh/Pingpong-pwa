@@ -1,9 +1,9 @@
 // Service worker: simpan fail app supaya boleh dibuka walaupun internet lemah.
 // Tukar VERSION setiap kali fail app berubah supaya pengguna dapat versi baharu.
-const VERSION = 'v3.2.0';
+const VERSION = 'v3.3.0';
 const CACHE = `pingpong-${VERSION}`;
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'engine.js', 'store.js',
-  'draw-anim.js', 'cloud.js', 'live.js', 'draw-video.js', 'poster.js', 'firebase-config.js', 'manifest.webmanifest', 'logos/kskpkpjb.webp', 'logos/ksas-pingpong.webp', 'logos/ksas.webp', 'icons/icon-192.png', 'icons/icon-512.png'];
+  'draw-anim.js', 'cloud.js', 'live.js', 'draw-video.js', 'poster.js', 'push.js', 'push-config.js', 'firebase-config.js', 'manifest.webmanifest', 'logos/kskpkpjb.webp', 'logos/ksas-pingpong.webp', 'logos/ksas.webp', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
@@ -25,6 +25,13 @@ self.addEventListener('fetch', e => {
   );
 });
 
+// Push dari pelayan (Cloudflare Worker): papar notifikasi walaupun app ditutup
+self.addEventListener('push', e => {
+  let d = {}; try { d = e.data ? e.data.json() : {}; } catch { d = { title: e.data && e.data.text() }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'Pingpong Portal', {
+    body: d.body || '', tag: d.tag || undefined, renotify: !!d.tag, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', vibrate: [200, 100, 200], data: { url: d.url || '' },
+  }));
+});
 // Ketik notifikasi → buka app pada halaman berkaitan
 self.addEventListener('notificationclick', e => {
   e.notification.close();
