@@ -4,7 +4,7 @@ import { playDeal } from './draw-anim.js';
 import * as cloud from './cloud.js';
 import * as LV from './live.js';
 
-const VERSION = '2.9.2';
+const VERSION = '2.9.3';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -33,7 +33,8 @@ const ls = { get: k => { try { return localStorage.getItem(k); } catch { return 
 // ---------- Kelab ----------
 const CLUBS = {
   ksas: { short: 'KSAS Kumpulan Rimau', name: 'Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru · Kumpulan Rimau', logos: ['logos/ksas.webp', 'logos/ksas-pingpong.webp'], theme: { tb: '#1f4aa8', tb2: '#173a86', or: '#ff7a1a', w: '#eaf1ff', hd1: '#0b1a3f', hd2: '#1d3f8c' }, waGroup: 'KSAS Rimau - Laporan Skor' },
-  kroni: { short: 'Kroni Shell (KSAS)', name: 'Kroni Shell · Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru', logos: [], ownLogo: true, theme: { tb: '#c8102e', tb2: '#9b0d23', or: '#ffc600', w: '#fff4d1', hd1: '#4a0a0f', hd2: '#a3111f' }, waGroup: '' },
+  ksasall: { short: 'KSAS', name: 'Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru', logos: ['logos/ksas.webp', 'logos/ksas-pingpong.webp'], theme: { tb: '#1f4aa8', tb2: '#173a86', or: '#ff7a1a', w: '#eaf1ff', hd1: '#0b1a3f', hd2: '#1d3f8c' }, waGroup: '' },
+  kroni: { short: 'Kroni Shell KSAS', name: 'Kroni Shell · Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru', logos: [], ownLogo: true, theme: { tb: '#c8102e', tb2: '#9b0d23', or: '#ffc600', w: '#fff4d1', hd1: '#4a0a0f', hd2: '#a3111f' }, waGroup: '' },
   kskpkpjb: { short: 'KSKPKPJB', name: 'Kelab Sukan Kebajikan Perubatan Kesihatan dan Pergigian Johor Bahru', logos: ['logos/kskpkpjb.webp'], theme: { tb: '#16803c', tb2: '#0d5a2a', or: '#e3262e', w: '#e8f6ec', hd1: '#07301b', hd2: '#0f5a2c' }, waGroup: '' },
 };
 function clubOf(t) {
@@ -294,7 +295,7 @@ function settingsFormAll(t, locked) {
     <div class="section-title" style="margin-top:0">Maklumat</div>
     <label>Nama pertandingan</label><input name="name" value="${esc(t.name)}" required>
     <div class="grid2">
-      <div><label>Kelab / Penganjur</label><select name="clubId">${opt({ ksas: 'KSAS Kumpulan Rimau', kskpkpjb: 'KSKPKPJB', lain: 'Lain-lain', '': '— Tiada —' }, clubOf(t).id)}</select></div>
+      <div><label>Kelab / Penganjur</label><select name="clubId">${opt({ ksasall: 'KSAS', ksas: 'KSAS Kumpulan Rimau', kroni: 'Kroni Shell KSAS', kskpkpjb: 'KSKPKPJB', lain: 'Lain-lain', '': '— Tiada —' }, clubOf(t).id)}</select></div>
       <div><label>Tarikh</label><input name="date" type="date" value="${esc(t.date)}"></div>
       <div><label>Masa mula</label><input name="startTime" type="time" value="${esc(t.startTime)}"></div>
       <div><label>Minit setiap sesi</label><input name="sessionMin" type="number" min="10" max="90" step="5" value="${t.sessionMin}"></div>
