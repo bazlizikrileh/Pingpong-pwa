@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.4.2';
+const VERSION = '3.4.3';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -120,7 +120,7 @@ function pn(t, id, cls = '', ph = '') {
 }
 
 // ---------- Penghala ----------
-window.addEventListener('hashchange', () => render());
+window.addEventListener('hashchange', () => { if (window._lsWake && !/\/ls\//.test(location.hash)) window._lsWake.release().catch(() => {}); render(); });
 window.addEventListener('load', () => { render(); cloud.init(); });
 let _dirty = false;
 const busy = () => {
@@ -1666,9 +1666,10 @@ function viewLiveScore(t, mid) {
       } else toast(`Game ${g} tamat · ${S.cur[0]}–${S.cur[1]}`, 1800);
       S.cur = allDone() ? [0, 0] : lsStart(t, m, S.ri);
     }
-    if (navigator.vibrate) navigator.vibrate(25);
+    try { navigator.vibrate && navigator.vibrate(d > 0 ? 60 : [40, 60, 40]); } catch {}
     push(); draw();
   };
+  if ('wakeLock' in navigator && !window._lsWake) navigator.wakeLock.request('screen').then(w => { window._lsWake = w; w.addEventListener('release', () => (window._lsWake = null)); }).catch(() => {});
   const draw = () => {
     const sets = S.rs[S.ri] || [], wa = sets.filter(s => s[0] > s[1]).length, wb = sets.filter(s => s[1] > s[0]).length;
     const h = E.handicapInfo(t, m.a, m.b, S.ri, m.lineup || null), done = allDone();
@@ -1688,7 +1689,7 @@ function viewLiveScore(t, mid) {
         <p>${r && r.winner ? `Pemenang: <b>${esc(E.pname(t, r.winner))}</b>` : r && r.draw ? '<b>Seri</b>' : 'Keputusan perlu ditentukan penganjur'}</p>
         <button class="pill-btn ${edit ? 'brand' : 'orange'}" id="sbFin"><span class="dot"></span>${edit ? '✅ Simpan keputusan' : '📤 Hantar kepada penganjur'}</button></div>` : ''}
       <div class="row" style="margin-top:12px;gap:8px"><button type="button" class="pill-btn light small" id="sbStop">⏹️ Henti skor langsung</button></div>
-      <p class="muted small">Tekan nama pemain untuk tambah 1 mata. Game tamat sendiri pada 11 (beza 2). Penonton nampak skor ini di tab Langsung dan Mod TV.</p>`;
+      <p class="muted small">Tekan nama pemain untuk tambah 1 mata. <b>−1</b> tolak satu mata pemain itu dalam game semasa. <b>↶ Undur</b> batalkan tindakan terakhir, termasuk game yang baru tamat. Game tamat sendiri pada 11 (beza 2). Skrin tidak akan padam semasa halaman ini dibuka. Penonton nampak skor ini di tab Langsung dan Mod TV.</p>`;
     $app.querySelectorAll('[data-pt]').forEach(b => (b.onclick = () => point(+b.dataset.pt, 1)));
     $app.querySelectorAll('[data-mn]').forEach(b => (b.onclick = () => point(+b.dataset.mn, -1)));
     $app.querySelectorAll('[data-ri]').forEach(b => (b.onclick = () => { H.push(JSON.stringify(S)); S.ri = +b.dataset.ri; S.cur = lsStart(t, m, S.ri); push(); draw(); }));
