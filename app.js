@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.4.9';
+const VERSION = '3.5.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1354,16 +1354,49 @@ function waText(t) {
   L.push('_✅ disahkan · ⏳ menunggu pengesahan_');
   return L.join('\n');
 }
+function regPosterData(t) {
+  const c = clubOf(t), S = E.HC_SCHEMES[t.hcMode], f = E.SET_FORMATS[t.groupFormat];
+  const at = startAt(t), d = at ? new Date(at) : null, days = at ? Math.ceil((at - Date.now()) / 86400000) : null;
+  const regs = rosterOf(t), venue = t.venue === 'X' ? t.venueName : E.VENUES[t.venue];
+  const live = regLive(t), full = t.regOpen && regFull(t);
+  return {
+    title: t.name, club: c.name || c.short, logos: c.logos,
+    when: d ? `${HARI[d.getDay()]}, ${fmtDate(t.date)}` : fmtDate(t.date), time: d ? E.sessionTime(t, 1) : '', venue,
+    format: `${E.isTeam(t) ? E.teamWord(t) + (t.tieFormat === 'SSD' ? ' (S + S + D)' : ' (S + D)') : ENTRY[t.entryMode]} · ${f.label.replace(/ \(.*\)/, '')}`,
+    hc: t.hcMode === 'manual' ? 'Handicap' : S ? `Handicap ${S.name}` : '', fee: t.regFee || '',
+    prizes: (t.prizes || '').split('\n').map(x => x.trim()).filter(Boolean), note: t.regNote || '',
+    slots: t.regMax ? (live ? `👥 Tinggal ${t.regMax - regs.length} daripada ${t.regMax} tempat` : `👥 ${regs.length} peserta`) : regs.length ? `👥 ${regs.length} sudah mendaftar` : '',
+    countdown: days != null && days > 0 ? `⏳ ${days === 1 ? 'Esok!' : days + ' hari lagi'}` : '',
+    url: shareUrl(t), status: live ? '' : full ? 'TEMPAT PENUH' : 'JOM SAKSIKAN',
+  };
+}
+async function showRegPoster(t) {
+  const md = document.getElementById('modal');
+  md.innerHTML = `<div class="sheet"><div class="row" style="justify-content:space-between"><h3 style="margin:0">🖼️ Poster</h3><button class="pill-btn light small" id="mx">✕</button></div>
+    <div id="rpBox" class="rp-box"><p class="muted">Menjana poster…</p></div></div>`;
+  md.hidden = false; md.onclick = e => { if (e.target === md || e.target.id === 'mx') md.hidden = true; };
+  try {
+    const m = await import('./reg-poster.js'), blob = await m.makeRegPoster(regPosterData(t));
+    const name = `Poster-${(t.name || 'pertandingan').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-')}.png`;
+    document.getElementById('rpBox').innerHTML = `<img src="${URL.createObjectURL(blob)}" alt="Poster" class="rp-img">
+      <div class="btn-stack" style="margin-top:10px"><button class="pill-btn orange" id="rpShare"><span class="dot"></span>📤 Kongsi poster</button></div>
+      <p class="muted small" style="text-align:center">Kod QR membawa terus ke halaman ${regLive(t) ? 'pendaftaran' : 'pertandingan'}. Jana semula untuk kemas kini bilangan tempat.</p>`;
+    document.getElementById('rpShare').onclick = async () => { const r = await m.shareBlob(blob, name, t.name); if (r === 'download') toast('Poster dimuat turun ke telefon'); };
+  } catch (e) { document.getElementById('rpBox').innerHTML = `<p>Gagal menjana poster: ${esc(e.message || String(e))}</p>`; }
+}
 function shareRow(t) {
   return `<div class="share-row"><span class="muted small">🔗 Kongsi:</span>
     <a class="pill-btn small" style="background:#25d366;color:#fff" target="_blank" rel="noopener" href="${waLink(waText(t))}">WhatsApp</a>
     <button type="button" class="pill-btn light small" data-share="msg">📋 Salin mesej</button>
     <button type="button" class="pill-btn light small" data-share="copy">🔗 Salin pautan</button>
-    <button type="button" class="pill-btn light small" data-share="preview">👁️ Lihat mesej</button></div>`;
+    <button type="button" class="pill-btn light small" data-share="preview">👁️ Lihat mesej</button>
+    <button type="button" class="pill-btn light small" data-share="poster">🖼️ Poster</button></div>`;
 }
 function wireShare(t) {
   $app.querySelectorAll('[data-share]').forEach(b => (b.onclick = async () => {
-    const k = b.dataset.share, txt = k === 'copy' ? shareUrl(t) : waText(t);
+    const k = b.dataset.share;
+    if (k === 'poster') return showRegPoster(t);
+    const txt = k === 'copy' ? shareUrl(t) : waText(t);
     if (k === 'preview') {
       const md = document.getElementById('modal');
       md.innerHTML = `<div class="sheet"><div class="row" style="justify-content:space-between"><h3 style="margin:0">Mesej WhatsApp</h3><button class="pill-btn light small" id="mx">✕</button></div>
