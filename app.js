@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.4.4';
+const VERSION = '3.4.5';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1694,12 +1694,16 @@ function viewLiveScore(t, mid) {
       ${done ? `<div class="card sb-end"><div class="section-title" style="margin-top:0">🏁 Perlawanan tamat</div>
         <p>${r && r.winner ? `Pemenang: <b>${esc(E.pname(t, r.winner))}</b>` : r && r.draw ? '<b>Seri</b>' : 'Keputusan perlu ditentukan penganjur'}</p>
         <button class="pill-btn ${edit ? 'brand' : 'orange'}" id="sbFin"><span class="dot"></span>${edit ? '✅ Simpan keputusan' : '📤 Hantar kepada penganjur'}</button></div>` : ''}
-      <div class="row" style="margin-top:12px;gap:8px"><button type="button" class="pill-btn light small" id="sbStop">⏹️ Henti skor langsung</button></div>
+      <div class="row" style="margin-top:12px;gap:8px"><button type="button" class="pill-btn light small" id="sbStop">⏹️ Henti skor langsung</button><button type="button" class="pill-btn light small" id="sbVib">📳 Uji getaran</button></div>
       <p class="muted small">Tekan nama pemain untuk tambah 1 mata. <b>−1</b> tolak satu mata pemain itu dalam set semasa. <b>↶ Undur</b> batalkan tindakan terakhir, termasuk set yang baru tamat. Set tamat sendiri pada 11 (beza 2). Skrin tidak akan padam semasa halaman ini dibuka. Penonton nampak skor ini di tab Langsung dan Mod TV.</p>`;
     $app.querySelectorAll('[data-pt]').forEach(b => (b.onclick = () => point(+b.dataset.pt, 1)));
     $app.querySelectorAll('[data-mn]').forEach(b => (b.onclick = () => point(+b.dataset.mn, -1)));
     $app.querySelectorAll('[data-ri]').forEach(b => (b.onclick = () => { H.push(JSON.stringify(S)); S.ri = +b.dataset.ri; S.cur = lsStart(t, m, S.ri); push(); draw(); }));
     document.getElementById('sbUndo').onclick = () => { if (!H.length) return; S = JSON.parse(H.pop()); push(); draw(); };
+    document.getElementById('sbVib').onclick = () => {
+      let ok = false; try { ok = !!(navigator.vibrate && navigator.vibrate(500)); } catch {}
+      toast(!('vibrate' in navigator) ? 'Pelayar ini tidak menyokong getaran (contoh iPhone).' : ok ? 'Arahan getaran dihantar ✓. Jika tiada rasa getaran, tetapan telefon yang menyekatnya.' : 'Pelayar menolak arahan getaran.', 5000);
+    };
     document.getElementById('sbSwap').onclick = () => { S.swap = !S.swap; ls.set(key, JSON.stringify(S)); draw(); };
     document.getElementById('sbStop').onclick = async () => {
       if (!confirm('Henti skor langsung untuk perlawanan ini? Skor di telefon ini akan dipadam.')) return;
