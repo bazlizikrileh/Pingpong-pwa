@@ -19,6 +19,7 @@ export const state = {
   offline: false,      // data dari cache peranti (belum disahkan pelayan)
   pending: {},         // tid → [penghantaran menunggu]
   regs: {},            // tid → [pendaftaran peserta]
+  live: {},            // tid → { mid: skor langsung }
 };
 const emit = what => listeners.forEach(f => { try { f(what); } catch (e) { console.error(e); } });
 export const onChange = f => { listeners.add(f); return () => listeners.delete(f); };
@@ -158,3 +159,25 @@ export async function register(tid, { name, unit, level, partner, note }) {
 export async function unregister(tid, uid) { await init(); await F.deleteDoc(F.doc(db, 'tournaments', tid, 'registrations', uid || auth.currentUser.uid)); }
 export async function setRegStatus(tid, uid, status) { await init(); await F.setDoc(F.doc(db, 'tournaments', tid, 'registrations', uid), { status }, { merge: true }); }
 export const myUid = () => (auth && auth.currentUser ? auth.currentUser.uid : '');
+
+// ---------- Skor langsung (setiap meja) ----------
+// tournaments/{tid}/live/{mid}: { uid, rs:"11-8,9-11|...", cur:"7-5", ri, by, tb, at } — semua boleh baca.
+// Penjaga skor bukan penganjur mendaftar sekali dengan PIN: tournaments/{tid}/scorers/{uid} { pin, at } (tidak boleh dibaca umum).
+const unsubLive = {};
+export function watchLive(tid) {
+  if (unsubLive[tid] || !F) return;
+  unsubLive[tid] = F.onSnapshot(F.collection(db, 'tournaments', tid, 'live'), snap => {
+    const o = {};
+    snap.forEach(d => { const x = d.data(); o[d.id] = { ...x, rs: decodeRubbers(x.rs), cur: String(x.cur || '0-0').split('-').map(Number), at: x.at?.toMillis?.() || Date.now() }; });
+    state.live[tid] = o; emit('live');
+  }, err => { console.warn('live', err); state.live[tid] = state.live[tid] || {}; emit('live'); });
+}
+export async function claimScorer(tid, pin) {
+  const u = await ensureAnon();
+  await F.setDoc(F.doc(db, 'tournaments', tid, 'scorers', u.uid), { pin: String(pin), at: F.serverTimestamp() });
+}
+export async function setLive(tid, mid, { rs, cur, ri, by, tb }) {
+  const u = await ensureAnon();
+  await F.setDoc(F.doc(db, 'tournaments', tid, 'live', mid), { uid: u.uid, rs: encodeRubbers(rs), cur: `${cur[0]}-${cur[1]}`, ri: ri | 0, by: String(by || '').slice(0, 50), tb: String(tb || '').slice(0, 15), at: F.serverTimestamp() });
+}
+export async function clearLive(tid, mid) { await init(); await F.deleteDoc(F.doc(db, 'tournaments', tid, 'live', mid)); }
