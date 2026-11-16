@@ -4,7 +4,7 @@ import { playDeal } from './draw-anim.js';
 import * as cloud from './cloud.js';
 import * as LV from './live.js';
 
-const VERSION = '2.9.1';
+const VERSION = '2.9.2';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -167,7 +167,7 @@ function renderHead(t, page) {
   const done = play.filter(m => m.status === 'done').length, pct = play.length ? Math.round(done / play.length * 100) : 0;
   const nT = E.numTablesOf(t), onT = LV.liveState(t).live.length;
   const stg = t.stage === 'setup' ? 'Persediaan' : t.stage === 'done' ? 'Tamat' : t.stage === 'group' ? (t.format === 'rr' ? 'Liga' : 'Kumpulan') : 'Kalah mati';
-  const sub = [c.short, fmtDate(t.date), E.isTeam(t) ? E.teamWord(t) + (t.tieFormat === 'SSD' ? ' S+S+D' : '') : ENTRY_SHORT[t.entryMode], `Best of ${f.full ? '3' : f.bo}`].filter(Boolean).map(esc).join(' · ');
+  const sub = [c.short, fmtDate(t.date), E.isTeam(t) ? E.teamWord(t) + (t.tieFormat === 'SSD' ? ' S+S+D' : '') : ENTRY_SHORT[t.entryMode], (f.full ? `${f.bo} set` : `Best of ${f.bo}`)].filter(Boolean).map(esc).join(' · ');
   $head.innerHTML = `${store.isLocal(t.id) ? '<div class="hb-test">🧪 MOD UJIAN · telefon ini sahaja</div>' : ''}<div class="hb-top">${c.logos.length ? `<div class="hb-logos">${c.logos.map(src => `<img src="${esc(src)}" alt="">`).join('')}</div>` : ''}
       <div class="hb-tt"><h1>${esc(t.name)}</h1><p>${sub}<span class="hb-cl" title="${store.isCloud(t.id) ? 'Dikongsi di awan' : 'Disimpan di peranti ini sahaja'}">${store.isCloud(t.id) ? '☁️' : '📱'}</span></p></div></div>
     <div class="hb-board">
@@ -309,6 +309,8 @@ function settingsFormAll(t, locked) {
     <label>Jenis acara</label><select name="entryMode" ${dis}>${opt(ENTRY, t.entryMode)}</select>
     <div data-show="team"><label>Saiz</label><select name="teamSize" ${dis}>${opt({ 3: 'Trio (3 orang)', 4: 'Kuartet (4 orang)' }, t.teamSize)}</select></div>
     <div data-show="team"><label>Setiap pertemuan</label><select name="tieFormat" ${dis}>${opt({ SD: 'Single + Double (menang 2-0 = 3 mata, 1-1 = seri)', SSD: 'Single + Single + Double (semua dimainkan; menang ikut jumlah set)' }, t.tieFormat)}</select></div>
+    <div data-show="tieRule"><label>Bila keputusan sama (peringkat kumpulan)</label><select name="tieRule">${opt({ draw: 'Seri: 1 mata setiap pihak (menang 3, kalah 0)', next: 'Tiada seri: penentu perlawanan dimenangi, kemudian jumlah mata' }, t.tieRule || 'draw')}</select>
+      <p class="muted small" style="margin:4px 0 0">Kalah mati tiada seri: penentu perlawanan dimenangi, kemudian jumlah mata, kemudian keputusan penganjur.</p></div>
     <label>Struktur</label><select name="format" ${dis}>${opt(FORMAT, t.format)}</select>
     <div class="grid2">
       <div><label data-label="gf">Format kumpulan</label><select name="groupFormat">${opt(setOpts, t.groupFormat)}</select></div>
@@ -354,6 +356,7 @@ function wireForm(form) {
     show('ko', f !== 'rr');
     show('venueX', form.venue.value === 'X');
     show('clubX', form.clubId.value === 'lain');
+    show('tieRule', (form.entryMode.value === 'team' && form.tieFormat.value === 'SSD' && Number(form.teamSize.value) >= 4) || (form.entryMode.value !== 'team' && form.groupFormat.value === 'F2'));
     show('clubLogo', form.clubId.value === 'lain' || form.clubId.value === 'kroni');
     show('wa', form.waEnabled.checked);
     show('waG', form.waMode.value === 'G'); show('waN', form.waMode.value === 'N');
@@ -376,6 +379,7 @@ function readSettings(form, t) {
   t.date = v('date'); t.startTime = v('startTime');
   t.sessionMin = Math.max(5, Number(v('sessionMin')) || 30);
   t.hcMode = v('hcMode'); t.handicap = t.hcMode !== 'off';
+  t.tieRule = v('tieRule') || 'draw';
   t.groupFormat = v('groupFormat'); t.koFormat = v('koFormat');
   t.koMode = v('koMode'); t.pool = v('pool'); t.poolMode = v('poolMode');
   t.venue = v('venue'); t.numTables = Number(v('numTables')) || 0; t.venueName = v('venueName').trim();
@@ -1128,7 +1132,7 @@ function rulesHtml(t) {
     if (t.pool !== '0') rules.push(`Pool kalah: ${t.pool === '34' ? 'peserta tempat ketiga yang tidak layak ke kalah mati utama dan semua peserta tempat keempat' : 'peserta tempat ketiga yang tidak layak ke kalah mati utama'} bermain kalah mati berasingan menggunakan format kalah mati yang sama. BYE (jika ada) diberi kepada peserta terbaik.`);
   }
   rules.push(!E.isTeam(t) ? 'Menang: 3 mata. Kalah: 0 mata.'
-    : t.tieFormat === 'SSD' ? `Pertemuan ${E.teamWord(t).toLowerCase()}: Single 1 + Single 2 + Double, ketiga-tiga dimainkan. Setiap ahli bermain sekali sahaja (dua pemain single, dua lagi double). Pemenang ditentukan oleh jumlah set yang dimenangi; jika sama: bilangan perlawanan dimenangi, kemudian jumlah mata. Menang: 3 mata. Kalah: 0 mata.`
+    : t.tieFormat === 'SSD' ? `Pertemuan ${E.teamWord(t).toLowerCase()}: Single 1 + Single 2 + Double, ketiga-tiga dimainkan. Setiap ahli bermain sekali sahaja (dua pemain single, dua lagi double). Pemenang ditentukan oleh jumlah set yang dimenangi. ${t.tieRule === 'next' ? 'Jika jumlah set sama: bilangan perlawanan dimenangi, kemudian jumlah mata. Menang: 3 mata. Kalah: 0 mata.' : 'Jika jumlah set sama di peringkat kumpulan: seri, 1 mata setiap pasukan. Menang: 3 mata. Kalah: 0 mata.'} Kalah mati: jika set sama, penentu perlawanan dimenangi, kemudian jumlah mata.`
     : `Pertemuan ${E.teamWord(t).toLowerCase()}: 1 perlawanan perseorangan + 1 perlawanan regu. Menang 2-0: 3 mata. Seri 1-1: 1 mata. Kalah: 0 mata.`);
   rules.push('Jika mata sama, susunan ditentukan mengikut turutan: (1) beza menang-kalah bilangan perlawanan, (2) beza menang-kalah bilangan set, (3) keputusan bersemuka (pertemuan sesama peserta yang masih sama; jika tiga atau lebih, bilangan kemenangan sesama mereka), (4) beza menang-kalah bilangan mata permainan. Contoh: 5-2 (+3).');
   const HS = E.HC_SCHEMES[t.hcMode];

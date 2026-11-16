@@ -76,6 +76,7 @@ export function migrate(t) {
   t.handicap = t.hcMode !== 'off';
   t.levels ||= {};
   t.tieFormat ||= 'SD';
+  t.tieRule ||= 'draw';
   if (t.groupSize > 5) t.groupSize = 5;
   if (t.groupSize < 4) t.groupSize = 4;
   for (const m of t.matches) {
@@ -178,15 +179,18 @@ export function evaluateMatch(t, m) {
   o.complete = R.length > 0 && R.every(r => r.complete);
   if (!o.complete) return o;
   let side = null;
+  const drawOk = m.stage === 'group' && t.tieRule !== 'next';
   if (isTeam(t) && t.tieFormat === 'SSD') {
-    // S+S+D: semua 3 perlawanan dimainkan; pemenang = jumlah set, kemudian perlawanan dimenangi, kemudian mata
+    // S+S+D: semua 3 perlawanan dimainkan; pemenang = jumlah set.
+    // Set sama → peringkat kumpulan: seri 1 mata (tieRule 'draw', lalai) atau penentu seterusnya (tieRule 'next')
     if (o.sa !== o.sb) side = o.sa > o.sb ? 'a' : 'b';
+    else if (drawOk) o.draw = true;
     else if (o.ra !== o.rb) side = o.ra > o.rb ? 'a' : 'b';
     else if (o.pa !== o.pb) side = o.pa > o.pb ? 'a' : 'b';
     else if (m.override === m.a || m.override === m.b) o.winner = m.override;
     else o.needsDecision = true;
   } else if (o.ra !== o.rb) side = o.ra > o.rb ? 'a' : 'b';
-  else if (m.stage === 'group') o.draw = true;
+  else if (m.stage === 'group' && (isTeam(t) || drawOk)) o.draw = true;
   else if (o.sa !== o.sb) side = o.sa > o.sb ? 'a' : 'b';
   else if (o.pa !== o.pb) side = o.pa > o.pb ? 'a' : 'b';
   else if (m.override === m.a || m.override === m.b) o.winner = m.override;
