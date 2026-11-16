@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.3.3';
+const VERSION = '3.3.4';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1026,7 +1026,7 @@ function viewMatch(t, mid) {
   if (wa) wa.onclick = () => {
     const text = E.reportText(t, m, clean(read()));
     const num = t.waMode === 'N' && t.waNumber ? t.waNumber : '';
-    window.open(`https://wa.me/${num}?text=${encodeURIComponent(text)}`, '_blank');
+    window.open(waLink(text, num), '_blank');
     if (t.waMode !== 'N' && t.waGroup) toast(`Pilih group "${t.waGroup}" dalam WhatsApp`, 4000);
   };
   const tgh = document.getElementById('tgh');
@@ -1310,7 +1310,11 @@ function levelsCard(t) {
     <div class="lv-list">${P.map(n => `<div class="lv-row"><span>${esc(n)}</span>${admin ? `<select data-lvn="${esc(n)}">${opt({ '': '— tahap —', ...Object.fromEntries(S.levels.map(l => [l[0], `${l[1]} (S${l[2]} · D${l[3]})`])) }, E.levelOf(t, n))}</select>` : chip(E.levelOf(t, n))}</div>`).join('')}</div></details>`;
 }
 // ---------- Pautan kongsi ----------
-const shareUrl = t => `${location.origin}${location.pathname}#/${t.regOpen ? 'daftar/' + t.id : 't/' + t.id + '/pemain'}`;
+const regFull = t => !!t.regMax && rosterOf(t).length >= t.regMax;
+const regLive = t => !!t.regOpen && !regFull(t);
+// wa.me di komputer merosakkan emoji (jadi �); guna WhatsApp Web terus
+const waLink = (text, num = '') => (/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) ? `https://wa.me/${num}?text=` : `https://web.whatsapp.com/send?${num ? 'phone=' + num + '&' : ''}text=`) + encodeURIComponent(text);
+const shareUrl = t => `${location.origin}${location.pathname}#/${regLive(t) ? 'daftar/' + t.id : 't/' + t.id + '/pemain'}`;
 // Mesej WhatsApp pendaftaran: butiran acara + senarai peserta bernombor + pautan daftar
 const HARI = ['Ahad', 'Isnin', 'Selasa', 'Rabu', 'Khamis', 'Jumaat', 'Sabtu'];
 function waText(t) {
@@ -1340,13 +1344,13 @@ function waText(t) {
   if (t.regMax) L.push(regs.length < t.regMax ? `_Tinggal ${t.regMax - regs.length} tempat lagi_` : '_🔒 Tempat penuh_');
   L.push('');
   if (days != null && days > 0) L.push(`⏰ ${days === 1 ? 'Esok!' : days + ' hari lagi'}`);
-  L.push(t.regOpen ? `👉 *Daftar di sini:*\n${shareUrl(t)}` : `🔗 ${shareUrl(t)}`);
+  L.push(regLive(t) ? `👉 *Daftar di sini:*\n${shareUrl(t)}` : `${t.regOpen ? '🔒 *Pendaftaran ditutup (tempat penuh)*\n' : ''}🔗 ${shareUrl(t)}`);
   L.push('_✅ disahkan · ⏳ menunggu pengesahan_');
   return L.join('\n');
 }
 function shareRow(t) {
   return `<div class="share-row"><span class="muted small">🔗 Kongsi:</span>
-    <a class="pill-btn small" style="background:#25d366;color:#fff" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(waText(t))}">WhatsApp</a>
+    <a class="pill-btn small" style="background:#25d366;color:#fff" target="_blank" rel="noopener" href="${waLink(waText(t))}">WhatsApp</a>
     <button type="button" class="pill-btn light small" data-share="msg">📋 Salin mesej</button>
     <button type="button" class="pill-btn light small" data-share="copy">🔗 Salin pautan</button>
     <button type="button" class="pill-btn light small" data-share="preview">👁️ Lihat mesej</button></div>`;
@@ -1384,7 +1388,7 @@ function regCard(t) {
       <div class="row" style="margin-top:10px"><button type="button" class="pill-btn orange" id="rgSave"><span class="dot"></span>${r ? 'Simpan perubahan' : 'Daftar'}</button></div></div>`;
   return `<div class="card reg-card">
     <div class="row" style="justify-content:space-between"><div class="section-title" style="margin:0">🏓 Pendaftaran</div>
-      <span class="role-chip">${t.regOpen ? '🟢 Dibuka' : 'Ditutup'}</span></div>
+      <span class="role-chip">${regLive(t) ? '🟢 Dibuka' : t.regOpen ? '🔒 Penuh' : 'Ditutup'}</span></div>
     <p class="small" style="margin:6px 0"><b>Jumlah peserta: ${rosterOf(t).length}${t.regMax ? '/' + t.regMax : ''}</b> · ${regs.length} daftar sendiri · ${ok.length} disahkan${t.entryMode !== 'single' && E.usesDraw(t) ? ` · ${t.entryMode === 'team' ? E.teamWord(t).toLowerCase() : 'regu'} diundi oleh penganjur` : ''}</p>
     ${t.regNote ? `<p class="muted small" style="margin:0 0 8px">${esc(t.regNote)}</p>` : ''}
     ${mine ? `<div class="notice small">Anda telah mendaftar sebagai <b>${esc(mine.name)}</b>${mine.level ? ` (${esc(lvName(mine.level))})` : ''} · ${REG_ST[mine.status][0]} ${REG_ST[mine.status][1]}
@@ -1462,7 +1466,7 @@ function viewDaftar(t) {
       <div class="d-info">${info.map(([i, v]) => `<div><span>${i}</span>${esc(v)}</div>`).join('')}</div>
       ${prizes.length ? `<div class="d-prize">${prizes.map((p, i) => `<div><span>${['🥇', '🥈', '🥉'][i] || '🏅'}</span>${esc(p)}</div>`).join('')}</div>` : ''}
       ${t.regNote ? `<p class="d-note">${esc(t.regNote)}</p>` : ''}
-      <div class="row" style="gap:6px;margin-top:8px"><span class="role-chip">${t.regOpen ? '🟢 Pendaftaran dibuka' : '🔒 Pendaftaran ditutup'}</span><span class="role-chip">${active}${t.regMax ? '/' + t.regMax : ''} berdaftar · ${ok.length} disahkan</span></div>
+      <div class="row" style="gap:6px;margin-top:8px"><span class="role-chip">${regLive(t) ? '🟢 Pendaftaran dibuka' : t.regOpen ? '🔒 Penuh' : '🔒 Pendaftaran ditutup'}</span><span class="role-chip">${active}${t.regMax ? '/' + t.regMax : ''} peserta · ${ok.length} disahkan</span></div>
     </div>
     <div class="card reg-card">
       <div class="section-title" style="margin-top:0">📝 ${mine ? 'Pendaftaran anda' : 'Daftar penyertaan'}</div>
