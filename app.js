@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.4.0';
+const VERSION = '3.4.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -140,6 +140,7 @@ cloud.onChange(what => {
   if (_cur && cloud.isVerifier()) cloud.watchSubmissions(_cur);
   if (['pending', 'tournaments', 'role', 'auth', 'error', 'regs'].includes(what)) softRender();
   else if (what === 'live' && /^#\/tv\//.test(location.hash)) tvLiveRefresh();
+  else if (what === 'live' && /^#\/t\/[^/]+\/ls\//.test(location.hash)) { if (_lsOnLive) _lsOnLive(); }
   else if (what === 'live' && !/^#\/t\/[^/]+\/(ls|m)\//.test(location.hash)) softRender();
 });
 // ---------- Notifikasi telefon ----------
@@ -1562,7 +1563,7 @@ const vsTxt = (t, m) => `<b>${esc(E.pname(t, m.a))}</b> <small>lwn</small> <b>${
 // Penjaga skor (penganjur, pengesah, atau sesiapa dengan PIN acara) tekan separuh skrin untuk tambah mata.
 // Skor disegerakkan ke awan; penonton nampak di tab Langsung dan Mod TV. Bila tamat → simpan / hantar untuk pengesahan.
 const LS_FRESH = 45 * 60e3, _lsHist = {};
-let _lsTimer = null;
+let _lsTimer = null, _lsOnLive = null;
 function liveOf(t, m) {
   const x = ((cloud.state.live || {})[t.id] || {})[m.id];
   return x && Date.now() - x.at < LS_FRESH ? x : null;
@@ -1570,7 +1571,8 @@ function liveOf(t, m) {
 function liveBadge(t, m, cls = 'lv-sc') {
   const x = liveOf(t, m); if (!x) return '';
   const g = x.rs[x.ri] || [], wa = g.filter(s => s[0] > s[1]).length, wb = g.filter(s => s[1] > s[0]).length;
-  return `<div class="${cls}"><span class="lv-dot"></span><span class="lv-l">LANGSUNG${E.isTeam(t) ? ' · ' + esc(E.rubberLabel(t, x.ri)) : ''}</span><span class="lv-g">Game ${wa}–${wb}</span><b>${x.cur[0]}–${x.cur[1]}</b></div>`;
+  const who = cls === 'lv-sc' && canEdit(t) ? `<span class="lv-by">🎯 ${esc(x.by || 'tanpa nama')} <button type="button" class="lv-rel" data-rel="${m.id}">🔓 Lepaskan</button></span>` : '';
+  return `<div class="${cls}"><span class="lv-dot"></span><span class="lv-l">LANGSUNG${E.isTeam(t) ? ' · ' + esc(E.rubberLabel(t, x.ri)) : ''}</span><span class="lv-g">Game ${wa}–${wb}</span><b>${x.cur[0]}–${x.cur[1]}</b>${who}</div>`;
 }
 const gameOver = (a, b) => (a >= 11 || b >= 11) && Math.abs(a - b) >= 2;
 function lsStart(t, m, ri) {
@@ -1612,19 +1614,35 @@ function viewLiveScore(t, mid) {
     };
     return;
   }
+  _lsOnLive = null;
+  const remote = cloudOn ? liveOf(t, m) : null, other = remote && remote.uid !== cloud.myUid();
+  if (other && !edit) {
+    // Dikunci oleh penjaga lain: telefon ini hanya menonton
+    const sets = remote.rs[remote.ri] || [], wa = sets.filter(g => g[0] > g[1]).length, wb = sets.filter(g => g[1] > g[0]).length;
+    $app.innerHTML = `${back}${eyebrow}
+      <div class="notice">🔒 Perlawanan ini sedang dijaga oleh <b>${esc(remote.by || 'penjaga lain')}</b>. Anda boleh menonton sahaja.<br><small>Jika perlu ambil alih (contoh bateri habis), minta penganjur tekan 🔓 Lepaskan di tab Langsung. Kunci juga terlepas sendiri selepas 10 minit tiada kemas kini.</small></div>
+      <div class="sb">${[[A, 0, wa], [B, 1, wb]].map(([nm, k, g]) => `<div class="sb-side s${k}" style="min-height:30vh"><div class="sb-nm">${esc(nm)}</div><div class="sb-pt">${remote.cur[k]}</div><div class="sb-g">Game <b>${g}</b></div></div>`).join('')}</div>`;
+    _lsOnLive = () => viewLiveScore(load(t.id) || t, mid);
+    return;
+  }
   // keadaan: dari telefon ini → dari awan (ambil alih) → dari skor sedia ada
   let S = null; try { S = JSON.parse(ls.get(key) || 'null'); } catch {}
-  const remote = liveOf(t, m);
+  let takeNote = other && edit ? `<div class="notice">🎯 Sedang dijaga oleh <b>${esc(remote.by || 'penjaga lain')}</b>. Jika anda tekan mata di sini, anda mengambil alih.</div>` : '';
+  if (other && edit) S = null;
   if (!S && remote) S = { ri: remote.ri, rs: remote.rs.map(r => r.map(g => [...g])), cur: [...remote.cur], swap: false };
   if (!S) { const rs = m.rubbers.map(r => r.sets.map(g => [...g])); let ri = rs.findIndex(s => !lsRubberDone(t, m, s)); if (ri < 0) ri = nR - 1; S = { ri, rs, cur: lsStart(t, m, ri), swap: false }; }
   while (S.rs.length < nR) S.rs.push([]);
   const H = (_lsHist[m.id] = _lsHist[m.id] || []);
   const allDone = () => S.rs.every(s => lsRubberDone(t, m, s));
   const push = () => {
+    takeNote = '';
     ls.set(key, JSON.stringify(S));
     if (!cloudOn) return;
     clearTimeout(_lsTimer);
-    _lsTimer = setTimeout(() => cloud.setLive(t.id, m.id, { rs: S.rs, cur: S.cur, ri: S.ri, by: ls.get('pingpong:myname') || '', tb: m.lt || m.table || '' }).catch(err => toast('Skor langsung tidak dapat dihantar: ' + (err.code || err.message), 3500)), 250);
+    _lsTimer = setTimeout(() => cloud.setLive(t.id, m.id, { rs: S.rs, cur: S.cur, ri: S.ri, by: ls.get('pingpong:myname') || (edit ? 'Penganjur' : ''), tb: m.lt || m.table || '' }).catch(err => {
+      if (err.code === 'permission-denied') { ls.set(key, null); toast('🔒 Perlawanan ini kini dijaga oleh orang lain', 4000); viewLiveScore(load(t.id) || t, mid); }
+      else toast('Skor langsung tidak dapat dihantar: ' + (err.code || err.message), 3500);
+    }), 250);
   };
   const point = (k, d) => {
     if (d > 0 && allDone()) return;
@@ -1649,7 +1667,7 @@ function viewLiveScore(t, mid) {
     const r = done ? E.evaluateMatch(t, { ...m, rubbers: S.rs.map(sets => ({ sets })) }) : null;
     const side = (k, nm) => `<button type="button" class="sb-side s${k}" data-pt="${k}" ${done ? 'disabled' : ''}>
         <div class="sb-nm">${esc(nm)}</div><div class="sb-pt">${S.cur[k]}</div><div class="sb-g">Game <b>${k ? wb : wa}</b></div></button>`;
-    $app.innerHTML = `${back}${eyebrow}
+    $app.innerHTML = `${back}${eyebrow}${takeNote}
       ${E.isTeam(t) ? `<div class="sb-tabs">${m.rubbers.map((_, i) => `<button type="button" class="pill-btn small ${i === S.ri ? 'brand' : 'light'}" data-ri="${i}">${esc(E.rubberLabel(t, i))}${lsRubberDone(t, m, S.rs[i]) ? ' ✓' : ''}</button>`).join('')}</div>` : ''}
       <div class="sb${S.swap ? ' sw' : ''}">${side(0, A)}${side(1, B)}</div>
       <div class="sb-ctl"><button type="button" class="pill-btn light small" data-mn="${S.swap ? 1 : 0}">−1</button>
@@ -1743,6 +1761,11 @@ function viewLive(t) {
     ${queued.length && !allDone ? `<div class="section-title">Giliran seterusnya</div><div class="card q-list">${queued.slice(0, 10).map((m, i) => `<a class="q-row" href="#/t/${t.id}/m/${m.id}"><span class="no">${i + 1}</span><span>${vsTxt(t, m)}<br><small class="muted">${esc(E.matchCode(m) || '')} · ${esc(E.stageLabel(t, m))}${m.tg ? ' · ⏸️ ditangguh' : ''}</small></span></a>`).join('')}
       ${queued.length > 10 ? `<p class="muted small">+ ${queued.length - 10} lagi</p>` : ''}</div>` : ''}
     <p class="muted small">📌 Meja tidak tetap. Bila satu perlawanan tamat dan skornya disahkan, meja itu terus diagih kepada perlawanan seterusnya yang pemainnya bebas (keutamaan kepada meja asal kumpulan). Pengadil peringkat kumpulan ialah rakan sekumpulan yang tidak bermain.</p>`;
+  $app.querySelectorAll('[data-rel]').forEach(b => (b.onclick = async () => {
+    if (!confirm('Lepaskan kunci penjaga skor perlawanan ini? Skor langsung dipadam; telefon lain boleh mula semula.')) return;
+    await cloud.clearLive(t.id, b.dataset.rel).catch(err => toast('Gagal: ' + (err.code || err.message)));
+    toast('🔓 Dilepaskan');
+  }));
   document.getElementById('meSel').onchange = e => { ls.set(meKey(t), e.target.value || null); pushSync(); viewLive(t); };
   const setTb = () => { t.numTables = Number(document.getElementById('ntSel').value) || 0; t.venue = document.getElementById('vnSel').value; E.planSchedule(t); save(t); toast(`${E.numTablesOf(t)} meja digunakan`); render(true); };
   ['ntSel', 'vnSel'].forEach(id => { const el = document.getElementById(id); if (el) el.onchange = setTb; });

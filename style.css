@@ -563,3 +563,6 @@ body.tv main#app { max-width:none; padding:0; margin:0; }
 .sb-games .wa { background:#dbeafe; color:#1e3a8a; } .sb-games .wb { background:#ffedd5; color:#9a3412; }
 .sb-end { border:2px solid #16a34a; }
 @media (orientation: landscape) { .sb-side { min-height:58vh; } }
+.lv-sc { flex-wrap:wrap; }
+.lv-by { flex-basis:100%; display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; opacity:.9; border-top:1px solid rgba(255,255,255,.15); padding-top:5px; margin-top:2px; }
+.lv-rel { border:0; border-radius:999px; padding:3px 10px; background:#fff; color:#1b1f2e; font-weight:600; font-size:12px; }
