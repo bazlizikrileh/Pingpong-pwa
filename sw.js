@@ -1,12 +1,12 @@
 // Service worker: simpan fail app supaya boleh dibuka walaupun internet lemah.
 // Tukar VERSION setiap kali fail app berubah supaya pengguna dapat versi baharu.
-const VERSION = 'v2.9.3';
+const VERSION = 'v2.9.4';
 const CACHE = `pingpong-${VERSION}`;
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'engine.js', 'store.js',
-  'draw-anim.js', 'cloud.js', 'firebase-config.js', 'manifest.webmanifest', 'logos/kskpkpjb.webp', 'logos/ksas-pingpong.webp', 'logos/ksas.webp', 'icons/icon-192.png', 'icons/icon-512.png'];
+  'draw-anim.js', 'cloud.js', 'live.js', 'draw-video.js', 'firebase-config.js', 'manifest.webmanifest', 'logos/kskpkpjb.webp', 'logos/ksas-pingpong.webp', 'logos/ksas.webp', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
@@ -16,7 +16,8 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(e.request).then(res => {
+    // cache: 'no-cache' → sentiasa semak versi terkini dengan pelayan (GitHub Pages menyimpan fail 10 minit dalam cache pelayar)
+    fetch(e.request, { cache: 'no-cache' }).then(res => {
       const copy = res.clone();
       caches.open(CACHE).then(c => c.put(e.request, copy));
       return res;

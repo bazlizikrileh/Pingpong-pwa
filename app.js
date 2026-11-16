@@ -4,7 +4,7 @@ import { playDeal } from './draw-anim.js';
 import * as cloud from './cloud.js';
 import * as LV from './live.js';
 
-const VERSION = '2.9.3';
+const VERSION = '2.9.4';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1509,7 +1509,20 @@ function showProfile(t, id) {
 }
 
 // ---------- PWA ----------
-if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+// Kemas kini automatik: semak versi baharu setiap kali app dibuka/kembali ke skrin, dan muat semula sekali bila versi baharu aktif
+if ('serviceWorker' in navigator) {
+  const hadSW = !!navigator.serviceWorker.controller;
+  let reloading = false, pendingReload = false;
+  const doReload = () => { if (reloading) return; reloading = true; location.reload(); };
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadSW) return;
+    if (busy()) { pendingReload = true; toast('Versi baharu sedia, akan dimuat semula selepas ini'); } else doReload();
+  });
+  window.addEventListener('hashchange', () => { if (pendingReload) doReload(); });
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+  }).catch(() => {}));
+}
 let deferredPrompt = null;
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault(); deferredPrompt = e;
