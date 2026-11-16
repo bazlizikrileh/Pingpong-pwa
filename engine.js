@@ -21,6 +21,7 @@ export const SET_FORMATS = {
   '3': { bo: 3, full: false, label: 'Terbaik 3 set (2-0 / 2-1)' },
   '5': { bo: 5, full: false, label: 'Terbaik 5 set (3-0 / 3-1 / 3-2)' },
   'F3': { bo: 3, full: true, label: '3 set, semua dimainkan (3-0 / 2-1)' },
+  'F2': { bo: 2, full: true, label: '2 set, kedua-dua dimainkan (2-0 / 1-1)' },
 };
 export const fmtFor = (t, stage) => SET_FORMATS[stage === 'group' ? t.groupFormat : t.koFormat] || SET_FORMATS['5'];
 
@@ -162,8 +163,8 @@ function evalRubber(f, sets) {
   let wa = 0, wb = 0, pa = 0, pb = 0;
   for (const [x, y] of valid) { if (+x > +y) wa++; else wb++; pa += +x; pb += +y; }
   const need = Math.floor(f.bo / 2) + 1;
-  const complete = f.full ? valid.length >= 3 : (wa >= need || wb >= need);
-  return { wa, wb, pa, pb, complete, winner: complete ? (wa > wb ? 'a' : 'b') : null };
+  const complete = f.full ? valid.length >= f.bo : (wa >= need || wb >= need);
+  return { wa, wb, pa, pb, complete, winner: complete && wa !== wb ? (wa > wb ? 'a' : 'b') : null };
 }
 
 export function evaluateMatch(t, m) {
