@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.3.4';
+const VERSION = '3.3.5';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -592,6 +592,7 @@ function viewSetupCore(t, part = 'tetapan') {
       ${locked ? '<p class="muted small">Dikunci. Gunakan <b>↺ Reset jadual</b> di Tetapan untuk mengubah peserta.</p>' : draw ? `
         <p class="muted small">${entryHint(t)}</p>
         <label>Senarai individu (${t.individuals.length})</label>
+        <p class="muted small" style="margin:0 0 4px">Nama dalam kotak ini ialah senarai rasmi dan dikira ✅ disahkan.</p>
         <textarea id="ind">${esc(t.individuals.map(x => x.name + (x.unit ? ', ' + x.unit : '') + (E.HC_SCHEMES[t.hcMode] && E.levelOf(t, x.name) ? ` (${E.levelInfo(t, E.levelOf(t, x.name))[1]})` : '')).join('\n'))}</textarea>
         <div class="row" style="margin-top:10px"><button type="button" class="pill-btn light" id="saveP">Simpan senarai</button>
           <button type="button" class="pill-btn orange" id="undi"><span class="dot"></span>Undi ${unit.toLowerCase()}</button></div>` : `
@@ -1376,6 +1377,7 @@ function regCard(t) {
   cloud.watchRegistrations(t.id);
   const regs = cloud.state.regs[t.id] || [], admin = canAdmin(t), uid = cloud.myUid();
   if (!t.regOpen && !regs.length) return `<div class="card">${shareRow(t)}</div>`;
+  const rows = [...rosterOf(t), ...(admin ? regs.filter(r => r.status === 'no') : [])];
   const mine = regs.find(r => r.uid === uid), ok = regs.filter(r => r.status === 'ok');
   const S = E.HC_SCHEMES[t.hcMode], lvName = c => { const L = E.levelInfo(t, c); return L ? L[1] : ''; };
   const notIn = ok.filter(r => !personsOf(t).some(n => n.toLowerCase() === r.name.toLowerCase()));
@@ -1389,15 +1391,15 @@ function regCard(t) {
   return `<div class="card reg-card">
     <div class="row" style="justify-content:space-between"><div class="section-title" style="margin:0">🏓 Pendaftaran</div>
       <span class="role-chip">${regLive(t) ? '🟢 Dibuka' : t.regOpen ? '🔒 Penuh' : 'Ditutup'}</span></div>
-    <p class="small" style="margin:6px 0"><b>Jumlah peserta: ${rosterOf(t).length}${t.regMax ? '/' + t.regMax : ''}</b> · ${regs.length} daftar sendiri · ${ok.length} disahkan${t.entryMode !== 'single' && E.usesDraw(t) ? ` · ${t.entryMode === 'team' ? E.teamWord(t).toLowerCase() : 'regu'} diundi oleh penganjur` : ''}</p>
+    <p class="small" style="margin:6px 0"><b>Peserta: ${rosterOf(t).length}${t.regMax ? '/' + t.regMax : ''}</b> · ${rosterOf(t).filter(r => r.status === 'ok').length} disahkan · ${regs.filter(r => r.status === 'pending').length} menunggu${t.entryMode !== 'single' && E.usesDraw(t) ? ` · ${t.entryMode === 'team' ? E.teamWord(t).toLowerCase() : 'regu'} diundi oleh penganjur` : ''}</p>
     ${t.regNote ? `<p class="muted small" style="margin:0 0 8px">${esc(t.regNote)}</p>` : ''}
     ${mine ? `<div class="notice small">Anda telah mendaftar sebagai <b>${esc(mine.name)}</b>${mine.level ? ` (${esc(lvName(mine.level))})` : ''} · ${REG_ST[mine.status][0]} ${REG_ST[mine.status][1]}
         ${t.regOpen ? `<a class="pill-btn light small" href="#/daftar/${t.id}">Ubah / batal</a>` : ''}</div>`
       : t.regOpen ? `<a class="pill-btn orange" href="#/daftar/${t.id}"><span class="dot"></span>📝 ${admin ? 'Buka halaman pendaftaran' : 'Daftar penyertaan'}</a>` : ''}
-    ${regs.length ? `<div class="reg-list">${regs.map((r, i) => `<div class="reg-row ${r.status}"><span class="no">${i + 1}</span><span class="nm"><b>${esc(r.name)}</b>${r.partner ? ` &amp; ${esc(r.partner)}` : ''}
-        <small>${[r.level ? lvName(r.level) : '', r.unit].filter(Boolean).map(esc).join(' · ')}${admin && r.note ? ` · <i>${esc(r.note)}</i>` : ''}</small></span>
+    ${rows.length ? `<div class="reg-list">${rows.map((r, i) => `<div class="reg-row ${r.status}"><span class="no">${i + 1}</span><span class="nm"><b>${esc(r.name)}</b>${r.partner ? ` &amp; ${esc(r.partner)}` : ''}
+        <small>${[r.level ? lvName(r.level) : '', r.unit].filter(Boolean).map(esc).join(' · ')}${admin && r.note ? ` · <i>${esc(r.note)}</i>` : ''}${admin && !r.uid ? '<i>ditambah penganjur</i>' : ''}</small></span>
         <span class="st">${REG_ST[r.status][0]}</span>
-        ${admin ? `<span class="act">${r.status !== 'ok' ? `<button type="button" class="pill-btn small light" data-rok="${r.uid}">✓</button>` : ''}${r.status !== 'no' ? `<button type="button" class="pill-btn small light" data-rno="${r.uid}">✕</button>` : ''}<button type="button" class="pill-btn small light" data-rdel="${r.uid}">🗑</button></span>` : ''}</div>`).join('')}</div>` : ''}
+        ${admin && r.uid ? `<span class="act">${r.status !== 'ok' ? `<button type="button" class="pill-btn small light" data-rok="${r.uid}">✓</button>` : ''}${r.status !== 'no' ? `<button type="button" class="pill-btn small light" data-rno="${r.uid}">✕</button>` : ''}<button type="button" class="pill-btn small light" data-rdel="${r.uid}">🗑</button></span>` : ''}</div>`).join('')}</div>` : ''}
     ${admin && notIn.length ? `<button type="button" class="pill-btn brand" id="rgImport" style="margin-top:10px"><span class="dot"></span>➕ Masukkan ${notIn.length} yang disahkan ke senarai</button>` : ''}
     ${shareRow(t)}
   </div>`;
