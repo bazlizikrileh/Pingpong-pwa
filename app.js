@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.3.5';
+const VERSION = '3.3.6';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -459,9 +459,9 @@ function settingsFormAll(t, locked) {
     <label class="check"><input type="checkbox" name="regOpen" ${t.regOpen ? 'checked' : ''}> Buka pendaftaran melalui pautan</label>
     <div data-show="reg">
       <div class="grid2"><div><label>Yuran</label><input name="regFee" value="${esc(t.regFee || '')}" placeholder="cth. Percuma / RM10"></div>
-      <div><label>Had peserta</label><input name="regMax" type="number" min="0" value="${t.regMax || ''}" placeholder="tiada had"></div></div>
+      <div><label>Had peserta</label><input name="regMax" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" oninput="this.value=this.value.replace(/[^0-9]/g,'')" value="${t.regMax || ''}" placeholder="tiada had"></div></div>
       <label>Hadiah (satu baris setiap tempat)</label><textarea name="prizes" rows="3" placeholder="Johan: RM100 + piala&#10;Naib johan: RM50&#10;Ketiga: Hadiah saguhati">${esc(t.prizes || '')}</textarea>
-      <label>Catatan</label><input name="regNote" value="${esc(t.regNote || '')}" placeholder="cth. Terbuka untuk semua ahli KSAS">
+      <label>Catatan</label><textarea name="regNote" rows="3" placeholder="cth. Terbuka untuk semua ahli KSAS">${esc(t.regNote || '')}</textarea>
     </div>
 
     <div class="section-title">Laporan skor</div>
@@ -512,7 +512,7 @@ function readSettings(form, t) {
   t.venue = v('venue'); t.numTables = Number(v('numTables')) || 0; t.venueName = v('venueName').trim();
   t.waEnabled = form.waEnabled.checked;
   t.regOpen = form.regOpen.checked; t.regNote = v('regNote').trim();
-  t.regFee = v('regFee').trim(); t.regMax = Number(v('regMax')) || 0; t.prizes = v('prizes').trim();
+  t.regFee = v('regFee').trim(); t.regMax = Number(String(v('regMax')).replace(/\D/g, '')) || 0; t.prizes = v('prizes').trim();
   t.waMode = v('waMode'); t.waGroup = v('waGroup').trim(); t.waNumber = v('waNumber').replace(/\D/g, '');
   if (!form.entryMode.disabled) {
     t.entryMode = v('entryMode'); t.teamSize = Number(v('teamSize')) || 3; t.format = v('format');
@@ -1337,7 +1337,7 @@ function waText(t) {
   else if (S) L.push(`⚖️ Handicap ${S.name}`);
   if (t.regFee) L.push(`💰 Yuran: ${t.regFee}`);
   if (prizes.length) { L.push('🏆 Hadiah:'); prizes.forEach((p, i) => L.push(`   ${medal[i] || '🏅'} ${p}`)); }
-  if (t.regNote) L.push(`📝 ${t.regNote}`);
+  if (t.regNote) L.push(`📝 ${t.regNote.replace(/\n+/g, '\n   ')}`);
   L.push('');
   L.push(`👥 *Peserta (${regs.length}${t.regMax ? '/' + t.regMax : ''})*`);
   if (regs.length) regs.forEach((r, i) => L.push(`${i + 1}. ${r.name}${r.partner ? ' & ' + r.partner : ''} ${r.status === 'ok' ? '✅' : '⏳'}`));
@@ -1392,7 +1392,7 @@ function regCard(t) {
     <div class="row" style="justify-content:space-between"><div class="section-title" style="margin:0">🏓 Pendaftaran</div>
       <span class="role-chip">${regLive(t) ? '🟢 Dibuka' : t.regOpen ? '🔒 Penuh' : 'Ditutup'}</span></div>
     <p class="small" style="margin:6px 0"><b>Peserta: ${rosterOf(t).length}${t.regMax ? '/' + t.regMax : ''}</b> · ${rosterOf(t).filter(r => r.status === 'ok').length} disahkan · ${regs.filter(r => r.status === 'pending').length} menunggu${t.entryMode !== 'single' && E.usesDraw(t) ? ` · ${t.entryMode === 'team' ? E.teamWord(t).toLowerCase() : 'regu'} diundi oleh penganjur` : ''}</p>
-    ${t.regNote ? `<p class="muted small" style="margin:0 0 8px">${esc(t.regNote)}</p>` : ''}
+    ${t.regNote ? `<p class="muted small" style="margin:0 0 8px;white-space:pre-line">${esc(t.regNote)}</p>` : ''}
     ${mine ? `<div class="notice small">Anda telah mendaftar sebagai <b>${esc(mine.name)}</b>${mine.level ? ` (${esc(lvName(mine.level))})` : ''} · ${REG_ST[mine.status][0]} ${REG_ST[mine.status][1]}
         ${t.regOpen ? `<a class="pill-btn light small" href="#/daftar/${t.id}">Ubah / batal</a>` : ''}</div>`
       : t.regOpen ? `<a class="pill-btn orange" href="#/daftar/${t.id}"><span class="dot"></span>📝 ${admin ? 'Buka halaman pendaftaran' : 'Daftar penyertaan'}</a>` : ''}
