@@ -4,7 +4,7 @@ import { playDeal } from './draw-anim.js';
 import * as cloud from './cloud.js';
 import * as LV from './live.js';
 
-const VERSION = '2.8.2';
+const VERSION = '2.9.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -33,12 +33,13 @@ const ls = { get: k => { try { return localStorage.getItem(k); } catch { return 
 // ---------- Kelab ----------
 const CLUBS = {
   ksas: { short: 'KSAS Kumpulan Rimau', name: 'Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru · Kumpulan Rimau', logos: ['logos/ksas.webp', 'logos/ksas-pingpong.webp'], theme: { tb: '#1f4aa8', tb2: '#173a86', or: '#ff7a1a', w: '#eaf1ff', hd1: '#0b1a3f', hd2: '#1d3f8c' }, waGroup: 'KSAS Rimau - Laporan Skor' },
+  kroni: { short: 'Kroni Shell (KSAS)', name: 'Kroni Shell · Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru', logos: [], ownLogo: true, theme: { tb: '#c8102e', tb2: '#9b0d23', or: '#ffc600', w: '#fff4d1', hd1: '#4a0a0f', hd2: '#a3111f' }, waGroup: '' },
   kskpkpjb: { short: 'KSKPKPJB', name: 'Kelab Sukan Kebajikan Perubatan Kesihatan dan Pergigian Johor Bahru', logos: ['logos/kskpkpjb.webp'], theme: { tb: '#16803c', tb2: '#0d5a2a', or: '#e3262e', w: '#e8f6ec', hd1: '#07301b', hd2: '#0f5a2c' }, waGroup: '' },
 };
 function clubOf(t) {
   if (t.clubId === undefined || t.clubId === null) t.clubId = /ksas|rimau/i.test(t.club || '') ? 'ksas' : /kskp/i.test(t.club || '') ? 'kskpkpjb' : (t.club ? 'lain' : '');
   const c = CLUBS[t.clubId];
-  if (c) return { ...c, id: t.clubId };
+  if (c) return { ...c, id: t.clubId, logos: c.ownLogo ? (t.logo ? [t.logo] : []) : c.logos };
   return { id: t.clubId, short: t.club || '', name: t.club || '', logos: t.logo ? [t.logo] : [] };
 }
 const logosHtml = (t, cls = 'logo-badge') => clubOf(t).logos.map(src => `<span class="${cls}"><img src="${esc(src)}" alt=""></span>`).join('');
@@ -166,7 +167,7 @@ function renderHead(t, page) {
   const done = play.filter(m => m.status === 'done').length, pct = play.length ? Math.round(done / play.length * 100) : 0;
   const nT = E.numTablesOf(t), onT = LV.liveState(t).live.length;
   const stg = t.stage === 'setup' ? 'Persediaan' : t.stage === 'done' ? 'Tamat' : t.stage === 'group' ? (t.format === 'rr' ? 'Liga' : 'Kumpulan') : 'Kalah mati';
-  const sub = [c.short, fmtDate(t.date), ENTRY_SHORT[t.entryMode], `Best of ${f.full ? '3' : f.bo}`].filter(Boolean).map(esc).join(' · ');
+  const sub = [c.short, fmtDate(t.date), E.isTeam(t) ? E.teamWord(t) + (t.tieFormat === 'SSD' ? ' S+S+D' : '') : ENTRY_SHORT[t.entryMode], `Best of ${f.full ? '3' : f.bo}`].filter(Boolean).map(esc).join(' · ');
   $head.innerHTML = `${store.isLocal(t.id) ? '<div class="hb-test">🧪 MOD UJIAN · telefon ini sahaja</div>' : ''}<div class="hb-top">${c.logos.length ? `<div class="hb-logos">${c.logos.map(src => `<img src="${esc(src)}" alt="">`).join('')}</div>` : ''}
       <div class="hb-tt"><h1>${esc(t.name)}</h1><p>${sub}<span class="hb-cl" title="${store.isCloud(t.id) ? 'Dikongsi di awan' : 'Disimpan di peranti ini sahaja'}">${store.isCloud(t.id) ? '☁️' : '📱'}</span></p></div></div>
     <div class="hb-board">
@@ -301,18 +302,19 @@ function settingsFormAll(t, locked) {
     <div class="club-preview" id="clubPrev"></div>
     <div data-show="clubX" class="grid2">
       <div><label>Nama kelab / penganjur</label><input name="club" value="${esc(t.clubId === 'lain' ? t.club : '')}"></div>
-      <div><label>Logo (pilihan)</label><input name="logoFile" type="file" accept="image/*"></div>
     </div>
+    <div data-show="clubLogo"><label>Logo (pilihan)</label><input name="logoFile" type="file" accept="image/*"></div>
 
     <div class="section-title">Acara</div>
     <label>Jenis acara</label><select name="entryMode" ${dis}>${opt(ENTRY, t.entryMode)}</select>
     <div data-show="team"><label>Saiz</label><select name="teamSize" ${dis}>${opt({ 3: 'Trio (3 orang)', 4: 'Kuartet (4 orang)' }, t.teamSize)}</select></div>
+    <div data-show="team"><label>Setiap pertemuan</label><select name="tieFormat" ${dis}>${opt({ SD: 'Single + Double (menang 2-0 = 3 mata, 1-1 = seri)', SSD: 'Single + Single + Double (semua dimainkan; menang ikut jumlah set)' }, t.tieFormat)}</select></div>
     <label>Struktur</label><select name="format" ${dis}>${opt(FORMAT, t.format)}</select>
     <div class="grid2">
       <div><label data-label="gf">Format kumpulan</label><select name="groupFormat">${opt(setOpts, t.groupFormat)}</select></div>
       <div data-show="ko"><label>Format kalah mati</label><select name="koFormat">${opt(setOpts, t.koFormat)}</select></div>
     </div>
-    <label class="check"><input type="checkbox" name="handicap" ${t.handicap ? 'checked' : ''}> Handicap (mata mula, maks. 5)</label>
+    <label>Handicap (mata mula)</label><select name="hcMode">${opt({ off: 'Tiada handicap', manual: 'Manual: angka 0–5 setiap peserta', ksas: 'Ikut tahap: KSAS dalaman (single 7/5/2/1/0 · double 5/3/2/1/0)', kroni: 'Ikut tahap: Kroni Shell (single 6/4/3/2/1/0 · double 5/4/3/2/1/0)' }, t.hcMode || (t.handicap ? 'manual' : 'off'))}</select>
 
     <div data-show="groups">
       <div class="section-title">Kumpulan &amp; kalah mati</div>
@@ -352,6 +354,7 @@ function wireForm(form) {
     show('ko', f !== 'rr');
     show('venueX', form.venue.value === 'X');
     show('clubX', form.clubId.value === 'lain');
+    show('clubLogo', form.clubId.value === 'lain' || form.clubId.value === 'kroni');
     show('wa', form.waEnabled.checked);
     show('waG', form.waMode.value === 'G'); show('waN', form.waMode.value === 'N');
     form.querySelector('[data-label="gf"]').textContent = f === 'rr' ? 'Format liga' : f === 'ko' ? 'Format (tidak digunakan)' : 'Format kumpulan';
@@ -372,7 +375,7 @@ function readSettings(form, t) {
   t.club = t.clubId === 'lain' ? v('club').trim() : (CLUBS[t.clubId] || {}).short || '';
   t.date = v('date'); t.startTime = v('startTime');
   t.sessionMin = Math.max(5, Number(v('sessionMin')) || 30);
-  t.handicap = form.handicap.checked;
+  t.hcMode = v('hcMode'); t.handicap = t.hcMode !== 'off';
   t.groupFormat = v('groupFormat'); t.koFormat = v('koFormat');
   t.koMode = v('koMode'); t.pool = v('pool'); t.poolMode = v('poolMode');
   t.venue = v('venue'); t.numTables = Number(v('numTables')) || 0; t.venueName = v('venueName').trim();
@@ -380,13 +383,14 @@ function readSettings(form, t) {
   t.waMode = v('waMode'); t.waGroup = v('waGroup').trim(); t.waNumber = v('waNumber').replace(/\D/g, '');
   if (!form.entryMode.disabled) {
     t.entryMode = v('entryMode'); t.teamSize = Number(v('teamSize')) || 3; t.format = v('format');
+    t.tieFormat = t.teamSize >= 4 ? v('tieFormat') || 'SD' : 'SD';
     t.numGroups = Number(v('numGroups')) || 0; t.groupSize = Number(v('groupSize')) || 4; t.bestThirds = Number(v('bestThirds')) || 0;
   }
   if (t.stage !== 'setup' && t.matches.length) E.planSchedule(t);
 }
 async function readLogo(form, t) {
   const file = form.logoFile && form.logoFile.files[0];
-  if (!file || t.clubId !== 'lain') return;
+  if (!file || !(t.clubId === 'lain' || t.clubId === 'kroni')) return;
   try { t.logo = await resizeLogo(file); } catch { toast('Logo tidak dapat dibaca'); }
 }
 
@@ -413,10 +417,10 @@ function viewNew() {
 
 // ---------- Tetapan & peserta ----------
 function entryHint(t) {
-  const hc = t.handicap ? ' Handicap dalam kurungan di hujung, cth. <i>Ali, Farmasi (2)</i>.' : '';
+  const hc = t.hcMode === 'manual' ? ' Handicap dalam kurungan di hujung, cth. <i>Ali, Farmasi (2)</i>.' : E.HC_SCHEMES[t.hcMode] ? ` Tahap dalam kurungan di hujung, cth. <i>Ali (Naga)</i>${t.hcMode === 'kroni' ? ', <i>Siti (Lion W)</i>' : ''}, atau pilih di kad 🎚️ Tahap handicap.` : '';
   if (t.entryMode === 'single') return 'Satu pemain setiap baris: <i>Nama, Jabatan / Unit</i>.' + hc;
   if (t.entryMode === 'double') return 'Satu pasangan setiap baris: <i>Pemain 1 &amp; Pemain 2, Jabatan / Unit</i>.' + hc;
-  return 'Satu peserta setiap baris: <i>Nama, Jabatan / Unit</i>. Peserta diundi rawak ' + (E.isTeam(t) ? `ke dalam ${E.teamWord(t).toLowerCase()} ${t.teamSize} orang. Setiap pertemuan: 1 perseorangan + 1 regu.` : 'berpasangan (bilangan mesti genap).');
+  return 'Satu peserta setiap baris: <i>Nama, Jabatan / Unit</i>. Peserta diundi rawak ' + (E.isTeam(t) ? `ke dalam ${E.teamWord(t).toLowerCase()} ${t.teamSize} orang. Setiap pertemuan: ${t.tieFormat === 'SSD' ? '2 perseorangan + 1 regu' : '1 perseorangan + 1 regu'}.` : 'berpasangan (bilangan mesti genap).');
 }
 
 // Paparan peserta (bukan admin): senarai sahaja
@@ -424,7 +428,7 @@ function viewParticipants(t) {
   const unit = UNIT(t);
   $app.innerHTML = `${section('Peserta', `Senarai ${unit}`)}
     <div class="card">${t.participants.length ? `<div class="mlist">${t.participants.map((p, i) => `<div class="list-item"><span class="row" style="flex-wrap:nowrap"><span class="muted small" style="width:22px">${i + 1}.</span>${pn(t, p.id)}</span>
-      <span class="muted small" style="text-align:right">${esc(E.isTeam(t) ? p.members.join(', ') : p.unit || '')}${t.handicap && p.hc ? ` · HC ${p.hc}` : ''}</span></div>`).join('')}</div>` : '<p class="muted">Senarai belum diterbitkan.</p>'}
+      <span class="muted small" style="text-align:right">${esc(E.isTeam(t) ? p.members.join(', ') : p.unit || '')}${t.hcMode === 'manual' && p.hc ? ` · HC ${p.hc}` : ''}</span></div>`).join('')}</div>` : '<p class="muted">Senarai belum diterbitkan.</p>'}
       ${E.usesDraw(t) && t.participants.length ? '<div class="btn-stack" style="margin-top:12px"><button class="pill-btn" id="playU"><span class="dot"></span>▶ Tonton undian</button></div>' : ''}
     </div>
     <p class="muted small">Penganjur: tekan <b>Log masuk</b> di atas untuk mengurus pertandingan ini.</p>`;
@@ -435,10 +439,10 @@ function viewSetupCore(t, part = 'tetapan') {
   if (!canAdmin(t)) return part === 'pemain' ? viewParticipants(t) : viewInfo(t);
   const locked = t.stage !== 'setup';
   const unit = UNIT(t), draw = E.usesDraw(t);
-  const plist = t.participants.length ? `<div class="tw"><table><thead><tr><th>#</th><th class="l">${unit}</th><th class="l">Unit</th>${t.handicap ? '<th>HC</th>' : ''}</tr></thead><tbody>
+  const plist = t.participants.length ? `<div class="tw"><table><thead><tr><th>#</th><th class="l">${unit}</th><th class="l">Unit</th>${t.hcMode === 'manual' ? '<th>HC</th>' : ''}</tr></thead><tbody>
       ${t.participants.map((p, i) => `<tr><td>${i + 1}</td><td class="l">${draw ? pnUnit(t, p.id) : `<input data-pn="${p.id}" value="${esc(p.name)}" style="min-width:130px">`}</td>
       <td class="l muted small">${esc(draw ? p.unit || '' : p.unit || '')}</td>
-      ${t.handicap ? `<td><input data-hc="${p.id}" type="number" min="0" max="5" value="${p.hc || 0}" style="width:60px"></td>` : ''}</tr>`).join('')}</tbody></table></div>` : '';
+      ${t.hcMode === 'manual' ? `<td><input data-hc="${p.id}" type="number" min="0" max="5" value="${p.hc || 0}" style="width:60px"></td>` : ''}</tr>`).join('')}</tbody></table></div>` : '';
   const isTest = store.isLocal(t.id);
   const op = k => (ls.get('pingpong:fold:' + t.id + ':' + k) ?? '') === '1' ? 'open' : (ls.get('pingpong:fold:' + t.id + ':' + k) ?? '') === '0' ? '' : null;
   const fo = (k, def) => { const v = op(k); return v === null ? (def ? 'open' : '') : v; };
@@ -456,11 +460,11 @@ function viewSetupCore(t, part = 'tetapan') {
       ${locked ? '<p class="muted small">Senarai dikunci kerana jadual sudah dijana. Gunakan <b>↺ Reset jadual</b> untuk mengubah peserta.</p>' : draw ? `
         <p class="muted small">${entryHint(t)}</p>
         <label>Senarai individu (${t.individuals.length})</label>
-        <textarea id="ind">${esc(t.individuals.map(x => x.name + (x.unit ? ', ' + x.unit : '')).join('\n'))}</textarea>
+        <textarea id="ind">${esc(t.individuals.map(x => x.name + (x.unit ? ', ' + x.unit : '') + (E.HC_SCHEMES[t.hcMode] && E.levelOf(t, x.name) ? ` (${E.levelInfo(t, E.levelOf(t, x.name))[1]})` : '')).join('\n'))}</textarea>
         <div class="row" style="margin-top:10px"><button type="button" class="pill-btn light" id="saveP">Simpan senarai</button>
           <button type="button" class="pill-btn orange" id="undi"><span class="dot"></span>Undi ${unit.toLowerCase()}</button></div>` : `
         <p class="muted small">${entryHint(t)}</p>
-        <textarea id="people">${esc(t.participants.map(p => p.name + (p.unit ? ', ' + p.unit : '') + (t.handicap && p.hc ? ` (${p.hc})` : '')).join('\n'))}</textarea>
+        <textarea id="people">${esc(t.participants.map(p => p.name + (p.unit ? ', ' + p.unit : '') + (t.hcMode === 'manual' && p.hc ? ` (${p.hc})` : '') + (E.HC_SCHEMES[t.hcMode] && !p.name.includes(' & ') && E.levelOf(t, p.name) ? ` (${E.levelInfo(t, E.levelOf(t, p.name))[1]})` : '')).join('\n'))}</textarea>
         <div class="row" style="margin-top:10px"><button type="button" class="pill-btn light" id="saveP">Simpan senarai</button></div>`}
       ${!locked && isTest ? `<div class="test-seed"><button type="button" class="pill-btn small seed" id="seed24">👥 Isi 24 peserta (UJIAN)</button>
         <span class="muted small">${t.entryMode === 'single' ? '24 pemain' : t.entryMode === 'double' ? '12 pasangan' : '24 individu sedia untuk diundi'}</span></div>` : ''}
@@ -623,7 +627,7 @@ function matchRow(t, m, no) {
   const cols = team
     ? m.rubbers.map((rb, i) => { const a = rb.sets.filter(([x, y]) => x > y).length, b = rb.sets.filter(([x, y]) => y > x).length; return { a: rb.sets.length ? a : '', b: rb.sets.length ? b : '', lab: i ? 'R' : 'P' }; })
     : (m.rubbers[0] || { sets: [] }).sets.map(([x, y]) => ({ a: x, b: y }));
-  const ta = team ? r.ra : r.sa, tb = team ? r.rb : r.sb;
+  const [ta, tb] = E.tieScore(t, r);
   const h = E.handicapInfo(t, m.a, m.b);
   const ctx = m.stage !== 'group' ? E.stageLabel(t, m) : (t.format === 'rr' ? 'Liga' : `Kumpulan ${m.group}`);
   const status = done ? '<span class="mc-st ok">✓ Selesai</span>'
@@ -648,7 +652,7 @@ function matchRow(t, m, no) {
 }
 
 // ---------- Pengesahan skor ----------
-const fmtRub = (t, rs) => rs.map((sets, i) => (rs.length > 1 ? (i ? 'Regu: ' : 'Single: ') : '') + sets.map(s => s.join('-')).join(', ')).join(' · ');
+const fmtRub = (t, rs) => rs.map((sets, i) => (rs.length > 1 ? E.rubberLabel(t, i) + ': ' : '') + sets.map(s => s.join('-')).join(', ')).join(' · ');
 function pendingCard(t, sub) {
   const m = t.matches.find(x => x.id === sub.matchId);
   if (!m) return '';
@@ -763,12 +767,23 @@ function viewMatch(t, mid) {
   let draft = null; try { draft = JSON.parse(ls.get(dkey) || 'null'); } catch {}
   const src = m.status !== 'done' && draft ? draft : m.rubbers.map(r => r.sets);
   const sel = (key, members, val) => `<select data-lu="${key}"><option value="">— pilih —</option>${members.map(n => `<option ${n === val ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>`;
-  const lineupHtml = i => !team ? '' : i === 0
-    ? `<div class="lu">${sel('as', A.members, L.as)} <span class="muted">lwn</span> ${sel('bs', B.members, L.bs)}</div>`
+  const types = E.rubberTypes(t);
+  const sKey = i => { const n = types.slice(0, i + 1).filter(x => x === 'S').length; return n === 1 ? 's' : 's' + n; };
+  const rubTitle = i => t.tieFormat === 'SSD' ? (types[i] === 'D' ? 'Double' : `Single ${types.slice(0, i + 1).filter(x => x === 'S').length}`) : (i === 0 ? 'Perseorangan' : 'Regu');
+  const lineupHtml = i => !team ? '' : types[i] === 'S'
+    ? `<div class="lu">${sel('a' + sKey(i), A.members, L['a' + sKey(i)])} <span class="muted">lwn</span> ${sel('b' + sKey(i), B.members, L['b' + sKey(i)])}</div>`
     : `<div class="lu">${sel('ad1', A.members, L.ad1)} &amp; ${sel('ad2', A.members, L.ad2)} <span class="muted">lwn</span> ${sel('bd1', B.members, L.bd1)} &amp; ${sel('bd2', B.members, L.bd2)}</div>`;
+  const hcText = (h, lu) => {
+    if (!h) return '';
+    if (h.pending) return '<div class="hc-r warn">Handicap dikira selepas pemain dipilih.</div>';
+    if (h.missing) return '<div class="hc-r warn">⚠️ Ada pemain belum ditetapkan tahap handicap (tab 👥 ' + esc(UNIT(t)) + ').</div>';
+    if (!h.n) return '<div class="hc-r">Handicap: sama (tiada mata mula)</div>';
+    const who = team ? (h.to === m.a ? A.name : B.name) + (h.kind === 'D' ? ' (regu)' : '') : E.pname(t, h.to);
+    return `<div class="hc-r">Handicap: <b>${esc(who)}</b> mula <b>${h.n}-0</b> setiap game${h.sa != null ? ` <span class="muted">(nilai ${h.sa} lwn ${h.sb})</span>` : ''}</div>`;
+  };
   const rubberHtml = (r, i) => {
     const rows = Array.from({ length: f.bo }, (_, k) => (src[i] || [])[k] || ['', '']);
-    return `<div class="rubber">${team ? `<h3>${i === 0 ? 'Perseorangan' : 'Regu'}</h3>${lineupHtml(i)}` : ''}
+    return `<div class="rubber">${team ? `<h3>${rubTitle(i)}</h3>${lineupHtml(i)}<div id="hc${i}">${hcText(E.handicapInfo(t, m.a, m.b, i, L), L)}</div>` : ''}
       <div class="sets">${rows.map((s, k) => `<div class="set"><span class="muted small">G${k + 1}</span>
         <input inputmode="numeric" data-r="${i}" data-i="${k}" data-s="0" value="${s[0]}">–<input inputmode="numeric" data-r="${i}" data-i="${k}" data-s="1" value="${s[1]}"></div>`).join('')}</div></div>`;
   };
@@ -780,10 +795,11 @@ function viewMatch(t, mid) {
     <div class="rule"></div>
     <div class="card">
       <div class="muted small">${m.session ? `Sesi ${m.session} · ${E.sessionTime(t, m.session)} · ` : ''}${esc(f.label)}</div>
-      ${h ? `<div class="hc">Handicap: ${h.n ? `<b>${esc(E.pname(t, h.to))}</b> mula dengan ${h.n} mata setiap game` : 'sama (tiada mata mula)'}</div>` : ''}
+      ${h && !team ? hcText(h) : ''}
       <label>Meja</label><select id="tbl">${['', ...E.tablesOf(t)].map(x => `<option ${x === m.table ? 'selected' : ''} value="${esc(x)}">${esc(x || '—')}</option>`).join('')}</select>
       <label>Skor setiap game (${esc(A.name)} – ${esc(B.name)})</label>
       ${m.rubbers.map(rubberHtml).join('')}
+      ${team && t.tieFormat === 'SSD' ? '<p id="dupa" class="small" style="color:#b3261e"></p><p id="dupb" class="small" style="color:#b3261e"></p>' : ''}
       <p id="summary" class="muted"></p>
       <div id="decide"></div>
       <div id="dmsg">${m.status === 'done' ? '<span class="ok-badge">✅ Disahkan penganjur</span>' : draft ? '<span class="draft">✏️ Draf skor disimpan di telefon ini</span>' : ''}</div>
@@ -814,16 +830,25 @@ function viewMatch(t, mid) {
   const readLineup = () => { if (!team) return null; const o = {}; $app.querySelectorAll('[data-lu]').forEach(s => (o[s.dataset.lu] = s.value)); return o; };
   let override = m.override;
   const upd = () => {
+    if (team) {
+      const lu = readLineup();
+      types.forEach((_, i) => { const el = document.getElementById('hc' + i); if (el) el.innerHTML = hcText(E.handicapInfo(t, m.a, m.b, i, lu), lu); });
+      if (t.tieFormat === 'SSD') ['a', 'b'].forEach(k => {
+        const used = ['s', 's2', 'd1', 'd2'].map(x => lu[k + x]).filter(Boolean), dup = used.filter((n, i) => used.indexOf(n) !== i);
+        const el = document.getElementById('dup' + k); if (el) el.textContent = dup.length ? `⚠️ ${dup.join(', ')} dipilih lebih dari sekali (setiap ahli main sekali sahaja).` : '';
+      });
+    }
     const rs = clean(read());
     const r = E.evaluateMatch(t, { ...m, override, rubbers: rs.map(sets => ({ sets })) });
-    const head = team ? `Pertemuan <b>${r.ra}–${r.rb}</b> · Set ${r.sa}-${r.sb} · Mata ${r.pa}-${r.pb}` : `Game <b>${r.sa}–${r.sb}</b>`;
+    const head = !team ? `Game <b>${r.sa}–${r.sb}</b>` : t.tieFormat === 'SSD' ? `Jumlah set <b>${r.sa}–${r.sb}</b> · Perlawanan ${r.ra}-${r.rb} · Mata ${r.pa}-${r.pb}` : `Pertemuan <b>${r.ra}–${r.rb}</b> · Set ${r.sa}-${r.sb} · Mata ${r.pa}-${r.pb}`;
     const res = r.winner ? ` · Pemenang: <b>${esc(E.pname(t, r.winner))}</b>` : r.draw ? ' · <b>Seri</b> (1 mata setiap pasukan)' : '';
     document.getElementById('summary').innerHTML = head + res;
-    const fullTie = r.complete && m.stage !== 'group' && r.ra === r.rb && r.sa === r.sb && r.pa === r.pb;
+    const fullTie = r.complete && (m.stage !== 'group' || t.tieFormat === 'SSD') && r.ra === r.rb && r.sa === r.sb && r.pa === r.pb;
     document.getElementById('decide').innerHTML = fullTie ? `<p style="color:#b91c1c">Seri penuh (set dan mata permainan sama). Penganjur perlu menentukan pemenang:</p>
       <div class="row">${[m.a, m.b].map(id => `<button class="pill-btn small ${override === id ? 'brand' : 'light'}" data-ov="${id}">${esc(E.pname(t, id))}</button>`).join('')}</div><br>` : '';
     document.querySelectorAll('[data-ov]').forEach(b => (b.onclick = () => { override = b.dataset.ov; upd(); }));
   };
+  $app.querySelectorAll('[data-lu]').forEach(x => (x.onchange = () => upd()));
   $app.querySelectorAll('.sets input').forEach(i => (i.oninput = () => {
     if (m.status !== 'done') { ls.set(dkey, JSON.stringify(read())); document.getElementById('dmsg').innerHTML = '<span class="draft">✏️ Draf skor disimpan di telefon ini</span>'; }
     upd();
@@ -1003,7 +1028,7 @@ function bracketHtml(t, b) {
       const playable = m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE';
       const line = (id, s, src) => `<div class="ln ${m.winner === id && id && id !== 'BYE' && m.status === 'done' ? 'w' : ''}"><span>${id && id !== 'BYE' ? `<span class="sd">${esc(E.seedLabel(t, id))}</span>` : ''}${id ? esc(E.pname(t, id)) : src ? `<i class="ph">${esc(E.placeholderLabel(src))}</i>` : '…'}</span><span class="s">${has ? s : ''}</span></div>`;
       const meta = playable && m.status !== 'done' && m.session ? `<div class="bmeta">${esc(E.matchCode(m))} · Sesi ${m.session} · ${esc((m.table || '').replace(/ \(.*\)/, ''))}</div>` : '';
-      const inner = line(m.a, team ? e.ra : e.sa, m.srcA) + line(m.b, team ? e.rb : e.sb, m.srcB) + meta;
+      const inner = line(m.a, E.tieScore(t, e)[0], m.srcA) + line(m.b, E.tieScore(t, e)[1], m.srcB) + meta;
       return playable ? `<a class="bm" href="#/t/${t.id}/m/${m.id}">${inner}</a>` : `<div class="bm">${inner}</div>`;
     }).join('')}</div></div>`);
   }
@@ -1102,9 +1127,13 @@ function rulesHtml(t) {
       : `Kalah mati: BYE diberi kepada johan kumpulan terbaik (ikut mata, kemudian beza menang-kalah perlawanan, set dan mata permainan). Johan dan naib johan dari kumpulan yang sama diletakkan di separuh bracket berbeza.${t.bestThirds ? ` ${t.bestThirds} tempat ketiga terbaik turut layak.` : ''} Jika saiz kumpulan tidak sama, perbandingan antara kumpulan tidak mengambil kira keputusan menentang pemain tempat terakhir kumpulan yang lebih besar.`);
     if (t.pool !== '0') rules.push(`Pool kalah: ${t.pool === '34' ? 'peserta tempat ketiga yang tidak layak ke kalah mati utama dan semua peserta tempat keempat' : 'peserta tempat ketiga yang tidak layak ke kalah mati utama'} bermain kalah mati berasingan menggunakan format kalah mati yang sama. BYE (jika ada) diberi kepada peserta terbaik.`);
   }
-  rules.push(E.isTeam(t) ? `Pertemuan ${E.teamWord(t).toLowerCase()}: 1 perlawanan perseorangan + 1 perlawanan regu. Menang 2-0: 3 mata. Seri 1-1: 1 mata. Kalah: 0 mata.` : 'Menang: 3 mata. Kalah: 0 mata.');
+  rules.push(!E.isTeam(t) ? 'Menang: 3 mata. Kalah: 0 mata.'
+    : t.tieFormat === 'SSD' ? `Pertemuan ${E.teamWord(t).toLowerCase()}: Single 1 + Single 2 + Double, ketiga-tiga dimainkan. Setiap ahli bermain sekali sahaja (dua pemain single, dua lagi double). Pemenang ditentukan oleh jumlah set yang dimenangi; jika sama: bilangan perlawanan dimenangi, kemudian jumlah mata. Menang: 3 mata. Kalah: 0 mata.`
+    : `Pertemuan ${E.teamWord(t).toLowerCase()}: 1 perlawanan perseorangan + 1 perlawanan regu. Menang 2-0: 3 mata. Seri 1-1: 1 mata. Kalah: 0 mata.`);
   rules.push('Jika mata sama, susunan ditentukan mengikut turutan: (1) beza menang-kalah bilangan perlawanan, (2) beza menang-kalah bilangan set, (3) keputusan bersemuka (pertemuan sesama peserta yang masih sama; jika tiga atau lebih, bilangan kemenangan sesama mereka), (4) beza menang-kalah bilangan mata permainan. Contoh: 5-2 (+3).');
-  if (t.handicap) rules.push('Handicap (mata mula): angka dalam kurungan ialah mata yang diberi kepada pihak lawan, maksimum 5. Mata mula = beza antara angka kedua-dua pihak. Pihak dengan angka lebih rendah mula dengan mata tersebut pada setiap game.');
+  const HS = E.HC_SCHEMES[t.hcMode];
+  if (t.hcMode === 'manual') rules.push('Handicap (mata mula): angka dalam kurungan ialah mata yang diberi kepada pihak lawan, maksimum 5. Mata mula = beza antara angka kedua-dua pihak. Pihak dengan angka lebih rendah mula dengan mata tersebut pada setiap game.');
+  else if (HS) rules.push(`Handicap ${HS.name} (mata mula setiap game). Nilai single: ${HS.levels.map(l => `${l[1]} ${l[2]}`).join(', ')}. Single: pihak bernilai rendah mula dengan beza nilai (cth. ${HS.levels[HS.levels.length - 1][1]} lwn ${HS.levels[0][1]}: mula ${HS.levels[0][2] - HS.levels[HS.levels.length - 1][2]}-0). Nilai double: ${HS.levels.map(l => `${l[1]} ${l[3]}`).join(', ')}. Double: nilai dua ahli dijumlahkan, beza maksimum ${HS.capD} mata.`);
   rules.push('Jika kaedah di atas gagal, penganjur berhak menggunakan kaedah yang difikirkan perlu dan munasabah. Keputusan penganjur adalah muktamad.');
   return `<div class="card"><ol class="rules">${rules.map(r => `<li>${esc(r)}</li>`).join('')}</ol></div>
     <div class="card"><div class="section-title" style="margin-top:0">📖 Panduan peserta</div>
@@ -1117,8 +1146,29 @@ function rulesHtml(t) {
 }
 function viewRules(t) { $app.innerHTML = section('Pertandingan', 'Peraturan') + rulesHtml(t); }
 function viewSetup(t) { viewSetupCore(t, 'tetapan'); }
+// Senarai semua individu (untuk tahap handicap)
+function personsOf(t) {
+  const names = E.usesDraw(t) && t.individuals.length ? t.individuals.map(x => x.name) : t.participants.flatMap(p => p.members && p.members.length ? p.members : [p.name]);
+  return [...new Set(names)];
+}
+function levelsCard(t) {
+  const S = E.HC_SCHEMES[t.hcMode]; if (!S) return '';
+  const P = personsOf(t); if (!P.length) return '';
+  const admin = canAdmin(t), missing = P.filter(n => !E.levelOf(t, n)).length;
+  const chip = c => { const L = E.levelInfo(t, c); return L ? `<span class="lv lv-${c}">${esc(L[1])}</span>` : '<span class="lv none">—</span>'; };
+  return `<details class="card fold" data-fold="lv" ${missing && admin ? 'open' : ''}><summary>🎚️ Tahap handicap · ${esc(S.name)}${missing ? ` <span class="role-chip">${missing} belum</span>` : ''}</summary>
+    <p class="muted small">Single: ${S.levels.map(l => `${esc(l[1])} ${l[2]}`).join(' · ')}<br>Double: ${S.levels.map(l => `${esc(l[1])} ${l[3]}`).join(' · ')} (jumlah dua ahli, beza maksimum ${S.capD}).<br>Pihak dengan nilai lebih rendah mula dengan beza mata tersebut setiap game.${admin ? ' Tahap juga boleh ditulis dalam senarai, cth. <i>Ali (Naga Elit)</i>' + (t.hcMode === 'kroni' ? ', <i>Siti (Lion W)</i>' : '') + '.' : ''}</p>
+    <div class="lv-list">${P.map(n => `<div class="lv-row"><span>${esc(n)}</span>${admin ? `<select data-lvn="${esc(n)}">${opt({ '': '— tahap —', ...Object.fromEntries(S.levels.map(l => [l[0], `${l[1]} (S${l[2]} · D${l[3]})`])) }, E.levelOf(t, n))}</select>` : chip(E.levelOf(t, n))}</div>`).join('')}</div></details>`;
+}
 function viewPemain(t) {
   viewSetupCore(t, 'pemain');
+  const lc = levelsCard(t);
+  if (lc) {
+    const ent = document.getElementById('entries');
+    ent ? ent.insertAdjacentHTML('afterend', lc) : $app.insertAdjacentHTML('beforeend', lc);
+    $app.querySelectorAll('[data-lvn]').forEach(sel => (sel.onchange = () => { E.setLevel(t, sel.dataset.lvn, sel.value); save(t); toast('Tahap disimpan'); }));
+    const d = $app.querySelector('details[data-fold=lv]'); if (d) d.ontoggle = () => {};
+  }
   $app.insertAdjacentHTML('beforeend', `<details class="card fold" style="margin-top:14px"><summary>📜 Peraturan &amp; panduan peserta</summary>${rulesHtml(t)}</details>`);
 }
 // Tetapan untuk bukan admin: ringkasan maklumat pertandingan + peraturan
@@ -1251,12 +1301,12 @@ function viewJadual(t) {
       <div><label style="margin-top:0">Pilih</label><select id="jdSel">${opt(Object.fromEntries(opts), jdSel)}</select></div>
       <div><label style="margin-top:0">Tapis sesi</label><select id="jdSes">${opt({ '': 'Semua sesi', ...Object.fromEntries(Array.from({ length: NS }, (_, i) => [i + 1, `Sesi ${i + 1} - ${E.sessionTime(t, i + 1)}`])) }, jdSes)}</select></div></div>
       <p class="muted small" style="margin-bottom:0">${E.numTablesOf(t)} meja digunakan · anggaran tamat sekitar <b>${E.sessionTime(t, NS + 1)}</b> (${t.sessionMin} min setiap sesi)</p></div>
-    <div class="card tw" style="padding:6px"><table class="jd"><thead><tr><th>Game</th><th>Sesi</th><th>Masa</th><th>Meja</th><th class="l">${UNIT(t)}</th><th class="l">Pengadil</th>${t.handicap ? '<th>HC</th>' : ''}<th>Skor</th></tr></thead><tbody>
+    <div class="card tw" style="padding:6px"><table class="jd"><thead><tr><th>Game</th><th>Sesi</th><th>Masa</th><th>Meja</th><th class="l">${UNIT(t)}</th><th class="l">Pengadil</th>${t.handicap && !E.isTeam(t) ? '<th>HC</th>' : ''}<th>Skor</th></tr></thead><tbody>
     ${rows.map(m => { const r = E.evaluateMatch(t, m), u = LV.umpireOf(t, m, U), h = t.handicap && m.a && m.b ? E.handicapInfo(t, m.a, m.b) : null;
       return `<tr class="${m.lt && m.status !== 'done' ? 'onlive' : ''}" data-go="${m.a && m.b ? m.id : ''}"><td>${esc(E.matchCode(m) || '')}</td><td>${m.session || '-'}</td><td>${m.session ? esc(E.sessionTime(t, m.session)) : '-'}</td><td>${tno(m) || '-'}${m.lt && m.status !== 'done' ? ' 🟢' : ''}</td>
         <td class="l">${m.a ? esc(E.pname(t, m.a)) : `<i class="muted">${esc(E.placeholderLabel(m.srcA) || 'Menunggu')}</i>`} <small class="muted">lwn</small> ${m.b ? esc(E.pname(t, m.b)) : `<i class="muted">${esc(E.placeholderLabel(m.srcB) || 'Menunggu')}</i>`}</td>
-        <td class="l">${u ? esc(E.pname(t, u)) : '-'}</td>${t.handicap ? `<td>${h && h.n ? esc(E.pname(t, h.to)).split(' ')[0] + ' +' + h.n : '-'}</td>` : ''}
-        <td>${m.status === 'done' ? (E.isTeam(t) ? `${r.ra}-${r.rb}` : `${r.sa}-${r.sb}`) + ' ✅' : '-'}</td></tr>`; }).join('')}
+        <td class="l">${u ? esc(E.pname(t, u)) : '-'}</td>${t.handicap && !E.isTeam(t) ? `<td>${h && h.n ? esc(E.pname(t, h.to)).split(' ')[0] + ' +' + h.n : '-'}</td>` : ''}
+        <td>${m.status === 'done' ? E.tieScore(t, r).join('-') + ' ✅' : '-'}</td></tr>`; }).join('')}
     </tbody></table></div>
     <p class="muted small">Sesi dan meja ialah anggaran. Semasa pertandingan, ikut tab 🟢 Langsung untuk meja sebenar.</p>`;
   document.getElementById('jdSel').onchange = e => { jdSel = e.target.value; viewJadual(t); };
@@ -1280,12 +1330,12 @@ function viewKnockout(t) {
 }
 
 // ---------- Laporan (PDF melalui cetak) ----------
-const gamesTxt = m => m.rubbers.map((r, i) => (m.rubbers.length > 1 ? (i ? 'R: ' : 'P: ') : '') + r.sets.map(s => s.join('-')).join(', ')).join(' · ');
+const gamesTxt = (m, t) => m.rubbers.map((r, i) => (m.rubbers.length > 1 ? (t ? E.rubberLabel(t, i) : i ? 'R' : 'P') + ': ' : '') + r.sets.map(s => s.join('-')).join(', ')).join(' · ');
 function viewReport(t) {
   const c = clubOf(t), f = E.SET_FORMATS;
   const played = t.matches.filter(m => m.status === 'done' && m.a !== 'BYE' && m.b !== 'BYE');
   const resRow = m => { const r = E.evaluateMatch(t, m), team = E.isTeam(t);
-    return `<tr><td>${esc(E.matchCode(m) || '')}</td><td class="l">${m.winner === m.a ? '<b>' + esc(E.pname(t, m.a)) + '</b>' : esc(E.pname(t, m.a))}</td><td><b>${team ? `${r.ra}-${r.rb}` : `${r.sa}-${r.sb}`}</b></td><td class="l">${m.winner === m.b ? '<b>' + esc(E.pname(t, m.b)) + '</b>' : esc(E.pname(t, m.b))}</td><td class="l small">${esc(gamesTxt(m))}</td></tr>`; };
+    return `<tr><td>${esc(E.matchCode(m) || '')}</td><td class="l">${m.winner === m.a ? '<b>' + esc(E.pname(t, m.a)) + '</b>' : esc(E.pname(t, m.a))}</td><td><b>${E.tieScore(t, r).join('-')}</b></td><td class="l">${m.winner === m.b ? '<b>' + esc(E.pname(t, m.b)) + '</b>' : esc(E.pname(t, m.b))}</td><td class="l small">${esc(gamesTxt(m, t))}</td></tr>`; };
   const resTable = ms => ms.length ? `<div class="tw"><table class="rp"><thead><tr><th>Game</th><th class="l">${UNIT(t)}</th><th>Skor</th><th class="l">${UNIT(t)}</th><th class="l">Game</th></tr></thead><tbody>${ms.map(resRow).join('')}</tbody></table></div>` : '<p class="muted small">Belum ada keputusan.</p>';
   const ko = b => { const R = t.rounds[b]; if (!R) return ''; let h = '';
     for (let r = 1; r <= R; r++) { const ms = played.filter(m => m.bracket === b && m.round === r).sort((x, y) => x.slot - y.slot); if (ms.length) h += `<h4>${esc(E.roundName(t, b, r))}</h4>${resTable(ms)}`; }

@@ -454,3 +454,11 @@ details.guide > summary { font-size:12px; }
 .mc.live .mc-t:empty { background: transparent; }
 
 .test-bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:10px 12px; margin-bottom:10px; }
+
+.lv-list { display:grid; grid-template-columns: 1fr; gap:4px; }
+.lv-row { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:4px 0; border-bottom:1px solid var(--line); font-size:14px; }
+.lv-row select { width:auto; max-width:60%; padding:5px 8px; font-size:13px; }
+.lv { font-size:11.5px; font-weight:700; padding:2px 8px; border-radius:999px; background: var(--w); color: var(--tb); }
+.lv.none { background: transparent; color: var(--muted); }
+.hc-r { font-size:12.5px; margin:4px 0 6px; padding:5px 9px; border-radius:9px; background: color-mix(in srgb, var(--or) 12%, transparent); }
+.hc-r.warn { background: color-mix(in srgb, #eab308 16%, transparent); }

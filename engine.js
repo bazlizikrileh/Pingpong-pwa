@@ -71,6 +71,10 @@ export function migrate(t) {
   if (!['B', 'C', 'X'].includes(t.venue)) t.venue = 'B';
   t.startTime ??= '21:00'; t.sessionMin ??= 30;
   t.waMode ||= 'G';
+  t.hcMode ||= t.handicap ? 'manual' : 'off';
+  t.handicap = t.hcMode !== 'off';
+  t.levels ||= {};
+  t.tieFormat ||= 'SD';
   if (t.groupSize > 5) t.groupSize = 5;
   if (t.groupSize < 4) t.groupSize = 4;
   for (const m of t.matches) {
@@ -85,25 +89,29 @@ export const pname = (t, id) => (pobj(t, id) || {}).name || (id === 'BYE' ? 'BYE
 
 // "Nama, Unit (2)" → { name, unit, hc }
 export function parseEntry(line) {
-  let s = line.trim(), hc = 0;
+  let s = line.trim(), hc = 0, lv = '';
   const m = s.match(/\((\d+)\)\s*$/);
   if (m) { hc = Math.min(5, Number(m[1])); s = s.replace(/\s*\(\d+\)\s*$/, ''); }
+  const L = s.match(/\(([^()]*[A-Za-z][^()]*)\)\s*$/);
+  if (L) { lv = L[1].trim(); s = s.replace(/\s*\([^()]*\)\s*$/, ''); }
   const k = s.indexOf(',');
   const name = (k >= 0 ? s.slice(0, k) : s).trim().replace(/\s*(\/|&)\s*/g, ' & ');
   const unit = k >= 0 ? s.slice(k + 1).trim() : '';
-  return { name, unit, hc };
+  return { name, unit, hc, lv };
 }
 
 export function setParticipantsFromLines(t, lines) {
   const old = Object.fromEntries(t.participants.map(p => [p.name, p.id]));
-  t.participants = lines.map(s => s.trim()).filter(Boolean).map(parseEntry).filter(e => e.name)
-    .map(e => ({ id: old[e.name] || uid(), name: e.name, unit: e.unit, hc: e.hc, members: e.name.split(' & ') }));
+  const es = lines.map(s => s.trim()).filter(Boolean).map(parseEntry).filter(e => e.name);
+  t.participants = es.map(e => ({ id: old[e.name] || uid(), name: e.name, unit: e.unit, hc: e.hc, members: e.name.split(' & ') }));
+  es.forEach(e => takeLevel(t, e));
 }
 export const setParticipants = setParticipantsFromLines;
 
 export function setIndividualsFromLines(t, lines) {
-  t.individuals = lines.map(s => s.trim()).filter(Boolean).map(parseEntry).filter(e => e.name)
-    .map(e => ({ id: uid(), name: e.name, unit: e.unit }));
+  const es = lines.map(s => s.trim()).filter(Boolean).map(parseEntry).filter(e => e.name);
+  t.individuals = es.map(e => ({ id: uid(), name: e.name, unit: e.unit }));
+  es.forEach(e => takeLevel(t, e));
 }
 
 // Undian regu/trio: kocok, potong ikut turutan (kad 1–3 = Trio 1 …)
@@ -132,8 +140,9 @@ export function drawUnits(t) {
 }
 
 // ---------- Handicap ----------
-export function handicapInfo(t, a, b) {
+export function handicapInfo(t, a, b, rubber = 0, lineup = null) {
   if (!t.handicap || !a || !b || a === 'BYE' || b === 'BYE') return null;
+  if (t.hcMode && t.hcMode !== 'manual') return levelHandicap(t, a, b, rubber, lineup);
   const ha = (pobj(t, a) || {}).hc || 0, hb = (pobj(t, b) || {}).hc || 0;
   const n = Math.min(5, Math.abs(ha - hb));
   return n ? { to: ha < hb ? a : b, n } : { to: null, n: 0 };
@@ -143,7 +152,7 @@ export function handicapInfo(t, a, b) {
 export function blankMatch(t, m) {
   return {
     id: uid(), winner: null, status: 'pending', table: '', session: 0,
-    rubbers: isTeam(t) ? [{ type: 'S', sets: [] }, { type: 'D', sets: [] }] : [{ type: 'S', sets: [] }],
+    rubbers: rubberTypes(t).map(type => ({ type, sets: [] })),
     lineup: null, override: null, ...m,
   };
 }
@@ -168,7 +177,14 @@ export function evaluateMatch(t, m) {
   o.complete = R.length > 0 && R.every(r => r.complete);
   if (!o.complete) return o;
   let side = null;
-  if (o.ra !== o.rb) side = o.ra > o.rb ? 'a' : 'b';
+  if (isTeam(t) && t.tieFormat === 'SSD') {
+    // S+S+D: semua 3 perlawanan dimainkan; pemenang = jumlah set, kemudian perlawanan dimenangi, kemudian mata
+    if (o.sa !== o.sb) side = o.sa > o.sb ? 'a' : 'b';
+    else if (o.ra !== o.rb) side = o.ra > o.rb ? 'a' : 'b';
+    else if (o.pa !== o.pb) side = o.pa > o.pb ? 'a' : 'b';
+    else if (m.override === m.a || m.override === m.b) o.winner = m.override;
+    else o.needsDecision = true;
+  } else if (o.ra !== o.rb) side = o.ra > o.rb ? 'a' : 'b';
   else if (m.stage === 'group') o.draw = true;
   else if (o.sa !== o.sb) side = o.sa > o.sb ? 'a' : 'b';
   else if (o.pa !== o.pb) side = o.pa > o.pb ? 'a' : 'b';
@@ -671,7 +687,7 @@ export function matrix(t, groupName) {
     const m = t.matches.find(x => x.stage === 'group' && x.status === 'done' && ((x.a === a && x.b === b) || (x.a === b && x.b === a)));
     if (!m) return null;
     const r = evaluateMatch(t, m), me = m.a === a;
-    const v = isTeam(t) ? [me ? r.ra : r.rb, me ? r.rb : r.ra] : [me ? r.sa : r.sb, me ? r.sb : r.sa];
+    const [x, y] = tieScore(t, r), v = me ? [x, y] : [y, x];
     return { v, win: m.winner === a, draw: r.draw };
   };
   return { ids, rows: ids.map(a => ids.map(b => (a === b ? 'self' : cell(a, b)))) };
@@ -684,11 +700,11 @@ export function stageLabel(t, m) {
 }
 export function reportText(t, m, rubberSets, umpire) {
   const r = evaluateMatch(t, { ...m, rubbers: rubberSets.map(s => ({ sets: s })) });
-  const games = rubberSets.map((sets, i) => (rubberSets.length > 1 ? (i === 0 ? 'Perseorangan: ' : 'Regu: ') : '') +
+  const games = rubberSets.map((sets, i) => (rubberSets.length > 1 ? rubberLabel(t, i) + ': ' : '') +
     sets.map((s, k) => `G${k + 1}: ${s[0]}-${s[1]}`).join(', ')).join('\n');
   const team = isTeam(t);
   const res = r.complete && r.winner
-    ? `${pname(t, r.winner)} menang ${team ? `${Math.max(r.ra, r.rb)}-${Math.min(r.ra, r.rb)}` : `${Math.max(r.sa, r.sb)}-${Math.min(r.sa, r.sb)}`}`
+    ? `${pname(t, r.winner)} menang ${Math.max(...tieScore(t, r))}-${Math.min(...tieScore(t, r))}${team && t.tieFormat === 'SSD' ? ' set' : ''}`
     : r.complete && r.draw ? `Seri ${r.ra}-${r.rb}` : `Belum tamat: game ${r.sa}-${r.sb}`;
   return ['*LAPOR KEPUTUSAN*', t.name,
     `${matchCode(m)} · ${stageLabel(t, m)}${m.table ? ' · ' + m.table.replace(/ \(.*\)/, '') : ''}`,
@@ -861,4 +877,66 @@ export function buildPool(t) {
   if (!ps) throw new Error('Tiada peserta pool kalah');
   buildBracket(t, 'pool', ps);
   numberKO(t); planSchedule(t); updateStage(t);
+}
+
+// ---------- Handicap ikut tahap (KSAS dalaman / Kroni Shell) ----------
+export const HC_SCHEMES = {
+  ksas: { name: 'KSAS dalaman', capS: 99, capD: 5, levels: [
+    ['NE', 'Naga Elit', 7, 5], ['N', 'Naga', 5, 3], ['S', 'Singa', 2, 2], ['R', 'Rimau', 1, 1], ['H', 'Helang', 0, 0]] },
+  kroni: { name: 'Kroni Shell', capS: 99, capD: 5, levels: [
+    ['N', 'Naga', 6, 5], ['L', 'Lion', 4, 4], ['LW', 'Lion (W)', 3, 3], ['T', 'Tiger', 2, 2], ['TW', 'Tiger (W)', 1, 1], ['H', 'Helang', 1, 1], ['HW', 'Helang (W)', 0, 0]] },
+};
+export const rubberTypes = t => !isTeam(t) ? ['S'] : t.tieFormat === 'SSD' ? ['S', 'S', 'D'] : ['S', 'D'];
+const lvKey = n => String(n || '').trim().toLowerCase();
+// Teks tahap → kod (cth. "Naga Elit", "ne", "singa", "lion w", "wanita tiger", "Helang (W)")
+export function parseLevel(t, txt) {
+  const S = HC_SCHEMES[t.hcMode]; if (!S || !txt) return '';
+  let s = lvKey(txt).replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim();
+  const w = /\b(w|wanita|perempuan|p|f)\b/.test(s); s = s.replace(/\b(w|wanita|perempuan|lelaki|l|m|p|f)\b/g, '').trim();
+  const alias = { 'naga elit': 'NE', 'naga elite': 'NE', 'elit': 'NE', 'elite': 'NE', 'ne': 'NE', naga: 'N', n: 'N', singa: 'S', lion: 'S', s: 'S', rimau: 'R', tiger: 'R', harimau: 'R', r: 'R', helang: 'H', eagle: 'H', h: 'H' };
+  let c = alias[s] || '';
+  if (t.hcMode === 'kroni') c = ({ N: 'N', S: 'L', R: 'T', H: 'H' })[c] || '';
+  if (!c) return S.levels.some(l => l[0] === txt) ? txt : '';
+  if (t.hcMode === 'kroni' && w && c !== 'N') c += 'W';
+  return S.levels.some(l => l[0] === c) ? c : '';
+}
+function takeLevel(t, e) {
+  if (!e.lv) return;
+  const c = parseLevel(t, e.lv);
+  if (c) e.name.split(' & ').forEach(n => { if (!e.name.includes(' & ') || true) t.levels[lvKey(n)] = c; });
+}
+export const levelOf = (t, name) => (t.levels || {})[lvKey(name)] || '';
+export function levelInfo(t, code) { const S = HC_SCHEMES[t.hcMode]; return S && S.levels.find(l => l[0] === code) || null; }
+export function setLevel(t, name, code) { t.levels ||= {}; if (code) t.levels[lvKey(name)] = code; else delete t.levels[lvKey(name)]; }
+// Nilai: S = single, D = double
+const lvVal = (t, name, kind) => { const L = levelInfo(t, levelOf(t, name)); return L ? (kind === 'S' ? L[2] : L[3]) : null; };
+// Pemain yang terlibat bagi satu pihak dalam perlawanan/rubber
+function sideNames(t, id, rubber, lineup, side) {
+  const p = pobj(t, id) || { name: '', members: [] };
+  if (!isTeam(t)) return p.members && p.members.length ? p.members : [p.name];
+  const L = lineup || {}, k = side;
+  const types = rubberTypes(t), ty = types[rubber];
+  if (ty === 'D') return [L[k + 'd1'], L[k + 'd2']].filter(Boolean);
+  const nthS = types.slice(0, rubber + 1).filter(x => x === 'S').length;
+  return [L[k + (nthS === 1 ? 's' : 's' + nthS)]].filter(Boolean);
+}
+export function levelHandicap(t, a, b, rubber = 0, lineup = null) {
+  const S = HC_SCHEMES[t.hcMode]; if (!S) return null;
+  const kind = isTeam(t) ? rubberTypes(t)[rubber] : (t.entryMode === 'single' ? 'S' : 'D');
+  const na = sideNames(t, a, rubber, lineup, 'a'), nb = sideNames(t, b, rubber, lineup, 'b');
+  const need = kind === 'D' ? 2 : 1;
+  if (na.length < need || nb.length < need) return { to: null, n: 0, pending: true, kind };
+  const va = na.map(n => lvVal(t, n, kind)), vb = nb.map(n => lvVal(t, n, kind));
+  if (va.concat(vb).some(v => v == null)) return { to: null, n: 0, missing: true, kind };
+  const sa = va.reduce((x, y) => x + y, 0), sb = vb.reduce((x, y) => x + y, 0);
+  const n = Math.min(kind === 'D' ? S.capD : S.capS, Math.abs(sa - sb));
+  return { to: n ? (sa < sb ? a : b) : null, n, kind, sa, sb };
+}
+
+// Skor utama pertemuan: SD = perlawanan dimenangi; SSD & bukan pasukan = set
+export const tieScore = (t, r) => isTeam(t) && t.tieFormat !== 'SSD' ? [r.ra, r.rb] : [r.sa, r.sb];
+export function rubberLabel(t, i) {
+  const ty = rubberTypes(t);
+  if (t.tieFormat === 'SSD') return ty[i] === 'D' ? 'Double' : `Single ${ty.slice(0, i + 1).filter(x => x === 'S').length}`;
+  return i === 0 ? 'Perseorangan' : 'Regu';
 }
