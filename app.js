@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.5.0';
+const VERSION = '3.5.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -120,7 +120,7 @@ function pn(t, id, cls = '', ph = '') {
 }
 
 // ---------- Penghala ----------
-window.addEventListener('hashchange', () => { if (window._lsWake && !/\/ls\//.test(location.hash)) window._lsWake.release().catch(() => {}); render(); });
+window.addEventListener('hashchange', () => { if (window._lsWake && !/\/ls\//.test(location.hash)) window._lsWake.release().catch(() => {}); const md = document.getElementById('modal'); if (md) md.hidden = true; render(); });
 window.addEventListener('load', () => { render(); cloud.init(); });
 let _dirty = false;
 const busy = () => {
@@ -138,7 +138,7 @@ cloud.onChange(what => {
   if (what === 'role' || what === 'tournaments' || what === 'auth') pushSync();
   updateTop();
   if (_cur && cloud.isVerifier()) cloud.watchSubmissions(_cur);
-  if (['pending', 'tournaments', 'role', 'auth', 'error', 'regs'].includes(what)) softRender();
+  if (['pending', 'tournaments', 'role', 'auth', 'error', 'regs', 'poster'].includes(what)) softRender();
   else if (what === 'live' && /^#\/tv\//.test(location.hash)) tvLiveRefresh();
   else if (what === 'live' && /^#\/t\/[^/]+\/ls\//.test(location.hash)) { if (_lsOnLive) _lsOnLive(); }
   else if (what === 'live' && !/^#\/t\/[^/]+\/(ls|m)\//.test(location.hash)) softRender();
@@ -1370,7 +1370,53 @@ function regPosterData(t) {
     url: shareUrl(t), status: live ? '' : full ? 'TEMPAT PENUH' : 'JOM SAKSIKAN',
   };
 }
-async function showRegPoster(t) {
+// Poster sendiri: kecilkan ke ≤1080px & mampatkan supaya muat satu dokumen Firestore (<1MB)
+async function shrinkImage(file) {
+  const url = URL.createObjectURL(file), im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+  const k = Math.min(1, 1080 / im.width, 1600 / im.height), cv = document.createElement('canvas');
+  cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k);
+  cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); URL.revokeObjectURL(url);
+  for (const q of [0.85, 0.75, 0.65, 0.55, 0.45]) {
+    let d = cv.toDataURL('image/webp', q); if (!d.startsWith('data:image/webp')) d = cv.toDataURL('image/jpeg', q);
+    if (d.length < 950000) return d;
+  }
+  throw new Error('Gambar terlalu besar');
+}
+const posterOf = t => (store.isCloud(t.id) ? (cloud.watchPoster(t.id), cloud.state.posters[t.id] || '') : '');
+function posterAdminRow(t) {
+  if (!canAdmin(t) || !store.isCloud(t.id)) return '';
+  const has = !!posterOf(t);
+  return `<div class="share-row"><span class="muted small">🖼️ Poster sendiri:</span>
+    <label class="pill-btn light small" style="cursor:pointer">${has ? '🔄 Tukar' : '📤 Muat naik'}<input type="file" accept="image/*" id="psUp" hidden></label>
+    ${has ? '<button type="button" class="pill-btn light small" id="psDel">🗑️ Buang</button>' : '<span class="muted small">(cth. reka di Canva, simpan sebagai PNG/JPG)</span>'}</div>`;
+}
+function wirePosterAdmin(t) {
+  const up = document.getElementById('psUp'), del = document.getElementById('psDel');
+  if (up) up.onchange = async () => {
+    const f = up.files[0]; if (!f) return;
+    toast('Memuat naik poster…', 2000);
+    try { await cloud.setPoster(t.id, await shrinkImage(f)); toast('✅ Poster dipaparkan di halaman pendaftaran'); }
+    catch (e) { toast('Gagal: ' + (e.code || e.message), 4000); }
+  };
+  if (del) del.onclick = async () => { if (!confirm('Buang poster sendiri? Poster automatik akan digunakan semula.')) return; await cloud.delPoster(t.id).catch(e => toast('Gagal: ' + (e.code || e.message))); };
+}
+async function showRegPoster(t, auto = false) {
+  const own = !auto && posterOf(t);
+  if (own) {
+    const md = document.getElementById('modal');
+    md.innerHTML = `<div class="sheet"><div class="row" style="justify-content:space-between"><h3 style="margin:0">🖼️ Poster</h3><button class="pill-btn light small" id="mx">✕</button></div>
+      <div class="rp-box"><img src="${own}" alt="Poster" class="rp-img">
+      <div class="btn-stack" style="margin-top:10px"><button class="pill-btn orange" id="rpShare"><span class="dot"></span>📤 Kongsi poster</button>
+      <button class="pill-btn light small" id="rpAuto">⚙️ Guna poster automatik (dengan kod QR)</button></div></div></div>`;
+    md.hidden = false; md.onclick = e => { if (e.target === md || e.target.id === 'mx') md.hidden = true; };
+    document.getElementById('rpAuto').onclick = () => showRegPoster(t, true);
+    document.getElementById('rpShare').onclick = async () => {
+      const blob = await (await fetch(own)).blob(), m = await import('./reg-poster.js');
+      const r = await m.shareBlob(blob, `Poster-${t.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-')}.${blob.type.includes('webp') ? 'webp' : 'jpg'}`, t.name);
+      if (r === 'download') toast('Poster dimuat turun ke telefon');
+    };
+    return;
+  }
   const md = document.getElementById('modal');
   md.innerHTML = `<div class="sheet"><div class="row" style="justify-content:space-between"><h3 style="margin:0">🖼️ Poster</h3><button class="pill-btn light small" id="mx">✕</button></div>
     <div id="rpBox" class="rp-box"><p class="muted">Menjana poster…</p></div></div>`;
@@ -1390,9 +1436,11 @@ function shareRow(t) {
     <button type="button" class="pill-btn light small" data-share="msg">📋 Salin mesej</button>
     <button type="button" class="pill-btn light small" data-share="copy">🔗 Salin pautan</button>
     <button type="button" class="pill-btn light small" data-share="preview">👁️ Lihat mesej</button>
-    <button type="button" class="pill-btn light small" data-share="poster">🖼️ Poster</button></div>`;
+    <button type="button" class="pill-btn light small" data-share="poster">🖼️ Poster</button></div>${posterAdminRow(t)}`;
 }
 function wireShare(t) {
+  wirePosterAdmin(t);
+  const dp = document.getElementById('dPoster'); if (dp) dp.onclick = () => showRegPoster(t);
   $app.querySelectorAll('[data-share]').forEach(b => (b.onclick = async () => {
     const k = b.dataset.share;
     if (k === 'poster') return showRegPoster(t);
@@ -1500,7 +1548,9 @@ function viewDaftar(t) {
     ['⚖️', t.hcMode === 'manual' ? 'Handicap' : S ? `Handicap ${S.name}` : ''], ['💰', t.regFee ? 'Yuran: ' + t.regFee : '']].filter(x => x[1]);
   const prizes = (t.prizes || '').split('\n').map(x => x.trim()).filter(Boolean);
   const active = regs.length, full = t.regMax && active >= t.regMax && !mine;
+  const own = posterOf(t);
   $app.innerHTML = `
+    ${own ? `<img src="${own}" alt="Poster ${esc(t.name)}" class="d-poster" id="dPoster">` : ''}
     <div class="card daftar-info">
       <div class="eyebrow">${esc(c.name || c.short || '')}</div>
       <div class="d-info">${info.map(([i, v]) => `<div><span>${i}</span>${esc(v)}</div>`).join('')}</div>

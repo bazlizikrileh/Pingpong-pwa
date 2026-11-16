@@ -20,6 +20,7 @@ export const state = {
   pending: {},         // tid → [penghantaran menunggu]
   regs: {},            // tid → [pendaftaran peserta]
   live: {},            // tid → { mid: skor langsung }
+  posters: {},         // tid → dataURL poster sendiri ('' = tiada)
 };
 const emit = what => listeners.forEach(f => { try { f(what); } catch (e) { console.error(e); } });
 export const onChange = f => { listeners.add(f); return () => listeners.delete(f); };
@@ -181,3 +182,14 @@ export async function setLive(tid, mid, { rs, cur, ri, by, tb, sw }) {
   await F.setDoc(F.doc(db, 'tournaments', tid, 'live', mid), { uid: u.uid, rs: encodeRubbers(rs), cur: `${cur[0]}-${cur[1]}`, ri: ri | 0, by: String(by || '').slice(0, 50), tb: String(tb || '').slice(0, 15), sw: !!sw, at: F.serverTimestamp() });
 }
 export async function clearLive(tid, mid) { await init(); await F.deleteDoc(F.doc(db, 'tournaments', tid, 'live', mid)); }
+
+// ---------- Poster sendiri (gambar dimuat naik penganjur) ----------
+// posters/{tid}: { img: dataURL webp/jpeg ≤ ~900KB, at } — semua boleh baca, hanya admin tulis
+const unsubPoster = {};
+export function watchPoster(tid) {
+  if (unsubPoster[tid] || !F) return;
+  unsubPoster[tid] = F.onSnapshot(F.doc(db, 'posters', tid), d => { state.posters[tid] = d.exists() ? d.data().img || '' : ''; emit('poster'); },
+    () => { state.posters[tid] = ''; });
+}
+export async function setPoster(tid, img) { await init(); await F.setDoc(F.doc(db, 'posters', tid), { img, at: F.serverTimestamp() }); }
+export async function delPoster(tid) { await init(); await F.deleteDoc(F.doc(db, 'posters', tid)); }
