@@ -4,7 +4,7 @@ import { playDeal } from './draw-anim.js';
 import * as cloud from './cloud.js';
 import * as LV from './live.js';
 
-const VERSION = '3.1.0';
+const VERSION = '3.2.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -182,11 +182,17 @@ function render(keep = false) {
   if (!keep) window.scrollTo(0, 0);
   document.getElementById('modal').hidden = true;
   applyTheme(null); $head.hidden = true; $tabs.hidden = true; _cur = null;
+  document.body.classList.remove('tv'); if (parts[0] !== 'tv') stopTV();
   document.getElementById('brand-title').textContent = 'Pingpong Portal';
   updateTop();
   if (!parts.length) { viewHome(); if (keep) window.scrollTo(0, y); return; }
   if (parts[0] === 'baru') return viewNew();
   if (parts[0] === 'pentadbir') return viewAdmin();
+  if (parts[0] === 'tv') {
+    const t = load(parts[1]);
+    if (!t) { $app.innerHTML = '<div class="empty">Memuatkan data…</div>'; return; }
+    _cur = t.id; applyTheme(t); viewTV(t); return;
+  }
   if (parts[0] === 'daftar') {
     const t = load(parts[1]);
     if (!t) { $app.innerHTML = cloud.state.tournaments || cloud.state.failed ? '<div class="empty">Pertandingan tidak dijumpai.</div>' : '<div class="empty">Memuatkan data…</div>'; return; }
@@ -208,6 +214,7 @@ function render(keep = false) {
     const views = { tetapan: viewSetup, pemain: viewPemain, langsung: viewLive, jadual: viewJadual, kumpulan: viewGroups, keputusan: viewResults, kalahmati: viewKnockout, pool: viewPool, laporan: viewReport, ranking: viewRanking, peraturan: viewRules };
     updateTop();
     if (page === 'm') viewMatch(t, parts[3]); else if (views[page]) views[page](t); else { location.hash = '#/'; return; }
+    if (page === 'kumpulan' && t.format === 'rr' && t.stage === 'done') { $app.insertAdjacentHTML('beforeend', '<div class="row" style="margin:12px 0"><button class="pill-btn orange" id="posterBtn"><span class="dot"></span>🏆 Kongsi poster juara</button></div>'); wirePoster(t); }
     guideCard(t, page);
     if (page !== 'langsung') myStrip(t);
     if (keep) window.scrollTo(0, y);
@@ -381,43 +388,45 @@ function settingsFormAll(t, locked) {
     <div class="section-title">Acara</div>
     <label>Jenis acara</label><select name="entryMode" ${dis}>${opt(ENTRY, t.entryMode)}</select>
     <div data-show="team"><label>Saiz</label><select name="teamSize" ${dis}>${opt({ 3: 'Trio (3 orang)', 4: 'Kuartet (4 orang)' }, t.teamSize)}</select></div>
-    <div data-show="team"><label>Setiap pertemuan</label><select name="tieFormat" ${dis}>${opt({ SD: 'Single + Double (menang 2-0 = 3 mata, 1-1 = seri)', SSD: 'Single + Single + Double (setiap perlawanan: menang 3 markah, seri 1; pemenang ikut jumlah markah)' }, t.tieFormat)}</select></div>
-    <div data-show="tieRule"><label>Bila keputusan sama (peringkat kumpulan)</label><select name="tieRule">${opt({ draw: 'Seri (markah sama dikekalkan)', next: 'Tiada seri: penentu beza set, kemudian jumlah mata' }, t.tieRule || 'draw')}</select>
-      <p class="muted small" style="margin:4px 0 0">Kalah mati tiada seri: penentu beza set, kemudian jumlah mata, kemudian keputusan penganjur.</p></div>
+    <div data-show="team"><label>Setiap pertemuan</label><select name="tieFormat" ${dis}>${opt({ SD: 'Single + Double', SSD: 'Single + Single + Double (ikut markah)' }, t.tieFormat)}</select></div>
+    <div data-show="tieRule"><label>Keputusan sama (kumpulan)</label><select name="tieRule">${opt({ draw: 'Seri', next: 'Tiada seri (beza set, kemudian mata)' }, t.tieRule || 'draw')}</select></div>
     <label>Struktur</label><select name="format" ${dis}>${opt(FORMAT, t.format)}</select>
     <div class="grid2">
       <div><label data-label="gf">Format kumpulan</label><select name="groupFormat">${opt(setOpts, t.groupFormat)}</select></div>
       <div data-show="ko"><label>Format kalah mati</label><select name="koFormat">${opt(setOpts, t.koFormat)}</select></div>
     </div>
-    <label>Handicap (mata mula)</label><select name="hcMode">${opt({ off: 'Tiada handicap', manual: 'Manual: angka 0–5 setiap peserta', ksas: 'Ikut tahap: KSAS dalaman (single 7/5/2/1/0 · double 5/3/2/1/0)', kroni: 'Ikut tahap: Kroni Shell (single 6/4/3/2/1/0 · double 5/4/3/2/1/0)' }, t.hcMode || (t.handicap ? 'manual' : 'off'))}</select>
+    <label>Handicap</label><select name="hcMode">${opt({ off: 'Tiada', manual: 'Manual (0–5)', ksas: 'Tahap KSAS dalaman', kroni: 'Tahap Kroni Shell' }, t.hcMode || (t.handicap ? 'manual' : 'off'))}</select>
 
     <div data-show="groups">
       <div class="section-title">Kumpulan &amp; kalah mati</div>
       <div class="grid2">
         <div><label>Saiz kumpulan</label><select name="groupSize" ${dis}>${opt({ 4: 'Maks. 4', 5: 'Maks. 5' }, t.groupSize)}</select></div>
         <div><label>Bilangan kumpulan</label><select name="numGroups" ${dis}>${opt({ 0: 'Auto (ikut saiz)', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8' }, t.numGroups)}</select></div>
-        <div><label>Tempat ketiga terbaik ke kalah mati</label><select name="bestThirds" ${dis}>${opt({ 0: 'Tiada', 2: '2 terbaik', 4: '4 terbaik', 6: '6 terbaik', 8: '8 terbaik' }, t.bestThirds)}</select></div>
-        <div><label>Susunan kalah mati</label><select name="koMode">${opt({ M: 'Bracket cermin automatik (jika genap)', U: 'Undian selepas kumpulan tamat' }, t.koMode)}</select></div>
+        <div><label>Tempat ke-3 terbaik layak</label><select name="bestThirds" ${dis}>${opt({ 0: 'Tiada', 2: '2 terbaik', 4: '4 terbaik', 6: '6 terbaik', 8: '8 terbaik' }, t.bestThirds)}</select></div>
+        <div><label>Susunan kalah mati</label><select name="koMode">${opt({ M: 'Cermin (automatik)', U: 'Undian' }, t.koMode)}</select></div>
         <div><label>Peserta pool kalah</label><select name="pool">${opt(POOL, t.pool)}</select></div>
-        <div><label>Susunan pool kalah</label><select name="poolMode">${opt({ M: 'Bracket cermin automatik (jika genap)', U: 'Undian selepas kumpulan tamat' }, t.poolMode)}</select></div>
+        <div><label>Susunan pool kalah</label><select name="poolMode">${opt({ M: 'Cermin (automatik)', U: 'Undian' }, t.poolMode)}</select></div>
       </div>
     </div>
 
     <div class="section-title">Meja</div>
     <div class="grid2">
       <div><label>Lokasi</label><select name="venue">${opt(E.VENUES, t.venue)}</select></div>
-      <div><label>Bilangan meja</label><select name="numTables">${opt({ 0: 'Auto (≤16: 4 meja · lebih: 8)', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8' }, t.numTables)}</select></div>
+      <div><label>Bilangan meja</label><select name="numTables">${opt({ 0: 'Auto', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8' }, t.numTables)}</select></div>
     </div>
     <div data-show="venueX"><label>Nama tempat</label><input name="venueName" value="${esc(t.venueName)}" placeholder="cth. Dewan Kelab Sukan HSAJB"></div>
 
     <div class="section-title">Pendaftaran peserta</div>
-    <label class="check"><input type="checkbox" name="regOpen" ${t.regOpen ? 'checked' : ''}> Buka pendaftaran sendiri (peserta daftar melalui pautan, log masuk Google)</label>
-    <div data-show="reg"><label>Catatan pendaftaran (pilihan)</label><input name="regNote" value="${esc(t.regNote || '')}" placeholder="cth. Terbuka untuk semua ahli. Yuran RM10 dibayar di kaunter."></div>
-    <p class="muted small" style="margin:4px 0 0">Hanya untuk pertandingan di awan ☁️. Penganjur sahkan setiap pendaftaran di tab 👥, kemudian masukkan ke senarai.</p>
+    <label class="check"><input type="checkbox" name="regOpen" ${t.regOpen ? 'checked' : ''}> Buka pendaftaran melalui pautan</label>
+    <div data-show="reg">
+      <div class="grid2"><div><label>Yuran</label><input name="regFee" value="${esc(t.regFee || '')}" placeholder="cth. Percuma / RM10"></div>
+      <div><label>Had peserta</label><input name="regMax" type="number" min="0" value="${t.regMax || ''}" placeholder="tiada had"></div></div>
+      <label>Hadiah (satu baris setiap tempat)</label><textarea name="prizes" rows="3" placeholder="Johan: RM100 + piala&#10;Naib johan: RM50&#10;Ketiga: Hadiah saguhati">${esc(t.prizes || '')}</textarea>
+      <label>Catatan</label><input name="regNote" value="${esc(t.regNote || '')}" placeholder="cth. Terbuka untuk semua ahli KSAS">
+    </div>
 
     <div class="section-title">Laporan skor</div>
-    <p class="muted small" style="margin:4px 0 0">Pengadil/peserta menghantar skor terus dalam portal dengan PIN acara; penganjur atau pengesah skor mengesahkannya.</p>
-    <label class="check"><input type="checkbox" name="waEnabled" ${t.waEnabled ? 'checked' : ''}> Benarkan juga lapor melalui WhatsApp (sandaran)</label>
+    <label class="check"><input type="checkbox" name="waEnabled" ${t.waEnabled ? 'checked' : ''}> Benarkan lapor melalui WhatsApp (sandaran kepada PIN)</label>
     <div class="grid2" data-show="wa">
       <div><label>Laporan dihantar ke</label><select name="waMode">${opt({ G: 'Group (peserta pilih group)', N: 'Nombor penganjur' }, t.waMode)}</select></div>
       <div data-show="waG"><label>Nama group</label><input name="waGroup" value="${esc(t.waGroup)}" placeholder="cth. KSAS Rimau - Laporan Skor"></div>
@@ -464,6 +473,7 @@ function readSettings(form, t) {
   t.venue = v('venue'); t.numTables = Number(v('numTables')) || 0; t.venueName = v('venueName').trim();
   t.waEnabled = form.waEnabled.checked;
   t.regOpen = form.regOpen.checked; t.regNote = v('regNote').trim();
+  t.regFee = v('regFee').trim(); t.regMax = Number(v('regMax')) || 0; t.prizes = v('prizes').trim();
   t.waMode = v('waMode'); t.waGroup = v('waGroup').trim(); t.waNumber = v('waNumber').replace(/\D/g, '');
   if (!form.entryMode.disabled) {
     t.entryMode = v('entryMode'); t.teamSize = Number(v('teamSize')) || 3; t.format = v('format');
@@ -501,10 +511,9 @@ function viewNew() {
 
 // ---------- Tetapan & peserta ----------
 function entryHint(t) {
-  const hc = t.hcMode === 'manual' ? ' Handicap dalam kurungan di hujung, cth. <i>Ali, Farmasi (2)</i>.' : E.HC_SCHEMES[t.hcMode] ? ` Tahap dalam kurungan di hujung, cth. <i>Ali (Naga)</i>${t.hcMode === 'kroni' ? ', <i>Siti (Lion W)</i>' : ''}, atau pilih di kad 🎚️ Tahap handicap.` : '';
-  if (t.entryMode === 'single') return 'Satu pemain setiap baris: <i>Nama, Jabatan / Unit</i>.' + hc;
-  if (t.entryMode === 'double') return 'Satu pasangan setiap baris: <i>Pemain 1 &amp; Pemain 2, Jabatan / Unit</i>.' + hc;
-  return 'Satu peserta setiap baris: <i>Nama, Jabatan / Unit</i>. Peserta diundi rawak ' + (E.isTeam(t) ? `ke dalam ${E.teamWord(t).toLowerCase()} ${t.teamSize} orang. Setiap pertemuan: ${t.tieFormat === 'SSD' ? '2 perseorangan + 1 regu' : '1 perseorangan + 1 regu'}.` : 'berpasangan (bilangan mesti genap).');
+  const ex = t.entryMode === 'double' ? 'Ali &amp; Abu, Farmasi' : 'Ali, Farmasi';
+  const hc = t.hcMode === 'manual' ? ' (2)' : E.HC_SCHEMES[t.hcMode] ? (t.hcMode === 'kroni' ? ' (Lion W)' : ' (Naga)') : '';
+  return `Satu ${t.entryMode === 'double' ? 'pasangan' : 'nama'} setiap baris, cth. <i>${ex}${hc}</i>`;
 }
 
 // Paparan peserta (bukan admin): senarai sahaja
@@ -538,10 +547,10 @@ function viewSetupCore(t, part = 'tetapan') {
   $app.innerHTML = P ? `
     ${section('Peserta', `Senarai ${unit}`)}
     <div class="card" id="entries">${listCard}
-      ${locked && t.participants.length ? '<div class="row" style="margin-top:10px"><button type="button" class="pill-btn light small" id="saveP">Simpan nama/handicap</button></div><p class="muted small">Jadual sudah dijana; senarai dikunci. Nama dan handicap masih boleh dibetulkan.</p>' : ''}</div>
+      ${locked && t.participants.length ? '<div class="row" style="margin-top:10px"><button type="button" class="pill-btn light small" id="saveP">Simpan nama/handicap</button></div><p class="muted small">Senarai dikunci (jadual sudah dijana). Ejaan nama masih boleh dibetulkan.</p>' : ''}</div>
 
     <details class="card fold" data-fold="add" ${fo('add', !locked)}><summary>➕ Tambah / undi peserta</summary>
-      ${locked ? '<p class="muted small">Senarai dikunci kerana jadual sudah dijana. Gunakan <b>↺ Reset jadual</b> untuk mengubah peserta.</p>' : draw ? `
+      ${locked ? '<p class="muted small">Dikunci. Gunakan <b>↺ Reset jadual</b> di Tetapan untuk mengubah peserta.</p>' : draw ? `
         <p class="muted small">${entryHint(t)}</p>
         <label>Senarai individu (${t.individuals.length})</label>
         <textarea id="ind">${esc(t.individuals.map(x => x.name + (x.unit ? ', ' + x.unit : '') + (E.HC_SCHEMES[t.hcMode] && E.levelOf(t, x.name) ? ` (${E.levelInfo(t, E.levelOf(t, x.name))[1]})` : '')).join('\n'))}</textarea>
@@ -553,7 +562,7 @@ function viewSetupCore(t, part = 'tetapan') {
       ${!locked && isTest ? `<div class="test-seed"><button type="button" class="pill-btn small seed" id="seed24">👥 Isi 24 peserta (UJIAN)</button>
         <span class="muted small">${t.entryMode === 'single' ? '24 pemain' : t.entryMode === 'double' ? '12 pasangan' : '24 individu sedia untuk diundi'}</span></div>` : ''}
       ${!locked && t.format !== 'ko' ? `<details class="fold sub"><summary>Import kumpulan yang telah diundi</summary>
-        <p class="muted small">Gunakan jika undian dibuat di luar sistem. Satu kumpulan setiap baris:<br><i>A | Azim &amp; Jay | Dora &amp; Chenjun | Alex &amp; Maggie</i></p>
+        <p class="muted small">Satu kumpulan setiap baris, cth. <i>A | Azim | Dora | Alex</i></p>
         <textarea id="mgt" rows="4"></textarea>
         <button type="button" class="pill-btn light small" id="impg" style="margin-top:8px">Import kumpulan</button></details>` : ''}
     </details>
@@ -564,7 +573,7 @@ function viewSetupCore(t, part = 'tetapan') {
     <form id="f">
     <details class="card fold" data-fold="info" ${fo('info', false)}><summary>⚙️ Maklumat pertandingan &amp; tetapan meja</summary>
       ${settingsForm(t, locked, 'info')}
-      <p class="muted small">Meja: ${E.tablesOf(t).map(esc).join(', ')}</p>
+
       <button class="pill-btn brand" style="margin-top:6px">Simpan tetapan</button>
     </details>
 
@@ -582,7 +591,7 @@ function viewSetupCore(t, part = 'tetapan') {
     </details>
     </form>
     ${store.isCloud(t.id) ? `<div class="card"><div class="section-title" style="margin-top:0">PIN pengadil &amp; peserta</div>
-      <p class="muted small">Kongsi PIN ini dalam group WhatsApp pertandingan. Sesiapa yang ada PIN boleh menghantar skor; skor hanya dikira selepas disahkan penganjur atau pengesah skor.</p>
+      <p class="muted small">Kongsi dengan peserta. Skor yang dihantar perlu disahkan penganjur.</p>
       <div class="row"><input id="pin" inputmode="numeric" maxlength="8" placeholder="cth. 2468" style="max-width:160px;font-family:var(--mono);font-size:18px">
       <button class="pill-btn brand small" id="savePin">Simpan PIN</button><button class="pill-btn light small" id="genPin">Jana rawak</button></div>
       <p class="muted small" id="pinMsg"></p></div>`
@@ -1241,22 +1250,63 @@ function levelsCard(t) {
   const admin = canAdmin(t), missing = P.filter(n => !E.levelOf(t, n)).length;
   const chip = c => { const L = E.levelInfo(t, c); return L ? `<span class="lv lv-${c}">${esc(L[1])}</span>` : '<span class="lv none">—</span>'; };
   return `<details class="card fold" data-fold="lv" ${missing && admin ? 'open' : ''}><summary>🎚️ Tahap handicap · ${esc(S.name)}${missing ? ` <span class="role-chip">${missing} belum</span>` : ''}</summary>
-    <p class="muted small">Single: ${S.levels.map(l => `${esc(l[1])} ${l[2]}`).join(' · ')}<br>Double: ${S.levels.map(l => `${esc(l[1])} ${l[3]}`).join(' · ')} (jumlah dua ahli, beza maksimum ${S.capD}).<br>Pihak dengan nilai lebih rendah mula dengan beza mata tersebut setiap game.${admin ? ' Tahap juga boleh ditulis dalam senarai, cth. <i>Ali (Naga Elit)</i>' + (t.hcMode === 'kroni' ? ', <i>Siti (Lion W)</i>' : '') + '.' : ''}</p>
+    <table class="lv-tab"><tr><th></th>${S.levels.map(l => `<th>${esc(l[1])}</th>`).join('')}</tr><tr><td>Single</td>${S.levels.map(l => `<td>${l[2]}</td>`).join('')}</tr><tr><td>Double</td>${S.levels.map(l => `<td>${l[3]}</td>`).join('')}</tr></table>
+    <p class="muted small">Pihak bernilai rendah mula dengan beza nilai. Double: jumlah dua ahli, maks. ${S.capD}.</p>
     <div class="lv-list">${P.map(n => `<div class="lv-row"><span>${esc(n)}</span>${admin ? `<select data-lvn="${esc(n)}">${opt({ '': '— tahap —', ...Object.fromEntries(S.levels.map(l => [l[0], `${l[1]} (S${l[2]} · D${l[3]})`])) }, E.levelOf(t, n))}</select>` : chip(E.levelOf(t, n))}</div>`).join('')}</div></details>`;
 }
 // ---------- Pautan kongsi ----------
 const shareUrl = t => `${location.origin}${location.pathname}#/${t.regOpen ? 'daftar/' + t.id : 't/' + t.id + '/pemain'}`;
+// Mesej WhatsApp pendaftaran: butiran acara + senarai peserta bernombor + pautan daftar
+const HARI = ['Ahad', 'Isnin', 'Selasa', 'Rabu', 'Khamis', 'Jumaat', 'Sabtu'];
+function waText(t) {
+  const c = clubOf(t), S = E.HC_SCHEMES[t.hcMode], f = E.SET_FORMATS[t.groupFormat];
+  const at = startAt(t), d = at ? new Date(at) : null;
+  const regs = (cloud.state.regs[t.id] || []).filter(r => r.status !== 'no');
+  const days = at ? Math.ceil((at - Date.now()) / 86400000) : null;
+  const medal = ['🥇', '🥈', '🥉'];
+  const prizes = (t.prizes || '').split('\n').map(x => x.trim()).filter(Boolean);
+  const L = [];
+  L.push(`🏓 *${t.name}*`);
+  if (c.short) L.push(`_${c.short}_`);
+  L.push('━━━━━━━━━━━━━━');
+  if (d) L.push(`📅 ${HARI[d.getDay()]}, ${fmtDate(t.date)} · ${E.sessionTime(t, 1)}`);
+  const venue = t.venue === 'X' ? t.venueName : E.VENUES[t.venue];
+  if (venue) L.push(`📍 ${venue}`);
+  L.push(`🎯 ${E.isTeam(t) ? E.teamWord(t) + (t.tieFormat === 'SSD' ? ' (S + S + D)' : ' (S + D)') : ENTRY[t.entryMode]} · ${f.label.replace(/ \(.*\)/, '')}`);
+  if (t.hcMode === 'manual') L.push('⚖️ Handicap');
+  else if (S) L.push(`⚖️ Handicap ${S.name}`);
+  if (t.regFee) L.push(`💰 Yuran: ${t.regFee}`);
+  if (prizes.length) { L.push('🏆 Hadiah:'); prizes.forEach((p, i) => L.push(`   ${medal[i] || '🏅'} ${p}`)); }
+  if (t.regNote) L.push(`📝 ${t.regNote}`);
+  L.push('');
+  L.push(`👥 *Peserta (${regs.length}${t.regMax ? '/' + t.regMax : ''})*`);
+  if (regs.length) regs.forEach((r, i) => L.push(`${i + 1}. ${r.name}${r.partner ? ' & ' + r.partner : ''} ${r.status === 'ok' ? '✅' : '⏳'}`));
+  else L.push('_Belum ada. Jadi yang pertama!_');
+  if (t.regMax && regs.length < t.regMax) L.push(`_Tinggal ${t.regMax - regs.length} tempat lagi_`);
+  L.push('');
+  if (days != null && days > 0) L.push(`⏰ ${days === 1 ? 'Esok!' : days + ' hari lagi'}`);
+  L.push(t.regOpen ? `👉 *Daftar di sini:*\n${shareUrl(t)}` : `🔗 ${shareUrl(t)}`);
+  L.push('_✅ disahkan · ⏳ menunggu pengesahan_');
+  return L.join('\n');
+}
 function shareRow(t) {
-  return `<div class="share-row"><span class="muted small">🔗 Kongsi pertandingan:</span>
-    <button type="button" class="pill-btn light small" data-share="native">📤 Kongsi</button>
-    <a class="pill-btn small" style="background:#25d366;color:#fff" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(`${t.name}${t.date ? ' · ' + fmtDate(t.date) : ''}${t.regOpen ? '\nDaftar di sini:' : '\n'} ${shareUrl(t)}`)}">WhatsApp</a>
-    <button type="button" class="pill-btn light small" data-share="copy">📋 Salin</button></div>`;
+  return `<div class="share-row"><span class="muted small">🔗 Kongsi:</span>
+    <a class="pill-btn small" style="background:#25d366;color:#fff" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(waText(t))}">WhatsApp</a>
+    <button type="button" class="pill-btn light small" data-share="msg">📋 Salin mesej</button>
+    <button type="button" class="pill-btn light small" data-share="copy">🔗 Salin pautan</button>
+    <button type="button" class="pill-btn light small" data-share="preview">👁️ Lihat mesej</button></div>`;
 }
 function wireShare(t) {
   $app.querySelectorAll('[data-share]').forEach(b => (b.onclick = async () => {
-    const url = shareUrl(t);
-    if (b.dataset.share === 'native' && navigator.share) { try { await navigator.share({ title: t.name, text: t.name, url }); } catch {} return; }
-    try { await navigator.clipboard.writeText(url); toast('Pautan disalin'); } catch { prompt('Salin pautan ini:', url); }
+    const k = b.dataset.share, txt = k === 'copy' ? shareUrl(t) : waText(t);
+    if (k === 'preview') {
+      const md = document.getElementById('modal');
+      md.innerHTML = `<div class="sheet"><div class="row" style="justify-content:space-between"><h3 style="margin:0">Mesej WhatsApp</h3><button class="pill-btn light small" id="mx">✕</button></div>
+        <div class="wa-bubble">${esc(txt).replace(/\*([^*\n]+)\*/g, '<b>$1</b>').replace(/_([^_\n]+)_/g, '<i>$1</i>')}</div></div>`;
+      md.hidden = false; md.onclick = e => { if (e.target === md || e.target.id === 'mx') md.hidden = true; };
+      return;
+    }
+    try { await navigator.clipboard.writeText(txt); toast(k === 'copy' ? 'Pautan disalin' : 'Mesej disalin. Tampal dalam WhatsApp.'); } catch { prompt('Salin:', txt); }
   }));
 }
 
@@ -1344,19 +1394,22 @@ function viewDaftar(t) {
       <p class="muted small" style="margin-bottom:0">Tiada log masuk diperlukan. Pendaftaran disimpan untuk telefon ini, jadi anda boleh mengubah atau membatalkannya dari telefon yang sama.</p></div>`;
   const info = [['📅', fmtDate(t.date)], ['⏰', t.startTime ? E.sessionTime(t, 1) : ''], ['📍', t.venue === 'X' ? t.venueName : E.VENUES[t.venue]],
     ['🏓', `${E.isTeam(t) ? E.teamWord(t) + (t.tieFormat === 'SSD' ? ' (Single + Single + Double)' : '') : ENTRY[t.entryMode]} · ${f[t.groupFormat].label}`],
-    ['⚖️', t.hcMode === 'manual' ? 'Handicap' : S ? `Handicap ${S.name}` : '']].filter(x => x[1]);
+    ['⚖️', t.hcMode === 'manual' ? 'Handicap' : S ? `Handicap ${S.name}` : ''], ['💰', t.regFee ? 'Yuran: ' + t.regFee : '']].filter(x => x[1]);
+  const prizes = (t.prizes || '').split('\n').map(x => x.trim()).filter(Boolean);
+  const active = regs.filter(x => x.status !== 'no').length, full = t.regMax && active >= t.regMax && !mine;
   $app.innerHTML = `
     <div class="card daftar-info">
       <div class="eyebrow">${esc(c.name || c.short || '')}</div>
       <div class="d-info">${info.map(([i, v]) => `<div><span>${i}</span>${esc(v)}</div>`).join('')}</div>
+      ${prizes.length ? `<div class="d-prize">${prizes.map((p, i) => `<div><span>${['🥇', '🥈', '🥉'][i] || '🏅'}</span>${esc(p)}</div>`).join('')}</div>` : ''}
       ${t.regNote ? `<p class="d-note">${esc(t.regNote)}</p>` : ''}
-      <div class="row" style="gap:6px;margin-top:8px"><span class="role-chip">${t.regOpen ? '🟢 Pendaftaran dibuka' : '🔒 Pendaftaran ditutup'}</span><span class="role-chip">${regs.length} berdaftar · ${ok.length} disahkan</span></div>
+      <div class="row" style="gap:6px;margin-top:8px"><span class="role-chip">${t.regOpen ? '🟢 Pendaftaran dibuka' : '🔒 Pendaftaran ditutup'}</span><span class="role-chip">${active}${t.regMax ? '/' + t.regMax : ''} berdaftar · ${ok.length} disahkan</span></div>
     </div>
     <div class="card reg-card">
       <div class="section-title" style="margin-top:0">📝 ${mine ? 'Pendaftaran anda' : 'Daftar penyertaan'}</div>
       ${mine ? `<div class="notice">✅ Anda telah mendaftar sebagai <b>${esc(mine.name)}</b>${mine.level ? ` (${esc(lvName(mine.level))})` : ''}${mine.partner ? ` &amp; ${esc(mine.partner)}` : ''}<br>Status: <b>${REG_ST[mine.status][0]} ${mine.status === 'pending' ? 'Menunggu pengesahan penganjur' : REG_ST[mine.status][1]}</b>
         ${t.regOpen ? '<div class="row" style="margin-top:8px;gap:6px"><button type="button" class="pill-btn light small" id="rgEdit">Ubah</button><button type="button" class="pill-btn light small" id="rgCancel">Batal pendaftaran</button>' + (mine.status === 'pending' ? notifBtn('🔔 Beritahu bila disahkan') : '') + '</div>' : ''}</div>` : ''}
-      ${t.regOpen ? form : mine ? '' : '<p class="muted">Pendaftaran telah ditutup.</p>'}
+      ${full ? '<p class="notice">Maaf, tempat sudah penuh.</p>' : t.regOpen ? form : mine ? '' : '<p class="muted">Pendaftaran telah ditutup.</p>'}
     </div>
     <div class="card"><div class="section-title" style="margin-top:0">👥 Peserta berdaftar (${regs.length})</div>
       ${regs.length ? `<div class="reg-list">${regs.map((x, i) => `<div class="reg-row ${x.status}"><span class="no">${i + 1}</span><span class="nm"><b>${esc(x.name)}</b>${x.partner ? ` &amp; ${esc(x.partner)}` : ''}
@@ -1467,6 +1520,7 @@ function viewLive(t) {
     <div class="card me-box"><label style="margin-top:0">👤 Saya</label>
       <select id="meSel"><option value="">— pilih nama anda —</option>${people.map(p => `<option value="${p.id}" ${p.id === me ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
       ${stTxt}${me ? `<div style="margin-top:8px">${notifBtn('🔔 Beritahu saya bila tiba giliran')}</div>` : ''}</div>
+    <div class="row" style="justify-content:flex-end;margin-top:8px"><a class="pill-btn light small" href="#/tv/${t.id}">📺 Mod TV</a></div>
     <div class="row" style="justify-content:space-between;margin-top:14px"><div class="section-title" style="margin:0">🟢 Sedang berlangsung <span class="muted small">(${live.length}/${T.length} meja)</span></div>
       ${edit && !allDone ? '<button class="pill-btn brand small" id="agih"><span class="dot"></span>▶️ Agih meja kosong</button>' : ''}</div>
     ${canAdmin(t) ? `<div class="row tb-set"><label>🏓 Meja digunakan</label><select id="ntSel">${opt({ 0: `Auto (${E.numTablesOf({ ...t, numTables: 0 })})`, 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8' }, t.numTables)}</select>
@@ -1491,6 +1545,71 @@ function viewLive(t) {
     LV.defer(t, b.dataset.tgh); save(t); toast('Ditangguh'); render(true);
   }));
 }
+
+// ---------- 📺 Mod TV / skrin besar: slaid bertukar sendiri ----------
+const _tv = { i: 0, timer: null, id: null };
+function stopTV() { clearInterval(_tv.timer); _tv.timer = null; _tv.id = null; }
+function tvSlides(t) {
+  const S = [];
+  const { live, cand } = LV.liveState(t);
+  if (live.length || cand.length) S.push({ k: 'live', sec: 20 });
+  for (let i = 0; i < t.groups.length; i += 2) S.push({ k: 'groups', g: t.groups.slice(i, i + 2), sec: 15 });
+  if (t.rounds.ko) S.push({ k: 'ko', sec: 18 });
+  if (t.rounds.pool) S.push({ k: 'pool', sec: 15 });
+  if (t.stage === 'done' && t.format !== 'rr') S.push({ k: 'champ', sec: 15 });
+  if (!S.length) S.push({ k: 'wait', sec: 30 });
+  return S;
+}
+function tvSlideHtml(t, sl) {
+  if (sl.k === 'live') {
+    const { occ } = LV.liveState(t), nx = LV.nextUp(t), U = LV.umpirePlan(t);
+    return `<h2 class="tv-h">🟢 Sedang berlangsung</h2><div class="tv-tables">${LV.tableList(t).map(({ k }) => {
+      const m = occ[k], u = m ? LV.umpireOf(t, m, U) : '';
+      return `<div class="tv-tt ${m ? '' : 'free'}"><div class="tv-tno">MEJA ${k}</div>
+        ${m ? `<div class="tv-court"><div>${esc(E.pname(t, m.a))}</div><i></i><div>${esc(E.pname(t, m.b))}</div></div>
+          <div class="tv-sub">${esc(E.stageLabel(t, m))}${u ? ` · 🟣 ${esc(E.pname(t, u))}` : ''}</div>` : '<div class="tv-court empty"><div>Kosong</div></div>'}
+        ${nx[k] ? `<div class="tv-next">⏭️ ${esc(E.pname(t, nx[k].a))} lwn ${esc(E.pname(t, nx[k].b))}</div>` : ''}</div>`;
+    }).join('')}</div>`;
+  }
+  if (sl.k === 'groups') return `<h2 class="tv-h">📊 ${t.format === 'rr' ? 'Kedudukan liga' : 'Kedudukan kumpulan'}</h2><div class="tv-cols">${sl.g.map(g => `<div class="tv-card"><h3>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h3>${standingsTable(t, g)}</div>`).join('')}</div>`;
+  if (sl.k === 'ko') return `<h2 class="tv-h">⚔️ Kalah mati</h2><div class="tv-card tv-fit"><div class="tv-scale">${bracketHtml(t, 'ko')}</div></div>`;
+  if (sl.k === 'pool') return `<h2 class="tv-h">🥉 Pool kalah</h2><div class="tv-card tv-fit"><div class="tv-scale">${bracketHtml(t, 'pool')}</div></div>`;
+  if (sl.k === 'champ') {
+    const R = E.finalRanking(t), get = p => (R.find(x => x.place === p) || { ids: [] }).ids;
+    const col = (p, cls, ic, lab) => `<div class="tv-pod ${cls}"><div class="ic">${ic}</div><div class="nm">${get(p).map(id => esc(E.pname(t, id))).join('<br>') || '—'}</div><div class="lab">${lab}</div></div>`;
+    return `<h2 class="tv-h">🏆 Keputusan akhir</h2><div class="tv-podium">${col(2, 'p2', '🥈', 'Naib johan')}${col(1, 'p1', '🥇', 'Johan')}${col(3, 'p3', '🥉', 'Tempat ketiga')}</div>`;
+  }
+  const cd = startAt(t) > Date.now();
+  return `<div class="tv-wait"><div class="big">${cd ? `Bermula dalam <b id="cdown">${cdText(t)}</b>` : 'Pertandingan akan bermula sebentar lagi'}</div></div>`;
+}
+function viewTV(t) {
+  document.body.classList.add('tv');
+  const c = clubOf(t), S = tvSlides(t);
+  if (_tv.id !== t.id) { stopTV(); _tv.id = t.id; _tv.i = 0; }
+  const sl = S[_tv.i % S.length];
+  const play = t.matches.filter(m => m.status !== 'bye' && m.a !== 'BYE' && m.b !== 'BYE'), done = play.filter(m => m.status === 'done').length;
+  $app.innerHTML = `<div class="tv-wrap">
+    <div class="tv-top">${c.logos.map(x => `<img src="${esc(x)}" alt="">`).join('')}<div class="tv-title"><b>${esc(t.name)}</b><span>${esc(c.short || '')}${t.date ? ' · ' + esc(fmtDate(t.date)) : ''}</span></div>
+      <div class="tv-stat"><small>Perlawanan</small><b>${done}<em>/${play.length}</em></b></div><div class="tv-clock" id="tvClock"></div></div>
+    <div class="tv-body" id="tvBody">${tvSlideHtml(t, sl)}</div>
+    <div class="tv-foot"><span class="tv-dots">${S.map((_, i) => `<i class="${i === _tv.i % S.length ? 'on' : ''}"></i>`).join('')}</span>
+      <span class="tv-ctl"><button id="tvPrev">◀</button><button id="tvNext">▶</button><button id="tvFs">⛶ Skrin penuh</button><a href="#/t/${t.id}/langsung">✕ Keluar</a></span></div></div>`;
+  const fit = $app.querySelector('.tv-fit');
+  if (fit) { const inner = fit.querySelector('.tv-scale'); if (inner) { const sc = Math.min(1.6, (fit.clientWidth - 30) / inner.scrollWidth, (fit.clientHeight - 30) / inner.scrollHeight); inner.style.transform = `scale(${sc})`; inner.style.transformOrigin = 'top center'; } }
+  const clock = () => { const el = document.getElementById('tvClock'); if (el) el.textContent = new Date().toLocaleTimeString('ms-MY', { hour: 'numeric', minute: '2-digit' }); };
+  clock();
+  const go = d => { _tv.i = (_tv.i + d + S.length) % S.length; viewTV(load(t.id) || t); };
+  document.getElementById('tvPrev').onclick = () => go(-1);
+  document.getElementById('tvNext').onclick = () => go(1);
+  document.getElementById('tvFs').onclick = () => { const el = document.documentElement; (document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen && el.requestFullscreen()).catch?.(() => {}); };
+  clearInterval(_tv.timer);
+  let left = sl.sec;
+  _tv.timer = setInterval(() => {
+    clock(); const cd = document.getElementById('cdown'); if (cd) cd.innerHTML = cdText(t);
+    if (--left <= 0) go(1);
+  }, 1000);
+}
+document.addEventListener('keydown', e => { if (!document.body.classList.contains('tv')) return; if (e.key === 'ArrowRight') document.getElementById('tvNext')?.click(); if (e.key === 'ArrowLeft') document.getElementById('tvPrev')?.click(); });
 
 // ---------- Jadual (ringkas, ikut portal) ----------
 let jdSel = null, jdSes = '';
@@ -1525,9 +1644,24 @@ function viewJadual(t) {
 }
 
 // ---------- Knockout + ranking ----------
+function posterOpts(t) {
+  const c = clubOf(t), R = E.finalRanking(t), lab = { 1: 'Johan', 2: 'Naib johan', 3: 'Tempat ketiga' };
+  const person = id => { const p = E.pobj(t, id) || {}; const mem = p.members || []; return { name: E.pname(t, id), sub: mem.length > 1 && E.usesDraw(t) ? mem.join(' · ') : '' }; };
+  return { title: t.name, club: c.name || c.short, date: fmtDate(t.date), logos: c.logos,
+    places: [1, 2, 3].map(pl => ({ place: pl, label: lab[pl], people: (R.find(x => x.place === pl) || { ids: [] }).ids.map(person) })).filter(p => p.people.length) };
+}
+function wirePoster(t) {
+  const b = document.getElementById('posterBtn');
+  if (b) b.onclick = async () => {
+    b.disabled = true;
+    try { const m = await import('./poster.js'); const r = await m.sharePoster(posterOpts(t)); if (r === 'download') toast('Poster dimuat turun ke telefon'); }
+    catch (e) { toast('Gagal: ' + (e.message || e)); }
+    b.disabled = false;
+  };
+}
 function viewKnockout(t) {
   viewBrackets(t);
-  if (t.stage === 'done') $app.insertAdjacentHTML('beforeend', rankingHtml(t));
+  if (t.stage === 'done') { $app.insertAdjacentHTML('beforeend', `<div class="row" style="margin:12px 0"><button class="pill-btn orange" id="posterBtn"><span class="dot"></span>🏆 Kongsi poster juara</button></div>` + rankingHtml(t)); wirePoster(t); }
   const ko = t.matches.filter(m => m.bracket === 'ko' && m.status !== 'bye' && m.a !== 'BYE' && m.b !== 'BYE');
   if (t.rounds.ko && ko.some(m => m.a || m.b)) {
     let h = '';
@@ -1579,11 +1713,11 @@ function testBar(t) {
 }
 function testTools(t) {
   if (store.isCloud(t.id)) return `<div class="card soft"><div class="section-title" style="margin-top:0">🧪 Ujian</div>
-    <p class="muted small">Buat salinan pertandingan ini di telefon anda untuk dicuba (undian, skor, agihan meja) tanpa menjejaskan pertandingan sebenar.</p>
+    <p class="muted small">Salinan di telefon ini sahaja; pertandingan sebenar tidak terjejas.</p>
     <button class="pill-btn light small" id="tCopy">🧪 Salin sebagai ujian</button></div>`;
   const ready = t.matches.filter(m => m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE' && m.status !== 'done' && m.status !== 'bye').length;
   return `<div class="card test-card"><div class="section-title" style="margin-top:0">🧪 Alat ujian</div>
-    <p class="muted small">Isi skor rawak untuk melihat kedudukan, tab Langsung, kalah mati dan ranking berfungsi. ${ready ? `${ready} perlawanan sedia untuk diisi.` : t.matches.length ? 'Tiada perlawanan sedia. Jika peringkat kumpulan tamat, jana kalah mati di tab ⚔️ Knockout.' : 'Undi dan jana kumpulan dahulu.'}</p>
+    <p class="muted small">${ready ? `${ready} perlawanan sedia untuk diisi skor rawak.` : t.matches.length ? 'Tiada perlawanan sedia. Jana kalah mati di tab ⚔️ Knockout.' : 'Jana jadual dahulu.'}</p>
     <div class="row"><button class="pill-btn orange small" id="tOne" ${ready ? '' : 'disabled'}><span class="dot"></span>🎲 Isi 1 perlawanan</button>
       <button class="pill-btn light small" id="tAll" ${ready ? '' : 'disabled'}>🎲 Isi semua yang sedia</button>
       <button class="pill-btn light small" id="tClr" ${t.matches.some(m => m.status === 'done' || m.lt) ? '' : 'disabled'}>↺ Kosongkan semua skor</button></div></div>`;
