@@ -577,3 +577,8 @@ body.tv main#app { max-width:none; padding:0; margin:0; }
 .lv-by2 { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px; font-size:12px; color:var(--mut, #64748b); }
 .tv-court.live { min-height:9vw; }
 .tv-court .cs-nm { font-size:1.3vw; } .tv-court .cs-pt { font-size:4.2vw; } .tv-court .cs-g { font-size:.9vw; font-weight:600; }
+.lv-set { font-weight:800; color:#dc2626; letter-spacing:.02em; }
+.tv-sub .lv-set { color:#fca5a5; }
+.sb-set { text-align:center; font-weight:800; letter-spacing:.12em; font-size:15px; margin:6px 0 -2px; color:#dc2626; }
+.cs-sets { font-size:13px; color:#ffd166; letter-spacing:2px; min-height:16px; } .cs-sets small { letter-spacing:0; font-size:11px; color:#fff; opacity:.85; }
+.tv-court .cs-sets { font-size:1.1vw; } .tv-court .cs-sets small { font-size:.85vw; }
