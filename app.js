@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.3.1';
+const VERSION = '3.3.2';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -61,6 +61,7 @@ function pushSync() {
 }
 const canAdmin = t => store.canAdmin(t.id);
 const canEdit = t => store.canEdit(t.id);
+const isHidden = t => t.hidden ?? !!t.test;
 const ls = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} } };
 
 // ---------- Kelab ----------
@@ -356,7 +357,7 @@ function playBracketDraw(t, b) {
 
 // ---------- Laman utama ----------
 function viewHome() {
-  const list = store.list().map(E.migrate);
+  const list = store.list().map(E.migrate).filter(t => store.isLocal(t.id) || store.canAdmin(t.id) || !isHidden(t));
   $app.innerHTML = `
     ${section('Pingpong Portal', 'Pertandingan')}
     <p class="muted small" style="margin-top:-6px">${cloud.state.failed ? '📴 Tidak dapat menyambung ke awan. Hanya data dalam peranti ini dipaparkan.' : cloud.state.tournaments ? (cloud.state.offline ? '📴 Luar talian — memaparkan salinan terakhir' : '☁️ Disambung ke awan') : '⏳ Menyambung ke awan…'}</p>
@@ -370,6 +371,7 @@ function viewHome() {
             <span class="muted small">${esc(clubOf(t).short || '—')} · ${ENTRY_SHORT[t.entryMode]} · ${t.participants.length} ${UNIT(t).toLowerCase()}${t.date ? ' · ' + esc(t.date) : ''}</span></span>
           </a>
           <span class="btn-stack" style="align-items:flex-end;gap:6px"><span class="pill ${t.stage === 'done' ? 'done' : t.stage === 'setup' ? '' : 'live'}">${STAGE[t.stage]}</span>
+            ${store.isCloud(t.id) && isHidden(t) ? '<span class="cloud-tag">🙈 Tersembunyi</span>' : ''}
             ${store.isLocal(t.id) ? `<span class="cloud-tag">📱 Peranti ini</span>${cloud.isAdmin() ? `<button class="pill-btn small light" data-up="${t.id}">☁️ Pindah ke awan</button>` : ''}` : ''}</span>
         </div>`).join('') : `<div class="empty">Belum ada pertandingan.</div>`}
     </div>
@@ -631,13 +633,16 @@ function viewSetupCore(t, part = 'tetapan') {
       <p class="muted small">Kongsi dengan peserta. Skor yang dihantar perlu disahkan penganjur.</p>
       <div class="row"><input id="pin" inputmode="numeric" maxlength="8" placeholder="cth. 2468" style="max-width:160px;font-family:var(--mono);font-size:18px">
       <button class="pill-btn brand small" id="savePin">Simpan PIN</button><button class="pill-btn light small" id="genPin">Jana rawak</button></div>
-      <p class="muted small" id="pinMsg"></p></div>`
+      <p class="muted small" id="pinMsg"></p></div>
+      <div class="card"><label class="test-chk" style="margin:0"><input type="checkbox" id="hideChk" ${isHidden(t) ? 'checked' : ''}> <span>🙈 <b>Sembunyikan dari senarai awam</b><br><small class="muted">Peserta tidak nampak di laman utama, tetapi pautan terus masih boleh dibuka.</small></span></label></div>`
       : `<div class="notice">📱 Pertandingan ini disimpan dalam peranti ini sahaja. ${cloud.isAdmin() ? '<button class="pill-btn small brand" id="upNow">☁️ Pindah ke awan</button>' : 'Log masuk sebagai admin untuk memindahkannya ke awan supaya semua orang boleh melihat dan menghantar skor.'}</div><br>`}
     ${testTools(t)}
     <div class="card noprint"><button class="pill-btn danger small" id="del">Padam pertandingan</button></div>`;
   $app.querySelectorAll('details[data-fold]').forEach(d => (d.ontoggle = () => ls.set('pingpong:fold:' + t.id + ':' + d.dataset.fold, d.open ? '1' : '0')));
 
   const f = document.getElementById('f');
+  const hc = document.getElementById('hideChk');
+  if (hc) hc.onchange = () => { t.hidden = hc.checked; save(t); toast(hc.checked ? '🙈 Disembunyikan dari senarai awam' : '👁 Dipaparkan dalam senarai awam'); };
   if (f) wireForm(f);
   if (f) f.onsubmit = async e => { e.preventDefault(); const was = t.entryMode; readSettings(f, t); await readLogo(f, t); const msg = E.switchEntry(t, was); save(t); toast(msg || 'Tetapan disimpan', msg ? 6000 : 2600); render(); };
   if (!locked && f) ['entryMode', 'teamSize'].forEach(n => f[n] && f[n].addEventListener('change', () => {
