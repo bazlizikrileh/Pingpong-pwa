@@ -149,9 +149,7 @@ export function watchRegistrations(tid) {
   }, err => { console.warn('registrations', err); state.regs[tid] = state.regs[tid] || []; emit('regs'); });
 }
 export async function register(tid, { name, unit, level, partner, note }) {
-  await init();
-  const u = auth.currentUser;
-  if (!u || u.isAnonymous) throw new Error('Sila log masuk dengan Google dahulu');
+  const u = await ensureAnon();   // tanpa log masuk: akaun tanpa nama peranti ini (boleh ubah/batal dari telefon yang sama)
   const ref = F.doc(db, 'tournaments', tid, 'registrations', u.uid);
   const old = await F.getDoc(ref);
   await F.setDoc(ref, { uid: u.uid, name: String(name).slice(0, 50), unit: String(unit || '').slice(0, 50), level: String(level || '').slice(0, 10),
@@ -159,4 +157,4 @@ export async function register(tid, { name, unit, level, partner, note }) {
 }
 export async function unregister(tid, uid) { await init(); await F.deleteDoc(F.doc(db, 'tournaments', tid, 'registrations', uid || auth.currentUser.uid)); }
 export async function setRegStatus(tid, uid, status) { await init(); await F.setDoc(F.doc(db, 'tournaments', tid, 'registrations', uid), { status }, { merge: true }); }
-export const myUid = () => (auth && auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser.uid : '');
+export const myUid = () => (auth && auth.currentUser ? auth.currentUser.uid : '');

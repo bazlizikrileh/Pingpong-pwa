@@ -4,7 +4,7 @@ import { playDeal } from './draw-anim.js';
 import * as cloud from './cloud.js';
 import * as LV from './live.js';
 
-const VERSION = '3.0.1';
+const VERSION = '3.1.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -187,6 +187,12 @@ function render(keep = false) {
   if (!parts.length) { viewHome(); if (keep) window.scrollTo(0, y); return; }
   if (parts[0] === 'baru') return viewNew();
   if (parts[0] === 'pentadbir') return viewAdmin();
+  if (parts[0] === 'daftar') {
+    const t = load(parts[1]);
+    if (!t) { $app.innerHTML = cloud.state.tournaments || cloud.state.failed ? '<div class="empty">Pertandingan tidak dijumpai.</div>' : '<div class="empty">Memuatkan data…</div>'; return; }
+    _cur = t.id; applyTheme(t); renderHead(t, 'daftar'); $tabs.hidden = true; updateTop();
+    viewDaftar(t); if (keep) window.scrollTo(0, y); return;
+  }
   if (parts[0] === 't') {
     const t = load(parts[1]);
     if (!t) {
@@ -1239,7 +1245,7 @@ function levelsCard(t) {
     <div class="lv-list">${P.map(n => `<div class="lv-row"><span>${esc(n)}</span>${admin ? `<select data-lvn="${esc(n)}">${opt({ '': '— tahap —', ...Object.fromEntries(S.levels.map(l => [l[0], `${l[1]} (S${l[2]} · D${l[3]})`])) }, E.levelOf(t, n))}</select>` : chip(E.levelOf(t, n))}</div>`).join('')}</div></details>`;
 }
 // ---------- Pautan kongsi ----------
-const shareUrl = t => `${location.origin}${location.pathname}#/t/${t.id}/pemain`;
+const shareUrl = t => `${location.origin}${location.pathname}#/${t.regOpen ? 'daftar/' + t.id : 't/' + t.id + '/pemain'}`;
 function shareRow(t) {
   return `<div class="share-row"><span class="muted small">🔗 Kongsi pertandingan:</span>
     <button type="button" class="pill-btn light small" data-share="native">📤 Kongsi</button>
@@ -1277,9 +1283,8 @@ function regCard(t) {
     <p class="small" style="margin:6px 0">${regs.length} berdaftar · ${ok.length} disahkan${t.entryMode !== 'single' && E.usesDraw(t) ? ` · ${t.entryMode === 'team' ? E.teamWord(t).toLowerCase() : 'regu'} diundi oleh penganjur` : ''}</p>
     ${t.regNote ? `<p class="muted small" style="margin:0 0 8px">${esc(t.regNote)}</p>` : ''}
     ${mine ? `<div class="notice small">Anda telah mendaftar sebagai <b>${esc(mine.name)}</b>${mine.level ? ` (${esc(lvName(mine.level))})` : ''} · ${REG_ST[mine.status][0]} ${REG_ST[mine.status][1]}
-        ${t.regOpen ? '<button type="button" class="pill-btn light small" id="rgEdit">Ubah</button> <button type="button" class="pill-btn light small" id="rgCancel">Batal</button>' : ''} ${mine.status === 'pending' ? notifBtn('🔔 Beritahu bila disahkan') : ''}</div>${t.regOpen ? formHtml(mine).replace('<div class="reg-form" id="regForm" ', '<div class="reg-form" id="regForm" hidden ') : ''}`
-      : t.regOpen ? (uid ? (admin ? `<button type="button" class="pill-btn light small" id="rgEdit">➕ Daftar diri saya juga</button>${formHtml(null).replace('<div class="reg-form" id="regForm" ', '<div class="reg-form" id="regForm" hidden ')}` : formHtml(null)) : `<button type="button" class="pill-btn orange" id="rgLogin"><span class="dot"></span>Log masuk Google &amp; daftar</button>
-        <p class="muted small">Log masuk diperlukan supaya setiap orang hanya boleh mendaftar sekali. E-mel anda tidak dipaparkan.</p>`) : ''}
+        ${t.regOpen ? `<a class="pill-btn light small" href="#/daftar/${t.id}">Ubah / batal</a>` : ''}</div>`
+      : t.regOpen ? `<a class="pill-btn orange" href="#/daftar/${t.id}"><span class="dot"></span>📝 ${admin ? 'Buka halaman pendaftaran' : 'Daftar penyertaan'}</a>` : ''}
     ${regs.length ? `<div class="reg-list">${regs.map((r, i) => `<div class="reg-row ${r.status}"><span class="no">${i + 1}</span><span class="nm"><b>${esc(r.name)}</b>${r.partner ? ` &amp; ${esc(r.partner)}` : ''}
         <small>${[r.level ? lvName(r.level) : '', r.unit].filter(Boolean).map(esc).join(' · ')}${admin && r.note ? ` · <i>${esc(r.note)}</i>` : ''}</small></span>
         <span class="st">${REG_ST[r.status][0]}</span>
@@ -1320,6 +1325,48 @@ function wireReg(t) {
     });
     save(t); toast(`${regs.length} peserta dimasukkan ke senarai${E.usesDraw(t) ? '. Tekan Undi bila senarai lengkap.' : ''}`, 4000); render();
   };
+}
+// ---------- Halaman pendaftaran berasingan: #/daftar/<id> ----------
+function viewDaftar(t) {
+  const c = clubOf(t), f = E.SET_FORMATS, S = E.HC_SCHEMES[t.hcMode];
+  if (!store.isCloud(t.id)) { $app.innerHTML = '<div class="card"><p class="muted">Pendaftaran hanya untuk pertandingan di awan.</p></div>'; return; }
+  cloud.watchRegistrations(t.id);
+  const regs = cloud.state.regs[t.id] || [], uid = cloud.myUid(), mine = regs.find(r => r.uid === uid), ok = regs.filter(r => r.status === 'ok');
+  const lvName = x => { const L = E.levelInfo(t, x); return L ? L[1] : ''; };
+  const r = mine || null, last = ls.get('pingpong:myname') || '';
+  const form = `<div class="reg-form" id="regForm" ${mine ? 'hidden' : ''}>
+      <label>Nama</label><input id="rgName" maxlength="40" value="${esc(r ? r.name : last)}" placeholder="nama seperti dikenali" autocomplete="name">
+      <label>Unit / Jabatan / Kumpulan (pilihan)</label><input id="rgUnit" maxlength="40" value="${esc(r ? r.unit : '')}">
+      ${S ? `<label>Tahap</label><select id="rgLv">${opt({ '': '— pilih tahap —', ...Object.fromEntries(S.levels.map(l => [l[0], l[1]])) }, r ? r.level : '')}</select>` : ''}
+      ${t.entryMode === 'double' ? `<label>Nama pasangan</label><input id="rgPartner" maxlength="40" value="${esc(r ? r.partner : '')}">` : ''}
+      <label>Catatan (pilihan)</label><input id="rgNote" maxlength="140" value="${esc(r ? r.note : '')}" placeholder="cth. no. telefon / saiz baju">
+      <button type="button" class="pill-btn orange big" id="rgSave" style="margin-top:14px;width:100%"><span class="dot"></span>${r ? 'Simpan perubahan' : 'Daftar sekarang'}</button>
+      <p class="muted small" style="margin-bottom:0">Tiada log masuk diperlukan. Pendaftaran disimpan untuk telefon ini, jadi anda boleh mengubah atau membatalkannya dari telefon yang sama.</p></div>`;
+  const info = [['📅', fmtDate(t.date)], ['⏰', t.startTime ? E.sessionTime(t, 1) : ''], ['📍', t.venue === 'X' ? t.venueName : E.VENUES[t.venue]],
+    ['🏓', `${E.isTeam(t) ? E.teamWord(t) + (t.tieFormat === 'SSD' ? ' (Single + Single + Double)' : '') : ENTRY[t.entryMode]} · ${f[t.groupFormat].label}`],
+    ['⚖️', t.hcMode === 'manual' ? 'Handicap' : S ? `Handicap ${S.name}` : '']].filter(x => x[1]);
+  $app.innerHTML = `
+    <div class="card daftar-info">
+      <div class="eyebrow">${esc(c.name || c.short || '')}</div>
+      <div class="d-info">${info.map(([i, v]) => `<div><span>${i}</span>${esc(v)}</div>`).join('')}</div>
+      ${t.regNote ? `<p class="d-note">${esc(t.regNote)}</p>` : ''}
+      <div class="row" style="gap:6px;margin-top:8px"><span class="role-chip">${t.regOpen ? '🟢 Pendaftaran dibuka' : '🔒 Pendaftaran ditutup'}</span><span class="role-chip">${regs.length} berdaftar · ${ok.length} disahkan</span></div>
+    </div>
+    <div class="card reg-card">
+      <div class="section-title" style="margin-top:0">📝 ${mine ? 'Pendaftaran anda' : 'Daftar penyertaan'}</div>
+      ${mine ? `<div class="notice">✅ Anda telah mendaftar sebagai <b>${esc(mine.name)}</b>${mine.level ? ` (${esc(lvName(mine.level))})` : ''}${mine.partner ? ` &amp; ${esc(mine.partner)}` : ''}<br>Status: <b>${REG_ST[mine.status][0]} ${mine.status === 'pending' ? 'Menunggu pengesahan penganjur' : REG_ST[mine.status][1]}</b>
+        ${t.regOpen ? '<div class="row" style="margin-top:8px;gap:6px"><button type="button" class="pill-btn light small" id="rgEdit">Ubah</button><button type="button" class="pill-btn light small" id="rgCancel">Batal pendaftaran</button>' + (mine.status === 'pending' ? notifBtn('🔔 Beritahu bila disahkan') : '') + '</div>' : ''}</div>` : ''}
+      ${t.regOpen ? form : mine ? '' : '<p class="muted">Pendaftaran telah ditutup.</p>'}
+    </div>
+    <div class="card"><div class="section-title" style="margin-top:0">👥 Peserta berdaftar (${regs.length})</div>
+      ${regs.length ? `<div class="reg-list">${regs.map((x, i) => `<div class="reg-row ${x.status}"><span class="no">${i + 1}</span><span class="nm"><b>${esc(x.name)}</b>${x.partner ? ` &amp; ${esc(x.partner)}` : ''}
+        <small>${[x.level ? lvName(x.level) : '', x.unit].filter(Boolean).map(esc).join(' · ')}</small></span><span class="st" title="${REG_ST[x.status][1]}">${REG_ST[x.status][0]}</span></div>`).join('')}</div>
+        <p class="muted small">✓ disahkan · ⏳ menunggu pengesahan penganjur</p>` : '<p class="muted">Belum ada pendaftaran. Jadilah yang pertama!</p>'}
+      ${shareRow(t)}
+    </div>
+    <p class="center"><a class="muted" href="#/t/${t.id}">Lihat halaman pertandingan →</a></p>`;
+  wireReg(t);
+  const nm = document.getElementById('rgName'); if (nm) nm.addEventListener('change', () => ls.set('pingpong:myname', nm.value.trim()));
 }
 function viewPemain(t) {
   viewSetupCore(t, 'pemain');
