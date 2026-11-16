@@ -1,6 +1,6 @@
 // Service worker: simpan fail app supaya boleh dibuka walaupun internet lemah.
 // Tukar VERSION setiap kali fail app berubah supaya pengguna dapat versi baharu.
-const VERSION = 'v2.9.4';
+const VERSION = 'v3.0.0';
 const CACHE = `pingpong-${VERSION}`;
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'engine.js', 'store.js',
   'draw-anim.js', 'cloud.js', 'live.js', 'draw-video.js', 'firebase-config.js', 'manifest.webmanifest', 'logos/kskpkpjb.webp', 'logos/ksas-pingpong.webp', 'logos/ksas.webp', 'icons/icon-192.png', 'icons/icon-512.png'];
@@ -23,4 +23,15 @@ self.addEventListener('fetch', e => {
       return res;
     }).catch(() => caches.match(e.request).then(r => r || caches.match('index.html')))
   );
+});
+
+// Ketik notifikasi → buka app pada halaman berkaitan
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '';
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(cs => {
+    const c = cs[0];
+    if (c) { if (url) c.navigate(new URL(url, self.registration.scope).href).catch(() => {}); return c.focus(); }
+    return self.clients.openWindow(new URL(url || './', self.registration.scope).href);
+  }));
 });

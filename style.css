@@ -462,3 +462,16 @@ details.guide > summary { font-size:12px; }
 .lv.none { background: transparent; color: var(--muted); }
 .hc-r { font-size:12.5px; margin:4px 0 6px; padding:5px 9px; border-radius:9px; background: color-mix(in srgb, var(--or) 12%, transparent); }
 .hc-r.warn { background: color-mix(in srgb, #eab308 16%, transparent); }
+
+/* Pendaftaran & kongsi */
+.reg-card .reg-form { margin-top:6px; }
+.reg-list { margin-top:8px; border-top:1px solid var(--line); }
+.reg-row { display:grid; grid-template-columns: 22px minmax(0,1fr) auto auto; gap:8px; align-items:center; padding:7px 0; border-bottom:1px solid var(--line); }
+.reg-row .no { font-family: var(--num); color: var(--muted); font-size:12px; text-align:right; }
+.reg-row .nm { display:flex; flex-direction:column; min-width:0; }
+.reg-row .nm small { color: var(--muted); font-size:11.5px; }
+.reg-row .st { font-weight:800; }
+.reg-row.ok .st { color: var(--win); } .reg-row.pending .st { color:#ca8a04; } .reg-row.no { opacity:.55; }
+.reg-row .act { display:flex; gap:4px; } .reg-row .act .pill-btn { padding:4px 9px; }
+.share-row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:12px; padding-top:10px; border-top:1px dashed var(--line); }
+.hb-board .seg.cd b { color:#ffb02e; } .hb-board .seg.cd b em { font-size:10px; margin:0 1px; }

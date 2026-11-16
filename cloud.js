@@ -18,6 +18,7 @@ export const state = {
   tournaments: null,   // Map id → objek pertandingan (dari awan)
   offline: false,      // data dari cache peranti (belum disahkan pelayan)
   pending: {},         // tid → [penghantaran menunggu]
+  regs: {},            // tid → [pendaftaran peserta]
 };
 const emit = what => listeners.forEach(f => { try { f(what); } catch (e) { console.error(e); } });
 export const onChange = f => { listeners.add(f); return () => listeners.delete(f); };
@@ -93,7 +94,7 @@ export async function signOutAll() { await init(); await F.signOut(auth); }
 // ---------- Pertandingan ----------
 export async function saveTournament(t) {
   await init();
-  const meta = { name: t.name || '', clubId: t.clubId || '', stage: t.stage || '', date: t.date || '', updatedAt: F.serverTimestamp(), updatedBy: state.user?.email || '' };
+  const meta = { name: t.name || '', clubId: t.clubId || '', stage: t.stage || '', date: t.date || '', regOpen: !!t.regOpen, updatedAt: F.serverTimestamp(), updatedBy: state.user?.email || '' };
   await F.setDoc(F.doc(db, 'tournaments', t.id), { ...meta, data: JSON.stringify(t) });
 }
 export async function deleteTournament(id) { await init(); await F.deleteDoc(F.doc(db, 'tournaments', id)); }
@@ -133,3 +134,29 @@ export function watchSubmissions(tid) {
   }, err => console.warn('submissions', err));
 }
 export async function deleteSubmission(tid, sid) { await init(); await F.deleteDoc(F.doc(db, 'tournaments', tid, 'submissions', sid)); }
+
+// ---------- Pendaftaran sendiri (peserta log masuk Google) ----------
+// tournaments/{tid}/registrations/{uid}: { uid, name, unit, level, partner, note, status: pending|ok|no, at }
+const unsubReg = {};
+export function watchRegistrations(tid) {
+  if (unsubReg[tid] || !F) return;
+  unsubReg[tid] = F.onSnapshot(F.collection(db, 'tournaments', tid, 'registrations'), snap => {
+    const list = [];
+    snap.forEach(d => { const x = d.data(); list.push({ id: d.id, ...x, at: x.at?.toMillis?.() || Date.now() }); });
+    list.sort((a, b) => a.at - b.at);
+    state.regs[tid] = list;
+    emit('regs');
+  }, err => { console.warn('registrations', err); state.regs[tid] = state.regs[tid] || []; emit('regs'); });
+}
+export async function register(tid, { name, unit, level, partner, note }) {
+  await init();
+  const u = auth.currentUser;
+  if (!u || u.isAnonymous) throw new Error('Sila log masuk dengan Google dahulu');
+  const ref = F.doc(db, 'tournaments', tid, 'registrations', u.uid);
+  const old = await F.getDoc(ref);
+  await F.setDoc(ref, { uid: u.uid, name: String(name).slice(0, 50), unit: String(unit || '').slice(0, 50), level: String(level || '').slice(0, 10),
+    partner: String(partner || '').slice(0, 50), note: String(note || '').slice(0, 150), status: old.exists() ? old.data().status : 'pending', at: old.exists() ? old.data().at : F.serverTimestamp() });
+}
+export async function unregister(tid, uid) { await init(); await F.deleteDoc(F.doc(db, 'tournaments', tid, 'registrations', uid || auth.currentUser.uid)); }
+export async function setRegStatus(tid, uid, status) { await init(); await F.setDoc(F.doc(db, 'tournaments', tid, 'registrations', uid), { status }, { merge: true }); }
+export const myUid = () => (auth && auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser.uid : '');
