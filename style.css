@@ -582,3 +582,5 @@ body.tv main#app { max-width:none; padding:0; margin:0; }
 .sb-set { text-align:center; font-weight:800; letter-spacing:.12em; font-size:15px; margin:6px 0 -2px; color:#dc2626; }
 .cs-sets { font-size:13px; color:#ffd166; letter-spacing:2px; min-height:16px; } .cs-sets small { letter-spacing:0; font-size:11px; color:#fff; opacity:.85; }
 .tv-court .cs-sets { font-size:1.1vw; } .tv-court .cs-sets small { font-size:.85vw; }
+.sb-side.flash { animation: sbFlash .35s ease-out; }
+@keyframes sbFlash { 0% { filter:brightness(1.9); transform:scale(.97); } 100% { filter:none; transform:none; } }

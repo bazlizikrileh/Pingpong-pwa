@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.4.5';
+const VERSION = '3.4.6';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1587,6 +1587,19 @@ function setTag(t, x) {
   return `${E.isTeam(t) ? esc(E.rubberLabel(t, x.ri)) + ' · ' : ''}SET ${g.length + 1}`;
 }
 const scoreMode = t => canEdit(t) || !!ls.get('pingpong:scorer:' + t.id) || ls.get('pingpong:scoremode:' + t.id) === '1';
+// Maklum balas tekan: kilat pada sisi + bunyi "tik" pendek (Web Audio ikut volum media, bukan mod senyap)
+let _ac = null;
+function tick(kind) {
+  if (ls.get('pingpong:lsSound') === '0') return;
+  try {
+    _ac = _ac || new (window.AudioContext || window.webkitAudioContext)();
+    if (_ac.state === 'suspended') _ac.resume();
+    const o = _ac.createOscillator(), g = _ac.createGain(), t0 = _ac.currentTime;
+    o.type = 'square'; o.frequency.value = kind === 'down' ? 330 : kind === 'set' ? 990 : 660;
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.35, t0 + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t0 + (kind === 'set' ? 0.35 : 0.08));
+    o.connect(g).connect(_ac.destination); o.start(t0); o.stop(t0 + 0.4);
+  } catch {}
+}
 const gameOver = (a, b) => (a >= 11 || b >= 11) && Math.abs(a - b) >= 2;
 function lsStart(t, m, ri) {
   const h = E.handicapInfo(t, m.a, m.b, ri, m.lineup || null);
@@ -1672,7 +1685,10 @@ function viewLiveScore(t, mid) {
       S.cur = allDone() ? [0, 0] : lsStart(t, m, S.ri);
     }
     try { navigator.vibrate && navigator.vibrate(d > 0 ? 150 : [120, 80, 120]); } catch {}
+    const setEnd = d > 0 && JSON.parse(H[H.length - 1]).rs.flat().length !== S.rs.flat().length;
+    tick(d < 0 ? 'down' : setEnd ? 'set' : 'up');
     push(); draw();
+    const el = $app.querySelector(`.sb-side.s${k}`); if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
   };
   if ('wakeLock' in navigator && !window._lsWake) navigator.wakeLock.request('screen').then(w => { window._lsWake = w; w.addEventListener('release', () => (window._lsWake = null)); }).catch(() => {});
   const draw = () => {
@@ -1694,12 +1710,13 @@ function viewLiveScore(t, mid) {
       ${done ? `<div class="card sb-end"><div class="section-title" style="margin-top:0">🏁 Perlawanan tamat</div>
         <p>${r && r.winner ? `Pemenang: <b>${esc(E.pname(t, r.winner))}</b>` : r && r.draw ? '<b>Seri</b>' : 'Keputusan perlu ditentukan penganjur'}</p>
         <button class="pill-btn ${edit ? 'brand' : 'orange'}" id="sbFin"><span class="dot"></span>${edit ? '✅ Simpan keputusan' : '📤 Hantar kepada penganjur'}</button></div>` : ''}
-      <div class="row" style="margin-top:12px;gap:8px"><button type="button" class="pill-btn light small" id="sbStop">⏹️ Henti skor langsung</button><button type="button" class="pill-btn light small" id="sbVib">📳 Uji getaran</button></div>
+      <div class="row" style="margin-top:12px;gap:8px"><button type="button" class="pill-btn light small" id="sbStop">⏹️ Henti skor langsung</button><button type="button" class="pill-btn light small" id="sbSnd">${ls.get('pingpong:lsSound') === '0' ? '🔇 Bunyi: tutup' : '🔊 Bunyi: buka'}</button><button type="button" class="pill-btn light small" id="sbVib">📳 Uji getaran</button></div>
       <p class="muted small">Tekan nama pemain untuk tambah 1 mata. <b>−1</b> tolak satu mata pemain itu dalam set semasa. <b>↶ Undur</b> batalkan tindakan terakhir, termasuk set yang baru tamat. Set tamat sendiri pada 11 (beza 2). Skrin tidak akan padam semasa halaman ini dibuka. Penonton nampak skor ini di tab Langsung dan Mod TV.</p>`;
     $app.querySelectorAll('[data-pt]').forEach(b => (b.onclick = () => point(+b.dataset.pt, 1)));
     $app.querySelectorAll('[data-mn]').forEach(b => (b.onclick = () => point(+b.dataset.mn, -1)));
     $app.querySelectorAll('[data-ri]').forEach(b => (b.onclick = () => { H.push(JSON.stringify(S)); S.ri = +b.dataset.ri; S.cur = lsStart(t, m, S.ri); push(); draw(); }));
     document.getElementById('sbUndo').onclick = () => { if (!H.length) return; S = JSON.parse(H.pop()); push(); draw(); };
+    document.getElementById('sbSnd').onclick = () => { ls.set('pingpong:lsSound', ls.get('pingpong:lsSound') === '0' ? null : '0'); tick('up'); draw(); };
     document.getElementById('sbVib').onclick = () => {
       let ok = false; try { ok = !!(navigator.vibrate && navigator.vibrate(500)); } catch {}
       toast(!('vibrate' in navigator) ? 'Pelayar ini tidak menyokong getaran (contoh iPhone).' : ok ? 'Arahan getaran dihantar ✓. Jika tiada rasa getaran, tetapan telefon yang menyekatnya.' : 'Pelayar menolak arahan getaran.', 5000);
