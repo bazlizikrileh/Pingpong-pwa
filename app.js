@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.4.7';
+const VERSION = '3.4.8';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1600,6 +1600,13 @@ function tick(kind) {
     o.connect(g).connect(_ac.destination); o.start(t0); o.stop(t0 + 0.4);
   } catch {}
 }
+// Getaran: pelayar hanya boleh tetapkan tempoh (bukan kekuatan); tempoh pendek terasa lebih lembut
+const VIB = { soft: ['🫧 Lembut', 30], strong: ['📳 Kuat', 90], off: ['📴 Tutup', 0] };
+const vibMode = () => (VIB[ls.get('pingpong:lsVib')] ? ls.get('pingpong:lsVib') : 'soft');
+function buzz(n = 1) {
+  const ms = VIB[vibMode()][1]; if (!ms) return;
+  try { navigator.vibrate && navigator.vibrate(n > 1 ? [ms, 70, ms] : ms); } catch {}
+}
 const gameOver = (a, b) => (a >= 11 || b >= 11) && Math.abs(a - b) >= 2;
 function lsStart(t, m, ri) {
   const h = E.handicapInfo(t, m.a, m.b, ri, m.lineup || null);
@@ -1684,7 +1691,7 @@ function viewLiveScore(t, mid) {
       } else toast(`Set ${g} tamat · ${S.cur[0]}–${S.cur[1]}`, 1800);
       S.cur = allDone() ? [0, 0] : lsStart(t, m, S.ri);
     }
-    if (ls.get('pingpong:lsVib') !== '0') try { navigator.vibrate && navigator.vibrate(d > 0 ? 80 : [70, 60, 70]); } catch {}
+    buzz(d > 0 ? 1 : 2);
     const setEnd = d > 0 && JSON.parse(H[H.length - 1]).rs.flat().length !== S.rs.flat().length;
     tick(d < 0 ? 'down' : setEnd ? 'set' : 'up');
     push(); draw();
@@ -1710,14 +1717,14 @@ function viewLiveScore(t, mid) {
       ${done ? `<div class="card sb-end"><div class="section-title" style="margin-top:0">🏁 Perlawanan tamat</div>
         <p>${r && r.winner ? `Pemenang: <b>${esc(E.pname(t, r.winner))}</b>` : r && r.draw ? '<b>Seri</b>' : 'Keputusan perlu ditentukan penganjur'}</p>
         <button class="pill-btn ${edit ? 'brand' : 'orange'}" id="sbFin"><span class="dot"></span>${edit ? '✅ Simpan keputusan' : '📤 Hantar kepada penganjur'}</button></div>` : ''}
-      <div class="row" style="margin-top:12px;gap:8px"><button type="button" class="pill-btn light small" id="sbStop">⏹️ Henti skor langsung</button><button type="button" class="pill-btn light small" id="sbSnd">${ls.get('pingpong:lsSound') === '0' ? '🔇 Bunyi: tutup' : '🔊 Bunyi: buka'}</button><button type="button" class="pill-btn light small" id="sbVib">${ls.get('pingpong:lsVib') === '0' ? '📴 Getar: tutup' : '📳 Getar: buka'}</button></div>
+      <div class="row" style="margin-top:12px;gap:8px"><button type="button" class="pill-btn light small" id="sbStop">⏹️ Henti skor langsung</button><button type="button" class="pill-btn light small" id="sbSnd">${ls.get('pingpong:lsSound') === '0' ? '🔇 Bunyi: tutup' : '🔊 Bunyi: buka'}</button><button type="button" class="pill-btn light small" id="sbVib">Getaran: ${VIB[vibMode()][0]}</button></div>
       <p class="muted small">Tekan nama pemain untuk tambah 1 mata. <b>−1</b> tolak satu mata pemain itu dalam set semasa. <b>↶ Undur</b> batalkan tindakan terakhir, termasuk set yang baru tamat. Set tamat sendiri pada 11 (beza 2). Skrin tidak akan padam semasa halaman ini dibuka. Penonton nampak skor ini di tab Langsung dan Mod TV.</p>`;
     $app.querySelectorAll('[data-pt]').forEach(b => (b.onclick = () => point(+b.dataset.pt, 1)));
     $app.querySelectorAll('[data-mn]').forEach(b => (b.onclick = () => point(+b.dataset.mn, -1)));
     $app.querySelectorAll('[data-ri]').forEach(b => (b.onclick = () => { H.push(JSON.stringify(S)); S.ri = +b.dataset.ri; S.cur = lsStart(t, m, S.ri); push(); draw(); }));
     document.getElementById('sbUndo').onclick = () => { if (!H.length) return; S = JSON.parse(H.pop()); push(); draw(); };
     document.getElementById('sbSnd').onclick = () => { ls.set('pingpong:lsSound', ls.get('pingpong:lsSound') === '0' ? null : '0'); tick('up'); draw(); };
-    document.getElementById('sbVib').onclick = () => { const off = ls.get('pingpong:lsVib') !== '0'; ls.set('pingpong:lsVib', off ? '0' : null); if (!off) try { navigator.vibrate && navigator.vibrate(80); } catch {} draw(); };
+    document.getElementById('sbVib').onclick = () => { const order = ['soft', 'strong', 'off']; ls.set('pingpong:lsVib', order[(order.indexOf(vibMode()) + 1) % 3]); buzz(); draw(); };
     document.getElementById('sbSwap').onclick = () => { S.swap = !S.swap; ls.set(key, JSON.stringify(S)); draw(); };
     document.getElementById('sbStop').onclick = async () => {
       if (!confirm('Henti skor langsung untuk perlawanan ini? Skor di telefon ini akan dipadam.')) return;
