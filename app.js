@@ -4,7 +4,7 @@ import { playDeal } from './draw-anim.js';
 import * as cloud from './cloud.js';
 import * as LV from './live.js';
 
-const VERSION = '3.0.0';
+const VERSION = '3.0.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -375,9 +375,9 @@ function settingsFormAll(t, locked) {
     <div class="section-title">Acara</div>
     <label>Jenis acara</label><select name="entryMode" ${dis}>${opt(ENTRY, t.entryMode)}</select>
     <div data-show="team"><label>Saiz</label><select name="teamSize" ${dis}>${opt({ 3: 'Trio (3 orang)', 4: 'Kuartet (4 orang)' }, t.teamSize)}</select></div>
-    <div data-show="team"><label>Setiap pertemuan</label><select name="tieFormat" ${dis}>${opt({ SD: 'Single + Double (menang 2-0 = 3 mata, 1-1 = seri)', SSD: 'Single + Single + Double (semua dimainkan; menang ikut jumlah set)' }, t.tieFormat)}</select></div>
-    <div data-show="tieRule"><label>Bila keputusan sama (peringkat kumpulan)</label><select name="tieRule">${opt({ draw: 'Seri: 1 mata setiap pihak (menang 3, kalah 0)', next: 'Tiada seri: penentu perlawanan dimenangi, kemudian jumlah mata' }, t.tieRule || 'draw')}</select>
-      <p class="muted small" style="margin:4px 0 0">Kalah mati tiada seri: penentu perlawanan dimenangi, kemudian jumlah mata, kemudian keputusan penganjur.</p></div>
+    <div data-show="team"><label>Setiap pertemuan</label><select name="tieFormat" ${dis}>${opt({ SD: 'Single + Double (menang 2-0 = 3 mata, 1-1 = seri)', SSD: 'Single + Single + Double (setiap perlawanan: menang 3 markah, seri 1; pemenang ikut jumlah markah)' }, t.tieFormat)}</select></div>
+    <div data-show="tieRule"><label>Bila keputusan sama (peringkat kumpulan)</label><select name="tieRule">${opt({ draw: 'Seri (markah sama dikekalkan)', next: 'Tiada seri: penentu beza set, kemudian jumlah mata' }, t.tieRule || 'draw')}</select>
+      <p class="muted small" style="margin:4px 0 0">Kalah mati tiada seri: penentu beza set, kemudian jumlah mata, kemudian keputusan penganjur.</p></div>
     <label>Struktur</label><select name="format" ${dis}>${opt(FORMAT, t.format)}</select>
     <div class="grid2">
       <div><label data-label="gf">Format kumpulan</label><select name="groupFormat">${opt(setOpts, t.groupFormat)}</select></div>
@@ -918,10 +918,10 @@ function viewMatch(t, mid) {
     }
     const rs = clean(read());
     const r = E.evaluateMatch(t, { ...m, override, rubbers: rs.map(sets => ({ sets })) });
-    const head = !team ? `Game <b>${r.sa}–${r.sb}</b>` : t.tieFormat === 'SSD' ? `Jumlah set <b>${r.sa}–${r.sb}</b> · Perlawanan ${r.ra}-${r.rb} · Mata ${r.pa}-${r.pb}` : `Pertemuan <b>${r.ra}–${r.rb}</b> · Set ${r.sa}-${r.sb} · Mata ${r.pa}-${r.pb}`;
-    const res = r.winner ? ` · Pemenang: <b>${esc(E.pname(t, r.winner))}</b>` : r.draw ? ' · <b>Seri</b> (1 mata setiap pasukan)' : '';
+    const head = !team ? `Game <b>${r.sa}–${r.sb}</b>` : t.tieFormat === 'SSD' ? `Markah <b>${r.ma}–${r.mb}</b> · Set ${r.sa}-${r.sb} · Mata ${r.pa}-${r.pb}` : `Pertemuan <b>${r.ra}–${r.rb}</b> · Set ${r.sa}-${r.sb} · Mata ${r.pa}-${r.pb}`;
+    const res = r.winner ? ` · Pemenang: <b>${esc(E.pname(t, r.winner))}</b>` : r.draw ? (E.usesMarks(t) ? ' · <b>Seri</b>' : ' · <b>Seri</b> (1 mata setiap pasukan)') : '';
     document.getElementById('summary').innerHTML = head + res;
-    const fullTie = r.complete && (m.stage !== 'group' || t.tieFormat === 'SSD') && r.ra === r.rb && r.sa === r.sb && r.pa === r.pb;
+    const fullTie = r.complete && !r.winner && !r.draw && r.sa === r.sb && r.pa === r.pb;
     document.getElementById('decide').innerHTML = fullTie ? `<p style="color:#b91c1c">Seri penuh (set dan mata permainan sama). Penganjur perlu menentukan pemenang:</p>
       <div class="row">${[m.a, m.b].map(id => `<button class="pill-btn small ${override === id ? 'brand' : 'light'}" data-ov="${id}">${esc(E.pname(t, id))}</button>`).join('')}</div><br>` : '';
     document.querySelectorAll('[data-ov]').forEach(b => (b.onclick = () => { override = b.dataset.ov; upd(); }));
@@ -1206,7 +1206,7 @@ function rulesHtml(t) {
     if (t.pool !== '0') rules.push(`Pool kalah: ${t.pool === '34' ? 'peserta tempat ketiga yang tidak layak ke kalah mati utama dan semua peserta tempat keempat' : 'peserta tempat ketiga yang tidak layak ke kalah mati utama'} bermain kalah mati berasingan menggunakan format kalah mati yang sama. BYE (jika ada) diberi kepada peserta terbaik.`);
   }
   rules.push(!E.isTeam(t) ? 'Menang: 3 mata. Kalah: 0 mata.'
-    : t.tieFormat === 'SSD' ? `Pertemuan ${E.teamWord(t).toLowerCase()}: Single 1 + Single 2 + Double, ketiga-tiga dimainkan. Setiap ahli bermain sekali sahaja (dua pemain single, dua lagi double). Pemenang ditentukan oleh jumlah set yang dimenangi. ${t.tieRule === 'next' ? 'Jika jumlah set sama: bilangan perlawanan dimenangi, kemudian jumlah mata. Menang: 3 mata. Kalah: 0 mata.' : 'Jika jumlah set sama di peringkat kumpulan: seri, 1 mata setiap pasukan. Menang: 3 mata. Kalah: 0 mata.'} Kalah mati: jika set sama, penentu perlawanan dimenangi, kemudian jumlah mata.`
+    : t.tieFormat === 'SSD' ? `Pertemuan ${E.teamWord(t).toLowerCase()}: Single 1 + Single 2 + Double, ketiga-tiga dimainkan. Setiap ahli bermain sekali sahaja (dua pemain single, dua lagi double). Setiap perlawanan: menang 3 markah, seri (1-1) 1 markah, kalah 0. Pemenang pertemuan = jumlah markah tertinggi. ${t.tieRule === 'next' ? 'Jika markah sama: beza set, kemudian jumlah mata.' : 'Jika markah sama di peringkat kumpulan: seri.'} Kedudukan kumpulan: jumlah markah, kemudian beza set, kemudian bersemuka. Kalah mati: jika markah sama, penentu beza set, kemudian jumlah mata.`
     : `Pertemuan ${E.teamWord(t).toLowerCase()}: 1 perlawanan perseorangan + 1 perlawanan regu. Menang 2-0: 3 mata. Seri 1-1: 1 mata. Kalah: 0 mata.`);
   rules.push('Jika mata sama, susunan ditentukan mengikut turutan: (1) beza menang-kalah bilangan perlawanan, (2) beza menang-kalah bilangan set, (3) keputusan bersemuka (pertemuan sesama peserta yang masih sama; jika tiga atau lebih, bilangan kemenangan sesama mereka), (4) beza menang-kalah bilangan mata permainan. Contoh: 5-2 (+3).');
   const HS = E.HC_SCHEMES[t.hcMode];

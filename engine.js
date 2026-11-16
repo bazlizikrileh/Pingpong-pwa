@@ -172,20 +172,23 @@ export function evaluateMatch(t, m) {
   const f = fmtFor(t, m.stage);
   const R = m.rubbers.map(r => evalRubber(f, r.sets));
   const o = { ra: 0, rb: 0, sa: 0, sb: 0, pa: 0, pb: 0, complete: false, winner: null, draw: false, rubbers: R };
+  o.ma = 0; o.mb = 0;   // markah pertemuan S+S+D: setiap perlawanan menang 3, seri 1
   for (const r of R) {
     o.sa += r.wa; o.sb += r.wb; o.pa += r.pa; o.pb += r.pb;
-    if (r.winner === 'a') o.ra++; else if (r.winner === 'b') o.rb++;
+    if (r.winner === 'a') { o.ra++; o.ma += 3; } else if (r.winner === 'b') { o.rb++; o.mb += 3; }
+    else if (r.complete) { o.ma += 1; o.mb += 1; }
   }
   o.complete = R.length > 0 && R.every(r => r.complete);
   if (!o.complete) return o;
   let side = null;
   const drawOk = m.stage === 'group' && t.tieRule !== 'next';
   if (isTeam(t) && t.tieFormat === 'SSD') {
-    // S+S+D: semua 3 perlawanan dimainkan; pemenang = jumlah set.
-    // Set sama → peringkat kumpulan: seri 1 mata (tieRule 'draw', lalai) atau penentu seterusnya (tieRule 'next')
-    if (o.sa !== o.sb) side = o.sa > o.sb ? 'a' : 'b';
+    // S+S+D: semua 3 perlawanan dimainkan; setiap perlawanan menang 3 markah, seri (1-1) 1 markah.
+    // Pemenang = jumlah markah. Markah sama → peringkat kumpulan: seri (tieRule 'draw', lalai)
+    // atau penentu beza set, kemudian jumlah mata (tieRule 'next'; juga untuk kalah mati).
+    if (o.ma !== o.mb) side = o.ma > o.mb ? 'a' : 'b';
     else if (drawOk) o.draw = true;
-    else if (o.ra !== o.rb) side = o.ra > o.rb ? 'a' : 'b';
+    else if (o.sa !== o.sb) side = o.sa > o.sb ? 'a' : 'b';
     else if (o.pa !== o.pb) side = o.pa > o.pb ? 'a' : 'b';
     else if (m.override === m.a || m.override === m.b) o.winner = m.override;
     else o.needsDecision = true;
@@ -300,15 +303,17 @@ function setGroups(t, groups) {
 
 // ---------- Kedudukan kumpulan ----------
 function emptyRow(id) { return { id, p: 0, w: 0, d: 0, l: 0, pts: 0, sf: 0, sa: 0, pf: 0, pa: 0 }; }
-function addResult(row, r, side, m) {
+function addResult(row, r, side, m, marks) {
   const me = side === 'a';
   row.p++;
   row.sf += me ? r.sa : r.sb; row.sa += me ? r.sb : r.sa;
   row.pf += me ? r.pa : r.pb; row.pa += me ? r.pb : r.pa;
-  if (r.draw) { row.d++; row.pts += 1; }
-  else if (m.winner === (me ? m.a : m.b)) { row.w++; row.pts += 3; }
-  else row.l++;
+  if (r.draw) { row.d++; row.pts += marks ? (me ? r.ma : r.mb) : 1; }
+  else if (m.winner === (me ? m.a : m.b)) { row.w++; row.pts += marks ? (me ? r.ma : r.mb) : 3; }
+  else { row.l++; if (marks) row.pts += me ? r.ma : r.mb; }
 }
+// Kuartet S+S+D: mata kedudukan = jumlah markah perlawanan (3 menang, 1 seri)
+export const usesMarks = t => isTeam(t) && t.tieFormat === 'SSD';
 const gMatches = (t, g) => t.matches.filter(m => m.stage === 'group' && m.group === g && m.status === 'done');
 
 // Pisah senarai kepada blok ikut nilai (menurun)
@@ -326,9 +331,10 @@ export function groupStandings(t, groupName) {
   if (!g) return [];
   const rows = Object.fromEntries(g.members.map(id => [id, emptyRow(id)]));
   const done = gMatches(t, groupName);
-  for (const m of done) { const r = evaluateMatch(t, m); addResult(rows[m.a], r, 'a', m); addResult(rows[m.b], r, 'b', m); }
-  // 1 mata, 2 beza perlawanan, 3 beza set
-  const key = r => [r.pts, r.w - r.l, r.sf - r.sa];
+  const MK = usesMarks(t);
+  for (const m of done) { const r = evaluateMatch(t, m); addResult(rows[m.a], r, 'a', m, MK); addResult(rows[m.b], r, 'b', m, MK); }
+  // 1 mata, 2 beza perlawanan, 3 beza set  (S+S+D: 1 markah, 2 beza set)
+  const key = r => MK ? [r.pts, r.sf - r.sa, 0] : [r.pts, r.w - r.l, r.sf - r.sa];
   const cmpKey = (x, y) => { const a = key(x), b = key(y); return (b[0] - a[0]) || (b[1] - a[1]) || (b[2] - a[2]); };
   // 4 bersemuka sesama yang masih seri, 5 beza mata; diulang bagi blok yang lebih kecil
   const resolve = S => {
@@ -336,7 +342,8 @@ export function groupStandings(t, groupName) {
     const ids = new Set(S.map(r => r.id)), h = Object.fromEntries(S.map(r => [r.id, 0]));
     for (const m of done) if (ids.has(m.a) && ids.has(m.b)) {
       const r = evaluateMatch(t, m);
-      if (r.draw) { h[m.a] += 1; h[m.b] += 1; } else h[m.winner] += 3;
+      if (MK) { h[m.a] += r.ma; h[m.b] += r.mb; }
+      else if (r.draw) { h[m.a] += 1; h[m.b] += 1; } else h[m.winner] += 3;
     }
     const out = [];
     for (const part of splitBy(S, r => h[r.id])) {
@@ -939,7 +946,7 @@ export function levelHandicap(t, a, b, rubber = 0, lineup = null) {
 }
 
 // Skor utama pertemuan: SD = perlawanan dimenangi; SSD & bukan pasukan = set
-export const tieScore = (t, r) => isTeam(t) && t.tieFormat !== 'SSD' ? [r.ra, r.rb] : [r.sa, r.sb];
+export const tieScore = (t, r) => !isTeam(t) ? [r.sa, r.sb] : t.tieFormat === 'SSD' ? [r.ma, r.mb] : [r.ra, r.rb];
 export function rubberLabel(t, i) {
   const ty = rubberTypes(t);
   if (t.tieFormat === 'SSD') return ty[i] === 'D' ? 'Double' : `Single ${ty.slice(0, i + 1).filter(x => x === 'S').length}`;
