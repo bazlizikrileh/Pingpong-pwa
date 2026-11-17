@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.6.0';
+const VERSION = '3.7.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1367,7 +1367,8 @@ function regPosterData(t) {
     prizes: (t.prizes || '').split('\n').map(x => x.trim()).filter(Boolean), note: t.regNote || '',
     slots: t.regMax ? (live ? `👥 Tinggal ${t.regMax - regs.length} daripada ${t.regMax} tempat` : `👥 ${regs.length} peserta`) : regs.length ? `👥 ${regs.length} sudah mendaftar` : '',
     countdown: days != null && days > 0 ? `⏳ ${days === 1 ? 'Esok!' : days + ' hari lagi'}` : '',
-    url: shareUrl(t), status: live ? '' : full ? 'TEMPAT PENUH' : 'JOM SAKSIKAN',
+    url: shareUrl(t), status: live ? '' : full ? 'TEMPAT PENUH' : 'JOM SAKSIKAN', clubShort: c.short || '',
+    dateParts: d ? { day: String(d.getDate()), mon: ['JAN', 'FEB', 'MAC', 'APR', 'MEI', 'JUN', 'JUL', 'OGO', 'SEP', 'OKT', 'NOV', 'DIS'][d.getMonth()], monN: String(d.getMonth() + 1).padStart(2, '0'), year: String(d.getFullYear()), wd: HARI[d.getDay()] } : null,
   };
 }
 // Poster sendiri: kecilkan ke ≤1080px & mampatkan supaya muat satu dokumen Firestore (<1MB)
@@ -1428,7 +1429,7 @@ async function showRegPoster(t, auto = false, combo = null) {
     if (!combo) combo = locked && K.COMBOS.includes(locked) ? locked : K.COMBOS[Math.floor(Math.random() * K.COMBOS.length)];
     document.getElementById('rpBar').innerHTML = `<button type="button" class="pill-btn small orange" id="rpRand">🎲 Rawak lagi</button>
       <button type="button" class="pill-btn small ${locked === combo ? 'brand' : 'light'}" id="rpLock">${locked === combo ? '📌 Dikunci' : '📌 Kunci gaya ini'}</button>
-      <span class="muted small" style="align-self:center">Gaya ${combo} · ${K.LAYOUT_NAMES[combo[0]]} · ${K.TREAT_NAMES[combo[1]]}</span>`;
+      <span class="muted small" style="align-self:center">Gaya ${combo} · ${K.LAYOUT_NAMES[combo.slice(0, -1)]} · ${K.TREAT_NAMES[combo.slice(-1)]}</span>`;
     document.getElementById('rpRand').onclick = () => { let n; do n = K.COMBOS[Math.floor(Math.random() * K.COMBOS.length)]; while (n === combo); showRegPoster(t, true, n); };
     document.getElementById('rpLock').onclick = () => { ls.set(lockKey, locked === combo ? null : combo); showRegPoster(t, true, combo); };
     const blob = await K.makeKitPoster(regPosterData(t), combo);
