@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.9.2';
+const VERSION = '3.9.3';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -84,7 +84,7 @@ const ls = { get: k => { try { return localStorage.getItem(k); } catch { return 
 
 // ---------- Kelab ----------
 const CLUBS = {
-  ksas: { short: 'KSAS Kumpulan Rimau', name: 'Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru · Kumpulan Rimau', logos: ['logos/ksas.webp', 'logos/ksas-pingpong.webp'], theme: { tb: '#1f4aa8', tb2: '#173a86', or: '#ff7a1a', w: '#eaf1ff', hd1: '#0b1a3f', hd2: '#1d3f8c' }, waGroup: 'KSAS Rimau - Laporan Skor' },
+  ksas: { short: 'KSAS Kumpulan Rimau', name: 'Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru · Kumpulan Rimau', logos: ['logos/ksas.webp', 'logos/ksas-pingpong.webp'], thumb: 'logos/ksas-pingpong.webp', theme: { tb: '#1f4aa8', tb2: '#173a86', or: '#ff7a1a', w: '#eaf1ff', hd1: '#0b1a3f', hd2: '#1d3f8c' }, waGroup: 'KSAS Rimau - Laporan Skor' },
   ksasall: { short: 'KSAS', name: 'Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru', logos: ['logos/ksas.webp', 'logos/ksas-pingpong.webp'], theme: { tb: '#1f4aa8', tb2: '#173a86', or: '#ff7a1a', w: '#eaf1ff', hd1: '#0b1a3f', hd2: '#1d3f8c' }, waGroup: '' },
   kroni: { short: 'Kroni Shell KSAS', name: 'Kroni Shell · Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru', logos: [], ownLogo: true, theme: { tb: '#c8102e', tb2: '#9b0d23', or: '#ffc600', w: '#fff4d1', hd1: '#4a0a0f', hd2: '#a3111f' }, waGroup: '' },
   kskpkpjb: { short: 'KSKPKPJB', name: 'Kelab Sukan Kebajikan Perubatan Kesihatan dan Pergigian Johor Bahru', logos: ['logos/kskpkpjb.webp'], theme: { tb: '#16803c', tb2: '#0d5a2a', or: '#e3262e', w: '#e8f6ec', hd1: '#07301b', hd2: '#0f5a2c' }, waGroup: '' },
@@ -403,7 +403,7 @@ function viewHome() {
       store.isLocal(t.id) ? '<span class="tg mute">📱 Peranti ini</span>' : '',
     ].join('');
     return `<div class="hc">
-      <a class="hc-thumb" href="#/t/${t.id}">${own ? `<img src="${own}" alt="">` : `<span class="hc-logo">${c.logos[0] ? `<img src="${esc(c.logos[0])}" alt="">` : '🏓'}</span>`}</a>
+      <a class="hc-thumb" href="#/t/${t.id}">${own ? `<img src="${own}" alt="">` : `<span class="hc-logo">${c.thumb || c.logos[0] ? `<img src="${esc(c.thumb || c.logos[0])}" alt="">` : '🏓'}</span>`}</a>
       <div class="hc-body">
         <div class="hc-date">${d ? `${HARI[d.getDay()]} · ${esc(fmtDate(t.date))}${t.startTime ? ' · ' + esc(E.sessionTime(t, 1)) : ''}` : esc(t.date || 'Tarikh belum ditetapkan')}</div>
         <a href="#/t/${t.id}" class="hc-name">${esc(t.name)}</a>
