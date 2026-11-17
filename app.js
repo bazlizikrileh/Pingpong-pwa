@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.9.0';
+const VERSION = '3.9.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1720,26 +1720,65 @@ function viewInfo(t) {
 }
 
 // ---------- Panduan peserta (kad lipat di atas setiap tab) ----------
+// Panduan mengikut peranan: penonton, peserta, pengadil / penjaga skor, pengesah, penganjur
+const ROLES = { penonton: '👀 Penonton', peserta: '🏓 Peserta', pengadil: '🎯 Pengadil', pengesah: '✅ Pengesah', penganjur: '👑 Penganjur' };
+const BEZA = '<b>Beza 🎯 Jaga skor dan 📝 Keputusan:</b> 🎯 Jaga skor (tab Langsung) diguna <i>semasa</i> perlawanan, mata demi mata, dan penonton nampak skor bergerak. 📝 Keputusan diguna <i>selepas</i> perlawanan untuk mengisi skor akhir sahaja. Guna salah satu, bukan kedua-duanya.';
 const GUIDE = {
-  tetapan: t => canAdmin(t) ? 'Isi maklumat pertandingan dan tetapan meja, pilih format, kemudian tekan <b>Jana</b>. Peserta ditambah atau diundi di tab 👥 ' + UNIT(t) + '.' : 'Maklumat pertandingan, format dan peraturan.',
-  pemain: t => canAdmin(t) ? 'Tambah peserta (satu setiap baris), atau isi senarai individu dan tekan <b>Undi</b>. Peraturan pertandingan ada di bahagian bawah.' : 'Semak nama dan unit anda dalam senarai. Peraturan dan cara melapor skor ada di bahagian bawah tab ini.',
-  langsung: () => 'Pilih nama anda di <b>👤 Saya</b>. 🔴 bermain sekarang · 🟡 sila bersedia · 🟣 anda pengadil · ⏳ menunggu giliran. Meja tidak tetap: perlawanan diberi ke meja yang kosong dahulu.',
-  jadual: () => 'Sesi dan masa ialah anggaran. Semasa pertandingan, ikut meja sebenar di tab 🟢 Langsung. Ketik baris untuk buka kad perlawanan.',
-  kumpulan: () => 'Kedudukan: mata → beza menang-kalah perlawanan → beza set → bersemuka → beza mata. Baris berjalur jingga layak ke kalah mati. Ketik nama untuk melihat profil.',
-  keputusan: () => 'Ketik perlawanan, isi skor setiap game (disimpan sebagai draf di telefon), masukkan <b>PIN acara</b> dan tekan <b>📤 Hantar skor</b>. Skor rasmi selepas disahkan penganjur.',
-  kalahmati: () => 'Carta cermin terisi sebaik kedudukan kumpulan pasti, jadi kalah mati boleh bermula lebih awal. Kalah mati: salah seorang pemain melapor skor.',
-  pool: () => 'Pool kalah untuk peserta yang tidak layak ke kalah mati utama. Salah seorang pemain melapor skor.',
-  laporan: () => 'Tekan <b>🖨️ Cetak / Simpan PDF</b>, kemudian pilih <b>Simpan sebagai PDF</b>.',
+  tetapan: {
+    penonton: ['Maklumat pertandingan: tarikh, masa, tempat, format dan peraturan.', 'Kertas kerja atau dokumen lain ada di 📎 Lampiran (jika disediakan).'],
+    peserta: ['Semak tarikh, masa, format set dan syarat penyertaan.', 'Dokumen seperti kertas kerja ada di 📎 Lampiran.'],
+    pengadil: ['Semak format set (contoh Terbaik 5 set, atau 2 set kedua-dua dimainkan) dan peraturan handicap sebelum menjaga skor.'],
+    pengesah: ['Maklumat pertandingan untuk rujukan. Hanya penganjur boleh mengubah tetapan.'],
+    penganjur: ['<b>Maklumat &amp; meja:</b> isi tarikh, masa, tempat, bilangan meja → Simpan.', '<b>Format:</b> pilih format → <b>Jana</b> kumpulan &amp; jadual (selepas peserta lengkap).', '<b>PIN acara:</b> tetapkan dan beri kepada pengadil sahaja. Tukar PIN untuk menyekat semua penjaga skor lama.', '<b>Pendaftaran:</b> buka pendaftaran, yuran, had, syarat dan tahap dibenarkan.', '<b>Pilihan:</b> 🤝 penaja, 📎 lampiran, 🙈 sembunyi dari senarai awam.'],
+  },
+  pemain: {
+    penonton: ['Senarai peserta dan status pendaftaran.'],
+    peserta: ['Tekan <b>📝 Daftar penyertaan</b>. Tiada log masuk diperlukan.', 'Status: ⏳ menunggu · ✓ disahkan. Tekan 🔔 untuk dimaklumkan bila disahkan.', 'Boleh <b>➕ Daftar orang lain</b> (keluarga / rakan) dari telefon yang sama.'],
+    pengadil: ['Kenal pasti pemain dan tahap handicap mereka.'],
+    pengesah: ['Senarai peserta untuk rujukan. Pengesahan pendaftaran dibuat oleh penganjur.'],
+    penganjur: ['<b>Pendaftaran:</b> ✓ sahkan / ✕ tolak / 🗑 padam setiap pendaftar.', '<b>Bayaran:</b> tekan ○ → 💰 bila sudah bayar. 📋 Salin senarai belum bayar untuk peringatan WhatsApp.', '<b>Masukkan ke senarai:</b> tekan ➕ Masukkan … yang disahkan, atau tambah nama sendiri dalam kotak.', '<b>Undi</b> regu/pasukan bila senarai lengkap. Tetapkan 🎚️ tahap handicap setiap pemain.', '<b>Kongsi:</b> WhatsApp, 🖼️ Poster (100 gaya, 🎲 rawak) atau poster sendiri.'],
+  },
+  langsung: {
+    penonton: ['Skor terus di atas meja: <b>🔴 SET 2</b> = set semasa, <b>●</b> = set dimenangi.', 'Tidak perlu menekan apa-apa; skor bergerak sendiri.', '<b>📺 Mod TV</b> untuk skrin besar di dewan.'],
+    peserta: ['Pilih nama anda di <b>👤 Saya</b>, kemudian tekan 🔔.', 'Notifikasi: 🟡 sila bersedia · 🔴 bermain sekarang · 🟣 anda pengadil, beserta nombor meja.', 'Meja tidak tetap: perlawanan diberi ke meja yang kosong dahulu.'],
+    pengadil: ['Tekan <b>🎯 Jaga skor</b> pada meja anda. Jika butang tiada, tekan pautan <i>"Pengadil / penjaga skor?"</i> di bawah.', 'Masukkan <b>PIN acara</b> sekali sahaja.', 'Tekan separuh skrin pemain untuk <b>+1</b>. Set tamat sendiri pada 11 (beza 2); handicap diisi sendiri.', '<b>−1</b> tolak satu mata · <b>↶ Undur</b> batal tindakan terakhir · <b>⇄ Tukar sisi</b> bila pemain bertukar hujung meja.', 'Tamat → <b>📤 Hantar kepada penganjur</b>.', 'Satu meja satu penjaga. Jika telefon anda bermasalah, minta penganjur tekan 🔓 Lepaskan.', BEZA],
+    pengesah: ['Sama seperti pengadil, tetapi keputusan yang anda simpan terus rasmi (<b>✅ Simpan keputusan</b>).', 'Nama penjaga skor dipaparkan pada setiap meja. 🔓 Lepaskan kunci jika penjaga perlu bertukar.', BEZA],
+    penganjur: ['<b>▶️ Agih meja kosong</b> untuk memulakan; meja seterusnya diagih sendiri bila skor disimpan.', '<b>⏸️</b> tangguh perlawanan (contoh pemain belum sampai).', '🎯 nama penjaga dan <b>🔓 Lepaskan</b> pada setiap meja.', 'Tetapan meja di bahagian bawah; <b>📺 Mod TV</b> untuk skrin besar.', BEZA],
+  },
+  jadual: {
+    penonton: ['Sesi dan masa ialah anggaran. Semasa pertandingan, ikut meja sebenar di tab 🟢 Langsung.', 'Ketik baris untuk buka kad perlawanan.'],
+    penganjur: ['Sesi dan masa ialah anggaran.', '<b>🖨️ Kad skor bercetak</b>: sandaran jika internet atau telefon bermasalah. Kod QR pada kad membuka perlawanan untuk isi skor kemudian.'],
+  },
+  kumpulan: {
+    penonton: ['Kedudukan: mata → beza menang-kalah → beza set → bersemuka → beza mata.', 'Baris berjalur jingga layak ke kalah mati. Ketik nama untuk melihat profil.'],
+  },
+  keputusan: {
+    penonton: ['Senarai keputusan dan skor setiap perlawanan.'],
+    peserta: ['Jika meja anda <i>tiada</i> penjaga skor: ketik perlawanan, isi skor setiap set, masukkan <b>PIN acara</b>, tekan <b>📤 Hantar skor</b>.', 'Skor menjadi rasmi selepas disahkan penganjur.', BEZA],
+    pengadil: ['Cara alternatif: isi skor akhir selepas perlawanan. Jika anda sudah guna 🎯 Jaga skor, <b>tidak perlu</b> isi lagi di sini.', BEZA],
+    pengesah: ['Skor <b>menunggu pengesahan</b> dipaparkan di atas: semak, kemudian ✓ Sahkan atau ✕ Tolak.', 'Anda juga boleh membetulkan skor terus pada kad perlawanan.', 'Perlawanan tamat: <b>📸 Kongsi kad keputusan</b>.'],
+    penganjur: ['Skor <b>menunggu pengesahan</b> dipaparkan di atas: ✓ Sahkan atau ✕ Tolak.', 'Ketik perlawanan untuk membetulkan skor.', 'Perlawanan tamat: <b>📸 Kongsi kad keputusan</b> (🎲 gaya lain).'],
+  },
+  kalahmati: { penonton: ['Carta cermin terisi sebaik kedudukan kumpulan pasti, jadi kalah mati boleh bermula lebih awal.'], penganjur: ['Carta terisi sendiri. Bila tamat: 🏆 Kongsi poster juara.'] },
+  pool: { penonton: ['Pool kalah untuk peserta yang tidak layak ke kalah mati utama.'] },
+  laporan: { penonton: ['Tekan <b>🖨️ Cetak / Simpan PDF</b>, kemudian pilih <b>Simpan sebagai PDF</b>.'] },
 };
+const roleOf = t => canAdmin(t) ? 'penganjur' : canEdit(t) ? 'pengesah' : ls.get('pingpong:scorer:' + t.id) ? 'pengadil' : (ls.get(meKey(t)) || ls.get('pingpong:regd:' + t.id)) ? 'peserta' : 'penonton';
 function guideCard(t, page) {
-  const f = GUIDE[page];
-  if (!f) return;
+  const g = GUIDE[page]; if (!g) return;
   const open = ls.get('pingpong:guide') === '1';
-  const html = `<details class="card fold guide noprint" ${open ? 'open' : ''}><summary>📖 Panduan</summary><p class="small" style="margin:6px 0 0">${f(t)}</p></details>`;
+  let role = ls.get('pingpong:guideRole:' + t.id) || roleOf(t); if (!ROLES[role]) role = 'penonton';
+  const items = g[role] || g.penonton || [];
+  const html = `<details class="card fold guide noprint" ${open ? 'open' : ''}><summary>📖 Panduan · ${ROLES[role]}</summary>
+    <div class="g-roles">${Object.entries(ROLES).map(([k, v]) => `<button type="button" class="chip ${k === role ? 'on' : ''}" data-grole="${k}">${v}</button>`).join('')}</div>
+    <ul class="g-list">${items.map(x => `<li>${x}</li>`).join('')}</ul>
+    ${!g[role] && role !== 'penonton' ? '<p class="muted small" style="margin:4px 0 0">Tiada tindakan khas untuk peranan ini di halaman ini.</p>' : ''}</details>`;
+  const old = $app.querySelector('details.guide'); if (old) old.remove();
   const h = $app.querySelector('.h-big');
   h ? h.insertAdjacentHTML('afterend', html) : $app.insertAdjacentHTML('afterbegin', html);
   const d = $app.querySelector('details.guide');
   d.ontoggle = () => ls.set('pingpong:guide', d.open ? '1' : '0');
+  d.querySelectorAll('[data-grole]').forEach(b => (b.onclick = e => { e.preventDefault(); ls.set('pingpong:guideRole:' + t.id, b.dataset.grole); guideCard(t, page); }));
 }
 
 // ---------- Langsung (agihan meja, pengadil, status peribadi) ----------
@@ -2090,7 +2129,7 @@ function viewLive(t) {
       ${m ? `<a class="tt-top${x ? ' live' : ''}" href="#/t/${t.id}/m/${m.id}">${x && x.sw ? courtSide(t, m, 1, x) : courtSide(t, m, 0, x)}<div class="tt-net"></div>${x && x.sw ? courtSide(t, m, 0, x) : courtSide(t, m, 1, x)}</a>
         ${x && edit ? `<div class="lv-by2">🎯 Dijaga oleh <b>${esc(x.by || 'tanpa nama')}</b><button type="button" class="pill-btn small light" data-rel="${m.id}">🔓 Lepaskan</button></div>` : ''}
         ${u ? `<div class="tt-u">🟣 Pengadil: <b>${esc(E.pname(t, u))}</b></div>` : ''}
-        ${scoreMode(t) || iUmp ? `<div class="row tt-act"><a class="pill-btn small ${x ? 'light' : 'orange'}" href="#/t/${t.id}/ls/${m.id}">🎯 Jaga skor</a>${edit ? `<a class="pill-btn small light" href="#/t/${t.id}/m/${m.id}">📝 Skor</a><button class="pill-btn small light" data-tgh="${m.id}">⏸️</button>` : ''}</div>` : ''}`
+        ${scoreMode(t) || iUmp ? `<div class="row tt-act"><a class="pill-btn small ${x ? 'light' : 'orange'}" href="#/t/${t.id}/ls/${m.id}">🎯 Jaga skor</a>${edit ? `<button class="pill-btn small light" data-tgh="${m.id}" title="Tangguh">⏸️ Tangguh</button>` : ''}</div>` : ''}`
       : '<div class="tt-top tt-empty"><div>Meja kosong</div></div>'}
       ${nx[k] ? `<div class="tt-n">⏭️ Bersedia: ${vsTxt(t, nx[k])}</div>` : ''}</div>`;
   };
