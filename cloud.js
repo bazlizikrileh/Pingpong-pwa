@@ -150,9 +150,12 @@ export function watchRegistrations(tid) {
     emit('regs');
   }, err => { console.warn('registrations', err); state.regs[tid] = state.regs[tid] || []; emit('regs'); });
 }
-export async function register(tid, { name, unit, level, partner, note }) {
+// Satu telefon boleh mendaftar beberapa orang: id dokumen = uid (pertama) atau uid_1 … uid_9
+export async function register(tid, { name, unit, level, partner, note }, docId = '') {
   const u = await ensureAnon();   // tanpa log masuk: akaun tanpa nama peranti ini (boleh ubah/batal dari telefon yang sama)
-  const ref = F.doc(db, 'tournaments', tid, 'registrations', u.uid);
+  if (!docId) { const used = new Set((state.regs[tid] || []).map(r => r.id)); docId = used.has(u.uid) ? (Array.from({ length: 9 }, (_, i) => `${u.uid}_${i + 1}`).find(x => !used.has(x)) || '') : u.uid; }
+  if (!docId) throw Object.assign(new Error('Had pendaftaran dari telefon ini dicapai'), { code: 'had-telefon' });
+  const ref = F.doc(db, 'tournaments', tid, 'registrations', docId);
   const old = await F.getDoc(ref);
   await F.setDoc(ref, { uid: u.uid, name: String(name).slice(0, 50), unit: String(unit || '').slice(0, 50), level: String(level || '').slice(0, 10),
     partner: String(partner || '').slice(0, 50), note: String(note || '').slice(0, 150), status: old.exists() ? old.data().status : 'pending', at: old.exists() ? old.data().at : F.serverTimestamp() });

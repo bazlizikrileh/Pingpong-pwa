@@ -28,3 +28,8 @@ export function send(topics, title, body, url, tag) {
   if (!URL_ || !topics.length) return;
   fetch(URL_ + '/notify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topics, title, body, url, tag }), keepalive: true }).catch(() => {});
 }
+// Jadualkan notifikasi (dihantar oleh Cron Worker). at = 0 / tiada tajuk → batal.
+export function schedule(key, at, topics, title, body, url, tag) {
+  if (!URL_) return;
+  fetch(URL_ + '/schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, at, topics, title, body, url, tag }), keepalive: true }).catch(() => {});
+}

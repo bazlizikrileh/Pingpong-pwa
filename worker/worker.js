@@ -6,11 +6,13 @@
 //   GET  /vapid           → { key }  kunci awam VAPID untuk pushManager.subscribe
 //   POST /sub             → { sub, topics }  daftar / kemas kini topik bagi satu peranti
 //   POST /notify          → { topics, title, body, url, tag }  hantar notifikasi kepada semua peranti dalam topik
+//   POST /schedule        → { key, at, topics, title, body, url, tag }  jadualkan notifikasi (cth. peringatan sehari sebelum)
+//   cron (scheduled)      → hantar notifikasi berjadual yang sudah tiba masanya (tetapkan Cron Trigger: */30 * * * *)
 //
 // Topik: adm:<tid> (penganjur), me:<tid>:<pid> (peserta pilih nama), reg:<tid>:<uid> (pendaftar)
 
 const ORIGINS = ['https://bazlizikrileh.github.io', 'http://localhost:8765'];
-const TOPIC_RE = /^(adm|me|reg):[A-Za-z0-9_:-]{1,90}$/;
+const TOPIC_RE = /^(adm|me|reg|club|t):[A-Za-z0-9_:-]{1,90}$/;
 const MAX_SUBS_PER_TOPIC = 60;
 
 const enc = new TextEncoder();
@@ -76,7 +78,36 @@ async function setTopic(env, t, list) { list.length ? await env.PUSH.put('T:' + 
 
 function json(data, cors, status = 200) { return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...cors } }); }
 
+async function deliver(env, { topics = [], title, body = '', url: link = '', tag = '' }) {
+  const payload = { title: String(title).slice(0, 80), body: String(body).slice(0, 220), url: String(link).slice(0, 200), tag: String(tag).slice(0, 60) };
+  const ids = new Set();
+  for (const t of topics.filter(t => TOPIC_RE.test(t)).slice(0, 10)) (await topicList(env, t)).forEach(x => ids.add(x));
+  let sent = 0, gone = 0;
+  for (const id of ids) {
+    const rec = await env.PUSH.get('S:' + id, 'json');
+    if (!rec) continue;
+    const st = await sendPush(env, rec.sub, payload).catch(() => 0);
+    if (st === 404 || st === 410) {   // langganan tamat: buang
+      gone++; await env.PUSH.delete('S:' + id);
+      for (const t of rec.topics) await setTopic(env, t, (await topicList(env, t)).filter(x => x !== id));
+    } else if (st >= 200 && st < 300) sent++;
+  }
+  return { sent, gone };
+}
+
 export default {
+  // Cron Trigger: hantar notifikasi berjadual yang sudah tiba masanya
+  async scheduled(event, env) {
+    if (!env.PUSH) return;
+    let cursor;
+    do {
+      const page = await env.PUSH.list({ prefix: 'Q:', cursor }); cursor = page.list_complete ? null : page.cursor;
+      for (const k of page.keys) {
+        const job = await env.PUSH.get(k.name, 'json');
+        if (job && job.at <= Date.now()) { await env.PUSH.delete(k.name); await deliver(env, job).catch(() => {}); }
+      }
+    } while (cursor);
+  },
   async fetch(req, env) {
     const url = new URL(req.url), origin = req.headers.get('Origin') || '';
     const cors = { 'Access-Control-Allow-Origin': ORIGINS.includes(origin) ? origin : ORIGINS[0], 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', Vary: 'Origin' };
@@ -97,22 +128,24 @@ export default {
       }
 
       if (url.pathname === '/notify' && req.method === 'POST') {
-        const { topics = [], title, body = '', url: link = '', tag = '' } = await req.json();
-        if (!title) return json({ error: 'tiada tajuk' }, cors, 400);
-        const payload = { title: String(title).slice(0, 80), body: String(body).slice(0, 220), url: String(link).slice(0, 200), tag: String(tag).slice(0, 60) };
-        const ids = new Set();
-        for (const t of topics.filter(t => TOPIC_RE.test(t)).slice(0, 10)) (await topicList(env, t)).forEach(x => ids.add(x));
-        let sent = 0, gone = 0;
-        for (const id of ids) {
-          const rec = await env.PUSH.get('S:' + id, 'json');
-          if (!rec) continue;
-          const st = await sendPush(env, rec.sub, payload).catch(() => 0);
-          if (st === 404 || st === 410) {   // langganan tamat: buang
-            gone++; await env.PUSH.delete('S:' + id);
-            for (const t of rec.topics) await setTopic(env, t, (await topicList(env, t)).filter(x => x !== id));
-          } else if (st >= 200 && st < 300) sent++;
+        const msg = await req.json();
+        if (!msg.title) return json({ error: 'tiada tajuk' }, cors, 400);
+        // had untuk topik kelab (ramai pelanggan): maksimum 6 notifikasi sejam setiap kelab
+        for (const t of (msg.topics || []).filter(t => /^club:/.test(t))) {
+          const k = 'RL:' + t + ':' + Math.floor(Date.now() / 3600e3), n = Number(await env.PUSH.get(k) || 0);
+          if (n >= 6) return json({ error: 'had notifikasi kelab dicapai, cuba sejam lagi' }, cors, 429);
+          await env.PUSH.put(k, String(n + 1), { expirationTtl: 7200 });
         }
-        return json({ ok: true, sent, gone }, cors);
+        return json({ ok: true, ...(await deliver(env, msg)) }, cors);
+      }
+
+      if (url.pathname === '/schedule' && req.method === 'POST') {
+        const { key, at, topics = [], title, body = '', url: link = '', tag = '' } = await req.json();
+        if (!/^[A-Za-z0-9_:-]{1,80}$/.test(String(key || ''))) return json({ error: 'kunci tidak sah' }, cors, 400);
+        const when = Number(at), now = Date.now();
+        if (!title || !(when > now - 6e4) || when > now + 60 * 864e5) { await env.PUSH.delete('Q:' + key); return json({ ok: true, cancelled: true }, cors); }
+        await env.PUSH.put('Q:' + key, JSON.stringify({ at: when, topics: topics.filter(t => TOPIC_RE.test(t)).slice(0, 10), title, body, url: link, tag }), { expirationTtl: Math.ceil((when - now) / 1000) + 2 * 86400 });
+        return json({ ok: true, key, at: when }, cors);
       }
       return json({ ok: true, service: 'pingpong-push' }, cors);
     } catch (e) {

@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.8.0';
+const VERSION = '3.9.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -30,8 +30,23 @@ const save = (t, opts) => {
   let before = null;
   try { if (store.isCloud(t.id) && PUSH.pushAvailable()) before = store.get(t.id); } catch {}
   try { store.save(t, opts); } catch (e) { toast(e.message, 4000); return; }
-  if (before) try { pushStatusDiff(E.migrate(before), t); } catch (e) { console.warn(e); }
+  if (before) try { pushStatusDiff(E.migrate(before), t); pushEvents(E.migrate(before), t); } catch (e) { console.warn(e); }
 };
+// Pendaftaran dibuka → beritahu pelanggan kelab; tarikh/masa berubah → jadualkan peringatan "esok"
+function pushEvents(a, b) {
+  const pub = !(b.hidden ?? !!b.test);
+  if (pub && b.regOpen && !a.regOpen && b.clubId) {
+    const at = startAt(b), d = at ? new Date(at) : null;
+    PUSH.send(['club:' + b.clubId], '🏓 Pendaftaran dibuka', `${b.name}${d ? ` · ${HARI[d.getDay()]}, ${fmtDate(b.date)}` : ''}. Tekan untuk daftar.`, `#/daftar/${b.id}`, 'open-' + b.id);
+  }
+  const sig = x => `${x.date}|${x.startTime}|${x.name}|${x.hidden ?? !!x.test}|${x.stage === 'done'}`;
+  if (sig(a) !== sig(b)) {
+    const at = startAt(b); let when = 0;
+    if (at && pub && b.stage !== 'done') { const d = new Date(at); d.setDate(d.getDate() - 1); d.setHours(20, 30, 0, 0); when = Math.min(d.getTime(), at - 3 * 3600e3); }
+    const venue = b.venue === 'X' ? b.venueName : E.VENUES[b.venue];
+    PUSH.schedule('remind-' + b.id, when > Date.now() ? when : 0, ['t:' + b.id], '⏰ Esok: ' + b.name, `${E.sessionTime(b, 1)}${venue ? ' · ' + venue : ''}. Jumpa di meja!`, `#/t/${b.id}/langsung`, 'remind-' + b.id);
+  }
+}
 // Hantar push kepada peserta yang statusnya berubah (bermain / pengadil / bersedia) selepas meja diagih
 function pushStatusDiff(a, b) {
   const key = (t, pid) => { const st = LV.myStatus(t, pid); return st && ['play', 'ump', 'ready'].includes(st.kind) ? `${st.kind}:${st.table}:${st.m.id}` : ''; };
@@ -55,10 +70,13 @@ function pushSync() {
       if (store.canEdit(x.id)) T.push('adm:' + x.id);
       const me = ls.get('pingpong:me:' + x.id); if (me) T.push(`me:${x.id}:${me}`);
       if (ls.get('pingpong:regd:' + x.id) && cloud.myUid()) T.push(`reg:${x.id}:${cloud.myUid()}`);
+      if ((me || ls.get('pingpong:regd:' + x.id)) && x.stage !== 'done') T.push('t:' + x.id);   // peringatan "esok"
     }
+    clubSubs().forEach(c => T.unshift('club:' + c));
     try { await PUSH.syncTopics(T.slice(0, 30)); } catch (e) { console.warn('push', e); }
   }, 800);
 }
+const clubSubs = () => { try { return JSON.parse(ls.get('pingpong:clubSubs') || '[]'); } catch { return []; } };
 const canAdmin = t => store.canAdmin(t.id);
 const canEdit = t => store.canEdit(t.id);
 const isHidden = t => t.hidden ?? !!t.test;
@@ -360,31 +378,65 @@ function playBracketDraw(t, b) {
 }
 
 // ---------- Laman utama ----------
+let _homeClub = '';
 function viewHome() {
-  const list = store.list().map(E.migrate).filter(t => store.isLocal(t.id) || store.canAdmin(t.id) || !isHidden(t));
+  const all = store.list().map(E.migrate).filter(t => store.isLocal(t.id) || store.canAdmin(t.id) || !isHidden(t));
+  const clubs = [...new Map(all.filter(t => t.clubId && CLUBS[t.clubId]).map(t => [t.clubId, CLUBS[t.clubId].short])).entries()];
+  if (_homeClub && !clubs.some(([k]) => k === _homeClub)) _homeClub = '';
+  const list = all.filter(t => !_homeClub || t.clubId === _homeClub);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const past = t => t.stage === 'done' || (t.date && new Date(t.date + 'T23:59') < today);
+  const sortD = (x, y) => (x.date || '9999').localeCompare(y.date || '9999');
+  const up = list.filter(t => !past(t)).sort(sortD), arc = list.filter(past).sort((x, y) => -sortD(x, y));
+  const mine = myRegTids().map(id => all.find(t => t.id === id)).filter(t => t && !past(t));
+  const subs = clubSubs();
+  const card = t => {
+    if (store.isCloud(t.id) && t.regOpen) cloud.watchRegistrations(t.id);
+    const own = posterOf(t), c = clubOf(t), at = startAt(t), d = at ? new Date(at) : null;
+    const venue = t.venue === 'X' ? t.venueName : E.VENUES[t.venue];
+    const tags = [
+      t.regOpen ? (regLive(t) ? '<span class="tg ok">Pendaftaran dibuka</span>' : '<span class="tg">Penuh</span>') : '',
+      t.stage === 'group' || t.stage === 'ko' ? '<span class="tg live">● Sedang berlangsung</span>' : '',
+      t.hcMode && t.hcMode !== 'off' ? '<span class="tg">Handicap</span>' : '',
+      t.regCond ? `<span class="tg">${esc(t.regCond)}</span>` : '',
+      store.isCloud(t.id) && isHidden(t) ? '<span class="tg mute">🙈 Tersembunyi</span>' : '',
+      store.isLocal(t.id) ? '<span class="tg mute">📱 Peranti ini</span>' : '',
+    ].join('');
+    return `<div class="hc">
+      <a class="hc-thumb" href="#/t/${t.id}">${own ? `<img src="${own}" alt="">` : `<span class="hc-logo">${c.logos[0] ? `<img src="${esc(c.logos[0])}" alt="">` : '🏓'}</span>`}</a>
+      <div class="hc-body">
+        <div class="hc-date">${d ? `${HARI[d.getDay()]} · ${esc(fmtDate(t.date))}${t.startTime ? ' · ' + esc(E.sessionTime(t, 1)) : ''}` : esc(t.date || 'Tarikh belum ditetapkan')}</div>
+        <a href="#/t/${t.id}" class="hc-name">${esc(t.name)}</a>
+        <div class="hc-meta">${esc(c.short || '—')} · ${E.isTeam(t) ? esc(E.teamWord(t)) : ENTRY_SHORT[t.entryMode]}${venue ? ' · ' + esc(venue) : ''}</div>
+        <div class="hc-tags">${tags}</div>
+        <div class="hc-act">${regLive(t) ? `<a class="pill-btn orange small" href="#/daftar/${t.id}"><span class="dot"></span>Daftar →</a>` : ''}<a class="pill-btn light small" href="#/t/${t.id}">Lihat</a>
+          ${store.isLocal(t.id) && cloud.isAdmin() ? `<button class="pill-btn small light" data-up="${t.id}">☁️ Pindah ke awan</button>` : ''}</div>
+      </div></div>`;
+  };
   $app.innerHTML = `
     ${section('Pingpong Portal', 'Pertandingan')}
     <p class="muted small" style="margin-top:-6px">${cloud.state.failed ? '📴 Tidak dapat menyambung ke awan. Hanya data dalam peranti ini dipaparkan.' : cloud.state.tournaments ? (cloud.state.offline ? '📴 Luar talian — memaparkan salinan terakhir' : '☁️ Disambung ke awan') : '⏳ Menyambung ke awan…'}</p>
     ${cloud.isAdmin() || cloud.state.failed || !cloud.state.ready ? `<div class="row" style="margin-bottom:14px"><a class="pill-btn orange" href="#/baru"><span class="dot"></span>Pertandingan baharu</a></div>` : ''}
-    <div class="card">
-      ${list.length ? list.map(t => `
-        <div class="list-item">
-          <a href="#/t/${t.id}" class="grow row" style="text-decoration:none;flex-wrap:nowrap">
-            <span class="home-logos">${logosHtml(t, 'logo-badge sm')}</span>
-            <span><strong>${esc(t.name)}</strong><br>
-            <span class="muted small">${esc(clubOf(t).short || '—')} · ${ENTRY_SHORT[t.entryMode]} · ${t.participants.length} ${UNIT(t).toLowerCase()}${t.date ? ' · ' + esc(t.date) : ''}</span></span>
-          </a>
-          <span class="btn-stack" style="align-items:flex-end;gap:6px"><span class="pill ${t.stage === 'done' ? 'done' : t.stage === 'setup' ? '' : 'live'}">${STAGE[t.stage]}</span>
-            ${store.isCloud(t.id) && isHidden(t) ? '<span class="cloud-tag">🙈 Tersembunyi</span>' : ''}
-            ${store.isLocal(t.id) ? `<span class="cloud-tag">📱 Peranti ini</span>${cloud.isAdmin() ? `<button class="pill-btn small light" data-up="${t.id}">☁️ Pindah ke awan</button>` : ''}` : ''}</span>
-        </div>`).join('') : `<div class="empty">Belum ada pertandingan.</div>`}
-    </div>
+    ${clubs.length > 1 ? `<div class="hc-chips"><button class="chip ${!_homeClub ? 'on' : ''}" data-hclub="">Semua kelab</button>${clubs.map(([k, n]) => `<button class="chip ${_homeClub === k ? 'on' : ''}" data-hclub="${k}">${esc(n)}</button>`).join('')}</div>` : ''}
+    ${(_homeClub || clubs.length === 1) && store.isCloud ? (() => { const k = _homeClub || clubs[0][0], on = subs.includes(k) && notifOn(); return `<div class="hc-sub"><span>${on ? '🔔' : '🔕'} ${on ? 'Anda akan dimaklumkan bila' : 'Dapatkan notifikasi bila'} <b>${esc(CLUBS[k].short)}</b> membuka pendaftaran</span><button class="pill-btn small ${on ? 'light' : 'brand'}" data-csub="${k}">${on ? 'Berhenti' : 'Langgan'}</button></div>`; })() : ''}
+    ${mine.length ? `<div class="section-title">📝 Pertandingan saya</div><div class="my-list">${mine.map(t => `<a class="my-item" href="#/daftar/${t.id}"><b>${esc(t.name)}</b><span>${esc(fmtDate(t.date) || '')} · Lihat pendaftaran →</span></a>`).join('')}</div>` : ''}
+    <div class="section-title">Akan datang</div>
+    ${up.length ? `<div class="hc-list">${up.map(card).join('')}</div>` : '<div class="card empty">Tiada pertandingan akan datang.</div>'}
+    ${arc.length ? `<details class="card fold" ${ls.get('pingpong:arcOpen') === '1' ? 'open' : ''} id="arcF"><summary>🗂️ Arkib pertandingan lepas (${arc.length})</summary><div class="hc-list" style="margin-top:10px">${arc.map(card).join('')}</div></details>` : ''}
     <details class="card fold noprint"><summary>Sandaran data</summary>
-      <p class="muted">Buat masa ini data disimpan dalam peranti ini sahaja. Eksport untuk sandaran atau pindah ke peranti lain.</p>
+      <p class="muted">Eksport untuk sandaran atau pindah ke peranti lain.</p>
       <div class="row"><button class="pill-btn light small" id="exp">Eksport</button>
       <label class="pill-btn light small" style="margin:0">Import<input type="file" id="imp" accept=".json,application/json" hidden></label></div>
     </details>
     <p class="muted small" style="text-align:center">Pingpong Portal · Versi ${VERSION}</p>`;
+  $app.querySelectorAll('[data-hclub]').forEach(b => (b.onclick = () => { _homeClub = b.dataset.hclub; viewHome(); }));
+  const af = document.getElementById('arcF'); if (af) af.ontoggle = () => ls.set('pingpong:arcOpen', af.open ? '1' : '0');
+  $app.querySelectorAll('[data-csub]').forEach(b => (b.onclick = async () => {
+    const k = b.dataset.csub, cur = clubSubs(), on = cur.includes(k) && notifOn();
+    if (!on && !notifOn()) { await askNotif(); if (!notifOn()) return; }
+    ls.set('pingpong:clubSubs', JSON.stringify(on ? cur.filter(x => x !== k) : [...new Set([...cur, k])]));
+    pushSync(); toast(on ? '🔕 Langganan kelab dihentikan' : `🔔 Anda akan dimaklumkan bila ${CLUBS[k].short} membuka pendaftaran`, 3500); viewHome();
+  }));
   $app.querySelectorAll('[data-up]').forEach(b => (b.onclick = async e => {
     e.preventDefault();
     if (!confirm('Pindah pertandingan ini ke awan supaya boleh dilihat semua orang?')) return;
@@ -466,6 +518,8 @@ function settingsFormAll(t, locked) {
       <div><label>Had peserta</label><input name="regMax" maxlength="30" value="${esc(t.regMaxText || (t.regMax ? String(t.regMax) : ''))}" placeholder="cth. 16 / tiada had"></div></div>
       <label>Hadiah (satu baris setiap tempat)</label><textarea name="prizes" rows="3" placeholder="Johan: RM100 + piala&#10;Naib johan: RM50&#10;Ketiga: Hadiah saguhati">${esc(t.prizes || '')}</textarea>
       <label>Catatan</label><textarea name="regNote" rows="3" placeholder="cth. Terbuka untuk semua ahli KSAS">${esc(t.regNote || '')}</textarea>
+      <label>Syarat penyertaan (pilihan)</label><input name="regCond" maxlength="60" value="${esc(t.regCond || '')}" placeholder="cth. Wanita sahaja / Staf HSAJB sahaja">
+      ${E.HC_SCHEMES[t.hcMode] ? `<label>Tahap dibenarkan</label><div class="lv-allow">${E.HC_SCHEMES[t.hcMode].levels.map(l => `<label class="check"><input type="checkbox" name="regLv" value="${l[0]}" ${!(t.regLevels || []).length || t.regLevels.includes(l[0]) ? 'checked' : ''}> ${esc(l[1])}</label>`).join('')}</div><p class="muted small" style="margin-top:0">Tanda semua = terbuka kepada semua tahap.</p>` : ''}
     </div>
 
     <div class="section-title">Laporan skor</div>
@@ -515,7 +569,8 @@ function readSettings(form, t) {
   t.koMode = v('koMode'); t.pool = v('pool'); t.poolMode = v('poolMode');
   t.venue = v('venue'); t.numTables = Number(v('numTables')) || 0; t.venueName = v('venueName').trim();
   t.waEnabled = form.waEnabled.checked;
-  t.regOpen = form.regOpen.checked; t.regNote = v('regNote').trim();
+  t.regOpen = form.regOpen.checked; t.regNote = v('regNote').trim(); t.regCond = String(v('regCond') || '').trim();
+  { const S = E.HC_SCHEMES[t.hcMode], ch = [...form.querySelectorAll('input[name=regLv]')]; if (S && ch.length) { const sel = ch.filter(x => x.checked).map(x => x.value); t.regLevels = sel.length === ch.length ? [] : sel; } }
   t.regFee = v('regFee').trim(); t.regMaxText = String(v('regMax') || '').trim(); t.regMax = Number((t.regMaxText.match(/\d+/) || [0])[0]) || 0; t.prizes = v('prizes').trim();
   t.waMode = v('waMode'); t.waGroup = v('waGroup').trim(); t.waNumber = v('waNumber').replace(/\D/g, '');
   if (!form.entryMode.disabled) {
@@ -1472,6 +1527,15 @@ function wireShare(t) {
 }
 
 // ---------- Pendaftaran sendiri ----------
+// Status bayaran yuran (disimpan dalam data pertandingan; hanya penganjur nampak)
+const payKey = r => String(r.partner ? `${r.name} & ${r.partner}` : r.name).trim().toLowerCase();
+const isPaid = (t, r) => !!(t.paid || {})[payKey(r)];
+const feeAmt = t => { const m = String(t.regFee || '').replace(/,/g, '').match(/\d+(\.\d+)?/); return m ? Number(m[0]) : 0; };
+function payBar(t, rows) {
+  const n = rows.filter(r => r.status !== 'no'), paid = n.filter(r => isPaid(t, r)).length, amt = feeAmt(t);
+  return `<div class="pay-bar"><span>💰 Bayar: <b>${paid}/${n.length}</b>${amt ? ` · Kutipan <b>RM${(paid * amt).toFixed(amt % 1 ? 2 : 0)}</b> / RM${(n.length * amt).toFixed(amt % 1 ? 2 : 0)}` : ''}</span>
+    ${paid < n.length ? '<button type="button" class="pill-btn light small" id="payCopy">📋 Salin senarai belum bayar</button>' : '<span class="muted small">Semua sudah bayar ✓</span>'}</div>`;
+}
 const REG_ST = { pending: ['⏳', 'Menunggu'], ok: ['✓', 'Disahkan'], no: ['✕', 'Ditolak'] };
 function regCard(t) {
   if (!store.isCloud(t.id)) return '';
@@ -1494,13 +1558,16 @@ function regCard(t) {
       <span class="role-chip">${regLive(t) ? '🟢 Dibuka' : t.regOpen ? '🔒 Penuh' : 'Ditutup'}</span></div>
     <p class="small" style="margin:6px 0"><b>Peserta: ${rosterOf(t).length}${t.regMax ? '/' + t.regMax : ''}</b> · ${rosterOf(t).filter(r => r.status === 'ok').length} disahkan · ${regs.filter(r => r.status === 'pending').length} menunggu${t.entryMode !== 'single' && E.usesDraw(t) ? ` · ${t.entryMode === 'team' ? E.teamWord(t).toLowerCase() : 'regu'} diundi oleh penganjur` : ''}</p>
     ${t.regNote ? `<p class="muted small" style="margin:0 0 8px;white-space:pre-line">${esc(t.regNote)}</p>` : ''}
+    ${t.regCond || (t.regLevels || []).length ? `<div class="row" style="gap:6px;margin-bottom:8px;flex-wrap:wrap">${condTags(t)}</div>` : ''}
     ${mine ? `<div class="notice small">Anda telah mendaftar sebagai <b>${esc(mine.name)}</b>${mine.level ? ` (${esc(lvName(mine.level))})` : ''} · ${REG_ST[mine.status][0]} ${REG_ST[mine.status][1]}
         ${t.regOpen ? `<a class="pill-btn light small" href="#/daftar/${t.id}">Ubah / batal</a>` : ''}</div>`
       : t.regOpen ? `<a class="pill-btn orange" href="#/daftar/${t.id}"><span class="dot"></span>📝 ${admin ? 'Buka halaman pendaftaran' : 'Daftar penyertaan'}</a>` : ''}
     ${rows.length ? `<div class="reg-list">${rows.map((r, i) => `<div class="reg-row ${r.status}"><span class="no">${i + 1}</span><span class="nm"><b>${esc(r.name)}</b>${r.partner ? ` &amp; ${esc(r.partner)}` : ''}
         <small>${[r.level ? lvName(r.level) : '', r.unit].filter(Boolean).map(esc).join(' · ')}${admin && r.note ? ` · <i>${esc(r.note)}</i>` : ''}${admin && !r.uid ? '<i>ditambah penganjur</i>' : ''}</small></span>
         <span class="st">${REG_ST[r.status][0]}</span>
-        ${admin && r.uid ? `<span class="act">${r.status !== 'ok' ? `<button type="button" class="pill-btn small light" data-rok="${r.uid}">✓</button>` : ''}${r.status !== 'no' ? `<button type="button" class="pill-btn small light" data-rno="${r.uid}">✕</button>` : ''}<button type="button" class="pill-btn small light" data-rdel="${r.uid}">🗑</button></span>` : ''}</div>`).join('')}</div>` : ''}
+        ${admin ? `<button type="button" class="pay ${isPaid(t, r) ? 'on' : ''}" data-pay="${esc(payKey(r))}" title="Status bayaran">${isPaid(t, r) ? '💰' : '○'}</button>` : ''}
+        ${admin && r.uid ? `<span class="act">${r.status !== 'ok' ? `<button type="button" class="pill-btn small light" data-rok="${r.id}">✓</button>` : ''}${r.status !== 'no' ? `<button type="button" class="pill-btn small light" data-rno="${r.id}">✕</button>` : ''}<button type="button" class="pill-btn small light" data-rdel="${r.id}">🗑</button></span>` : ''}</div>`).join('')}</div>` : ''}
+    ${admin && rows.length ? payBar(t, rows) : ''}
     ${admin && notIn.length ? `<button type="button" class="pill-btn brand" id="rgImport" style="margin-top:10px"><span class="dot"></span>➕ Masukkan ${notIn.length} yang disahkan ke senarai</button>` : ''}
     ${shareRow(t)}
   </div>`;
@@ -1509,26 +1576,39 @@ function wireReg(t) {
   wireShare(t);
   const $ = id => document.getElementById(id);
   if ($('rgLogin')) $('rgLogin').onclick = async () => { try { await cloud.signInGoogle(); toast('Berjaya log masuk'); render(); } catch (e) { toast('Log masuk gagal: ' + (e.code || e.message)); } };
-  if ($('rgEdit')) $('rgEdit').onclick = () => { $('regForm').hidden = false; };
-  if ($('rgCancel')) $('rgCancel').onclick = async () => { if (!confirm('Batalkan pendaftaran anda?')) return; try { await cloud.unregister(t.id); toast('Pendaftaran dibatalkan'); } catch (e) { toast('Gagal: ' + (e.code || e.message)); } };
+  $app.querySelectorAll('[data-rgedit]').forEach(b => (b.onclick = () => { _rgEdit = b.dataset.rgedit; render(); setTimeout(() => { const f = $('regForm'); if (f) f.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50); }));
+  if ($('rgBack')) $('rgBack').onclick = () => { _rgEdit = null; render(); };
+  $app.querySelectorAll('[data-rgcancel]').forEach(b => (b.onclick = async () => { if (!confirm('Batalkan pendaftaran ini?')) return; try { await cloud.unregister(t.id, b.dataset.rgcancel); toast('Pendaftaran dibatalkan'); } catch (e) { toast('Gagal: ' + (e.code || e.message)); } }));
   if ($('rgSave')) $('rgSave').onclick = async () => {
     const name = $('rgName').value.trim();
     if (!name) return toast('Isi nama paparan');
     if ($('rgLv') && !$('rgLv').value) return toast('Pilih tahap anda');
     if ($('rgPartner') && !$('rgPartner').value.trim()) return toast('Isi nama pasangan');
+    if ($('rgCond') && !$('rgCond').checked) return toast('Sila sahkan anda memenuhi syarat penyertaan');
     $('rgSave').disabled = true;
     try {
-      const isNew = !(cloud.state.regs[t.id] || []).some(r => r.uid === cloud.myUid());
-      await cloud.register(t.id, { name, unit: $('rgUnit').value.trim(), level: $('rgLv') ? $('rgLv').value : '', partner: $('rgPartner') ? $('rgPartner').value.trim() : '', note: $('rgNote').value.trim() });
+      const editId = _rgEdit && _rgEdit !== 'new' ? _rgEdit : '', isNew = !editId;
+      const firstReg = !(cloud.state.regs[t.id] || []).some(r => r.uid === cloud.myUid());
+      const data = { name, unit: $('rgUnit').value.trim(), level: $('rgLv') ? $('rgLv').value : '', partner: $('rgPartner') ? $('rgPartner').value.trim() : '', note: $('rgNote').value.trim() };
+      await cloud.register(t.id, data, editId);
+      if (firstReg || (editId && editId === cloud.myUid())) ls.set('pingpong:profile', JSON.stringify({ name: data.name, unit: data.unit, level: data.level }));
+      ls.set('pingpong:myRegs', JSON.stringify([...new Set([t.id, ...myRegTids()])].slice(0, 30)));
+      _rgEdit = null;
       if (isNew) PUSH.send(['adm:' + t.id], '🏓 Pendaftaran baharu', `${name} · ${t.name}`, `#/t/${t.id}/pemain`, 'reg-' + t.id);
       pushSync();
       ls.set('pingpong:regd:' + t.id, '1'); toast('✅ Pendaftaran dihantar. Menunggu pengesahan penganjur.', 3500);
     } catch (e) { $('rgSave').disabled = false; toast(e.code === 'permission-denied' ? 'Pendaftaran sudah ditutup' : 'Gagal: ' + (e.code || e.message), 4000); }
   };
   $app.querySelectorAll('[data-rok],[data-rno]').forEach(b => (b.onclick = async () => {
-    const uid = b.dataset.rok || b.dataset.rno, ok = !!b.dataset.rok;
-    try { await cloud.setRegStatus(t.id, uid, ok ? 'ok' : 'no'); PUSH.send([`reg:${t.id}:${uid}`], ok ? '✅ Pendaftaran disahkan' : '✕ Pendaftaran ditolak', t.name, `#/daftar/${t.id}`, 'myreg-' + t.id); } catch (e) { toast('Gagal: ' + (e.code || e.message)); }
+    const rid = b.dataset.rok || b.dataset.rno, ok = !!b.dataset.rok, rg = (cloud.state.regs[t.id] || []).find(x => x.id === rid), uid = rg ? rg.uid : rid;
+    try { await cloud.setRegStatus(t.id, rid, ok ? 'ok' : 'no'); PUSH.send([`reg:${t.id}:${uid}`], ok ? '✅ Pendaftaran disahkan' : '✕ Pendaftaran ditolak', t.name, `#/daftar/${t.id}`, 'myreg-' + t.id); } catch (e) { toast('Gagal: ' + (e.code || e.message)); }
   }));
+  $app.querySelectorAll('[data-pay]').forEach(b => (b.onclick = () => { t.paid = { ...(t.paid || {}) }; const k = b.dataset.pay; if (t.paid[k]) delete t.paid[k]; else t.paid[k] = 1; save(t); render(); }));
+  if ($('payCopy')) $('payCopy').onclick = async () => {
+    const list = rosterOf(t).filter(r => r.status !== 'no' && !isPaid(t, r)), amt = feeAmt(t);
+    const txt = `💰 *Peringatan yuran · ${t.name}*\n${amt ? `Yuran: RM${amt}\n` : t.regFee ? `Yuran: ${t.regFee}\n` : ''}\nBelum bayar:\n${list.map((r, i) => `${i + 1}. ${r.partner ? r.name + ' & ' + r.partner : r.name}`).join('\n')}`;
+    try { await navigator.clipboard.writeText(txt); toast('Senarai disalin. Tampal dalam WhatsApp.'); } catch { prompt('Salin:', txt); }
+  };
   $app.querySelectorAll('[data-rdel]').forEach(b => (b.onclick = async () => { if (confirm('Padam pendaftaran ini?')) try { await cloud.unregister(t.id, b.dataset.rdel); } catch (e) { toast('Gagal: ' + (e.code || e.message)); } }));
   if ($('rgImport')) $('rgImport').onclick = () => {
     const regs = (cloud.state.regs[t.id] || []).filter(r => r.status === 'ok' && !personsOf(t).some(n => n.toLowerCase() === r.name.toLowerCase()));
@@ -1542,27 +1622,43 @@ function wireReg(t) {
     save(t); toast(`${regs.length} peserta dimasukkan ke senarai${E.usesDraw(t) ? '. Tekan Undi bila senarai lengkap.' : ''}`, 4000); render();
   };
 }
+// Profil mini (disimpan di telefon ini sahaja): isi borang secara automatik
+const profile = () => { try { return JSON.parse(ls.get('pingpong:profile') || '{}'); } catch { return {}; } };
+const myRegTids = () => { try { return JSON.parse(ls.get('pingpong:myRegs') || '[]'); } catch { return []; } };
+let _rgEdit = null;
+function condTags(t) {
+  const S = E.HC_SCHEMES[t.hcMode], lv = (t.regLevels || []).length && S ? S.levels.filter(l => t.regLevels.includes(l[0])).map(l => l[1]) : [];
+  return `${t.regCond ? `<span class="role-chip cond">⚠️ ${esc(t.regCond)}</span>` : ''}${lv.length ? `<span class="role-chip cond">🎚️ ${esc(lv.join(', '))} sahaja</span>` : ''}`;
+}
 // ---------- Halaman pendaftaran berasingan: #/daftar/<id> ----------
 function viewDaftar(t) {
   const c = clubOf(t), f = E.SET_FORMATS, S = E.HC_SCHEMES[t.hcMode];
   if (!store.isCloud(t.id)) { $app.innerHTML = '<div class="card"><p class="muted">Pendaftaran hanya untuk pertandingan di awan.</p></div>'; return; }
   cloud.watchRegistrations(t.id);
-  const uid = cloud.myUid(), mine = (cloud.state.regs[t.id] || []).find(r => r.uid === uid), regs = rosterOf(t), ok = regs.filter(r => r.status === 'ok');
+  const uid = cloud.myUid(), mineList = (cloud.state.regs[t.id] || []).filter(r => uid && r.uid === uid), regs = rosterOf(t), ok = regs.filter(r => r.status === 'ok');
+  const mine = mineList[0] || null;
   const lvName = x => { const L = E.levelInfo(t, x); return L ? L[1] : ''; };
-  const r = mine || null, last = ls.get('pingpong:myname') || '';
-  const form = `<div class="reg-form" id="regForm" ${mine ? 'hidden' : ''}>
-      <label>Nama</label><input id="rgName" maxlength="40" value="${esc(r ? r.name : last)}" placeholder="nama seperti dikenali" autocomplete="name">
-      <label>Unit / Jabatan / Kumpulan (pilihan)</label><input id="rgUnit" maxlength="40" value="${esc(r ? r.unit : '')}">
-      ${S ? `<label>Tahap</label><select id="rgLv">${opt({ '': '— pilih tahap —', ...Object.fromEntries(S.levels.map(l => [l[0], l[1]])) }, r ? r.level : '')}</select>` : ''}
+  if (_rgEdit && _rgEdit !== 'new' && !mineList.some(x => x.id === _rgEdit)) _rgEdit = null;
+  const r = _rgEdit && _rgEdit !== 'new' ? mineList.find(x => x.id === _rgEdit) : null;
+  const prof = profile(), first = !mineList.length;
+  const lvOpts = S ? S.levels.filter(l => !(t.regLevels || []).length || t.regLevels.includes(l[0]) || (r && r.level === l[0])) : [];
+  const form = `<div class="reg-form" id="regForm">
+      ${!first && !r ? '<div class="section-title" style="margin-top:0">➕ Daftar orang lain</div>' : ''}
+      <label>Nama</label><input id="rgName" maxlength="40" value="${esc(r ? r.name : first ? prof.name || '' : '')}" placeholder="nama seperti dikenali" autocomplete="${first ? 'name' : 'off'}">
+      <label>Unit / Jabatan / Kumpulan (pilihan)</label><input id="rgUnit" maxlength="40" value="${esc(r ? r.unit : first ? prof.unit || '' : '')}">
+      ${S ? `<label>Tahap</label><select id="rgLv">${opt({ '': '— pilih tahap —', ...Object.fromEntries(lvOpts.map(l => [l[0], l[1]])) }, r ? r.level : first ? prof.level || '' : '')}</select>` : ''}
       ${t.entryMode === 'double' ? `<label>Nama pasangan</label><input id="rgPartner" maxlength="40" value="${esc(r ? r.partner : '')}">` : ''}
       <label>Catatan (pilihan)</label><input id="rgNote" maxlength="140" value="${esc(r ? r.note : '')}" placeholder="cth. no. telefon / saiz baju">
+      ${t.regCond ? `<label class="check" style="margin-top:10px"><input type="checkbox" id="rgCond" ${r ? 'checked' : ''}> <span>Saya memenuhi syarat: <b>${esc(t.regCond)}</b></span></label>` : ''}
       <button type="button" class="pill-btn orange big" id="rgSave" style="margin-top:14px;width:100%"><span class="dot"></span>${r ? 'Simpan perubahan' : 'Daftar sekarang'}</button>
+      ${_rgEdit ? '<button type="button" class="pill-btn light small" id="rgBack" style="margin-top:8px">Batal</button>' : ''}
       <p class="muted small" style="margin-bottom:0">Tiada log masuk diperlukan. Pendaftaran disimpan untuk telefon ini, jadi anda boleh mengubah atau membatalkannya dari telefon yang sama.</p></div>`;
   const info = [['📅', fmtDate(t.date)], ['⏰', t.startTime ? E.sessionTime(t, 1) : ''], ['📍', t.venue === 'X' ? t.venueName : E.VENUES[t.venue]],
     ['🏓', `${E.isTeam(t) ? E.teamWord(t) + (t.tieFormat === 'SSD' ? ' (Single + Single + Double)' : '') : ENTRY[t.entryMode]} · ${f[t.groupFormat].label}`],
     ['⚖️', t.hcMode === 'manual' ? 'Handicap' : S ? `Handicap ${S.name}` : ''], ['💰', t.regFee ? 'Yuran: ' + t.regFee : '']].filter(x => x[1]);
   const prizes = (t.prizes || '').split('\n').map(x => x.trim()).filter(Boolean);
-  const active = regs.length, full = t.regMax && active >= t.regMax && !mine;
+  const active = regs.length, full = t.regMax && active >= t.regMax && !r;
+  const showForm = t.regOpen && !full && (first || _rgEdit);
   const own = posterOf(t);
   $app.innerHTML = `
     ${own ? `<img src="${own}" alt="Poster ${esc(t.name)}" class="d-poster" id="dPoster">` : ''}
@@ -1572,13 +1668,15 @@ function viewDaftar(t) {
       ${attachLinks(t)}
       ${prizes.length ? `<div class="d-prize">${prizes.map((p, i) => `<div><span>${['🥇', '🥈', '🥉'][i] || '🏅'}</span>${esc(p)}</div>`).join('')}</div>` : ''}
       ${t.regNote ? `<p class="d-note">${esc(t.regNote)}</p>` : ''}
-      <div class="row" style="gap:6px;margin-top:8px"><span class="role-chip">${regLive(t) ? '🟢 Pendaftaran dibuka' : t.regOpen ? '🔒 Penuh' : '🔒 Pendaftaran ditutup'}</span><span class="role-chip">${active}${t.regMax ? '/' + t.regMax : ''} peserta · ${ok.length} disahkan</span></div>
+      <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap"><span class="role-chip">${regLive(t) ? '🟢 Pendaftaran dibuka' : t.regOpen ? '🔒 Penuh' : '🔒 Pendaftaran ditutup'}</span><span class="role-chip">${active}${t.regMax ? '/' + t.regMax : ''} peserta · ${ok.length} disahkan</span>${condTags(t)}</div>
     </div>
     <div class="card reg-card">
-      <div class="section-title" style="margin-top:0">📝 ${mine ? 'Pendaftaran anda' : 'Daftar penyertaan'}</div>
-      ${mine ? `<div class="notice">✅ Anda telah mendaftar sebagai <b>${esc(mine.name)}</b>${mine.level ? ` (${esc(lvName(mine.level))})` : ''}${mine.partner ? ` &amp; ${esc(mine.partner)}` : ''}<br>Status: <b>${REG_ST[mine.status][0]} ${mine.status === 'pending' ? 'Menunggu pengesahan penganjur' : REG_ST[mine.status][1]}</b>
-        ${t.regOpen ? '<div class="row" style="margin-top:8px;gap:6px"><button type="button" class="pill-btn light small" id="rgEdit">Ubah</button><button type="button" class="pill-btn light small" id="rgCancel">Batal pendaftaran</button>' + (mine.status === 'pending' ? notifBtn('🔔 Beritahu bila disahkan') : '') + '</div>' : ''}</div>` : ''}
-      ${full ? '<p class="notice">Maaf, tempat sudah penuh.</p>' : t.regOpen ? form : mine ? '' : '<p class="muted">Pendaftaran telah ditutup.</p>'}
+      <div class="section-title" style="margin-top:0">📝 ${mineList.length ? 'Pendaftaran dari telefon ini' : 'Daftar penyertaan'}</div>
+      ${mineList.length ? `<div class="my-regs">${mineList.map(x => `<div class="notice small my-reg"><div><b>${esc(x.name)}</b>${x.partner ? ` &amp; ${esc(x.partner)}` : ''}${x.level ? ` <span class="muted">(${esc(lvName(x.level))})</span>` : ''}<br>${REG_ST[x.status][0]} ${x.status === 'pending' ? 'Menunggu pengesahan penganjur' : REG_ST[x.status][1]}</div>
+        ${t.regOpen ? `<div class="row" style="gap:6px"><button type="button" class="pill-btn light small" data-rgedit="${x.id}">Ubah</button><button type="button" class="pill-btn light small" data-rgcancel="${x.id}">Batal</button></div>` : ''}</div>`).join('')}
+        ${mineList.some(x => x.status === 'pending') ? notifBtn('🔔 Beritahu bila disahkan') : ''}</div>` : ''}
+      ${showForm ? form : full && !mineList.length ? '<p class="notice">Maaf, tempat sudah penuh.</p>' : !t.regOpen && !mineList.length ? '<p class="muted">Pendaftaran telah ditutup.</p>' : ''}
+      ${t.regOpen && !full && mineList.length && !_rgEdit && mineList.length < 10 ? '<button type="button" class="pill-btn light" data-rgedit="new" style="margin-top:10px">➕ Daftar orang lain (keluarga / rakan)</button>' : ''}
     </div>
     <div class="card"><div class="section-title" style="margin-top:0">👥 Peserta (${regs.length}${t.regMax ? '/' + t.regMax : ''})</div>
       ${regs.length ? `<div class="reg-list">${regs.map((x, i) => `<div class="reg-row ${x.status}"><span class="no">${i + 1}</span><span class="nm"><b>${esc(x.name)}</b>${x.partner ? ` &amp; ${esc(x.partner)}` : ''}
@@ -1588,7 +1686,6 @@ function viewDaftar(t) {
     </div>
     <p class="center"><a class="muted" href="#/t/${t.id}">Lihat halaman pertandingan →</a></p>`;
   wireReg(t);
-  const nm = document.getElementById('rgName'); if (nm) nm.addEventListener('change', () => ls.set('pingpong:myname', nm.value.trim()));
 }
 function viewPemain(t) {
   viewSetupCore(t, 'pemain');
