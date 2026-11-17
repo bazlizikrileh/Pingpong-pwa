@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.9.4';
+const VERSION = '3.9.5';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1929,12 +1929,20 @@ function liveBadge(t, m, cls = 'lv-sc') {
 function courtSide(t, m, k, x) {
   const id = k ? m.b : m.a;
   if (!x) return `<div>${esc(E.pname(t, id))}</div>`;
-  const won = (x.rs[x.ri] || []).filter(s => (k ? s[1] > s[0] : s[0] > s[1])).length;
+  const won = (x.rs[x.ri] || []).filter(s => (k ? s[1] > s[0] : s[0] > s[1])).length, fin = liveDone(t, m, x);
+  if (fin) { // semua set tamat tetapi belum disimpan: papar jumlah set (atau markah pasukan) sebagai skor besar
+    const r = E.evaluateMatch(t, { ...m, rubbers: x.rs.map(sets => ({ sets })) }), big = E.isTeam(t) ? (t.tieFormat === 'SSD' ? [r.ma, r.mb] : [r.ra, r.rb]) : [r.sa, r.sb];
+    const win = r.winner === (k ? m.b : m.a);
+    return `<div class="cs"><span class="cs-nm">${esc(E.pname(t, id))}</span><span class="cs-pt">${big[k]}</span><span class="cs-sets">${win ? '🏆 <small>MENANG</small>' : '&nbsp;'}</span></div>`;
+  }
   return `<div class="cs"><span class="cs-nm">${esc(E.pname(t, id))}</span><span class="cs-pt">${x.cur[k]}</span><span class="cs-sets" title="Set dimenangi">${won ? '●'.repeat(won) + ` <small>${won} set</small>` : '&nbsp;'}</span></div>`;
 }
 // "SET 2 · 1–0": set yang sedang dimainkan + set dimenangi setiap pihak
-function setTag(t, x) {
-  const g = x.rs[x.ri] || [], wa = g.filter(s => s[0] > s[1]).length, wb = g.filter(s => s[1] > s[0]).length;
+// Semua perlawanan/set dalam pertemuan sudah tamat (skor langsung belum disimpan)
+const liveDone = (t, m, x) => !!(m && m.rubbers.length && m.rubbers.every((_, i) => lsRubberDone(t, m, x.rs[i] || [])));
+function setTag(t, x, m) {
+  if (liveDone(t, m, x)) return `🏁 TAMAT · ${E.isTeam(t) ? 'markah' : 'set'} · menunggu disimpan`;
+  const g = x.rs[x.ri] || [];
   return `${E.isTeam(t) ? esc(E.rubberLabel(t, x.ri)) + ' · ' : ''}SET ${g.length + 1}`;
 }
 const scoreMode = t => canEdit(t) || !!ls.get('pingpong:scorer:' + t.id) || ls.get('pingpong:scoremode:' + t.id) === '1';
@@ -2129,7 +2137,7 @@ function viewLive(t) {
   const tableCard = ({ k }) => {
     const m = occ[k], mine = m && me && (m.a === me || m.b === me || m.ump === me), u = m ? LV.umpireOf(t, m, U) : '';
     const x = m ? liveOf(t, m) : null, iUmp = m && me && u === me;
-    return `<div class="tt${mine ? ' me' : ''}${m ? '' : ' free'}${x ? ' on' : ''}"><div class="tt-h"><b>MEJA ${k}</b>${m ? `<small>${x ? `<span class="lv-dot"></span> <b class="lv-set">${setTag(t, x)}</b>${liveAgo(x)} · ` : ''}${esc(E.matchCode(m) || '')} · ${esc(E.stageLabel(t, m))}</small>` : ''}</div>
+    return `<div class="tt${mine ? ' me' : ''}${m ? '' : ' free'}${x ? ' on' : ''}"><div class="tt-h"><b>MEJA ${k}</b>${m ? `<small>${x ? `<span class="lv-dot"></span> <b class="lv-set">${setTag(t, x, m)}</b>${liveAgo(x)} · ` : ''}${esc(E.matchCode(m) || '')} · ${esc(E.stageLabel(t, m))}</small>` : ''}</div>
       ${m ? `<a class="tt-top${x ? ' live' : ''}" href="#/t/${t.id}/m/${m.id}">${x && x.sw ? courtSide(t, m, 1, x) : courtSide(t, m, 0, x)}<div class="tt-net"></div>${x && x.sw ? courtSide(t, m, 0, x) : courtSide(t, m, 1, x)}</a>
         ${x && edit ? `<div class="lv-by2">🎯 Dijaga oleh <b>${esc(x.by || 'tanpa nama')}</b><button type="button" class="pill-btn small light" data-rel="${m.id}">🔓 Lepaskan</button></div>` : ''}
         ${u ? `<div class="tt-u">🟣 Pengadil: <b>${esc(E.pname(t, u))}</b></div>` : ''}
@@ -2197,7 +2205,7 @@ function tvSlideHtml(t, sl) {
       const m = occ[k], u = m ? LV.umpireOf(t, m, U) : '', x = m ? liveOf(t, m) : null;
       return `<div class="tv-tt ${m ? '' : 'free'}"><div class="tv-tno">MEJA ${k}</div>
         ${m ? `<div class="tv-court${x ? ' live' : ''}">${x && x.sw ? courtSide(t, m, 1, x) : courtSide(t, m, 0, x)}<i></i>${x && x.sw ? courtSide(t, m, 0, x) : courtSide(t, m, 1, x)}</div>
-          <div class="tv-sub">${x ? `<span class="lv-dot"></span> <b class="lv-set">${setTag(t, x)}</b> · ` : ''}${esc(E.stageLabel(t, m))}${u ? ` · 🟣 ${esc(E.pname(t, u))}` : ''}</div>` : '<div class="tv-court empty"><div>Kosong</div></div>'}
+          <div class="tv-sub">${x ? `<span class="lv-dot"></span> <b class="lv-set">${setTag(t, x, m)}</b> · ` : ''}${esc(E.stageLabel(t, m))}${u ? ` · 🟣 ${esc(E.pname(t, u))}` : ''}</div>` : '<div class="tv-court empty"><div>Kosong</div></div>'}
         ${nx[k] ? `<div class="tv-next">⏭️ ${esc(E.pname(t, nx[k].a))} lwn ${esc(E.pname(t, nx[k].b))}</div>` : ''}</div>`;
     }).join('')}</div>`;
   }
