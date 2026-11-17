@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.7.0';
+const VERSION = '3.7.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1365,8 +1365,9 @@ function regPosterData(t) {
     format: `${E.isTeam(t) ? E.teamWord(t) + (t.tieFormat === 'SSD' ? ' (S + S + D)' : ' (S + D)') : ENTRY[t.entryMode]} · ${f.label.replace(/ \(.*\)/, '')}`,
     hc: t.hcMode === 'manual' ? 'Handicap' : S ? `Handicap ${S.name}` : '', fee: t.regFee || '',
     prizes: (t.prizes || '').split('\n').map(x => x.trim()).filter(Boolean), note: t.regNote || '',
-    slots: t.regMax ? (live ? `👥 Tinggal ${t.regMax - regs.length} daripada ${t.regMax} tempat` : `👥 ${regs.length} peserta`) : regs.length ? `👥 ${regs.length} sudah mendaftar` : '',
-    countdown: days != null && days > 0 ? `⏳ ${days === 1 ? 'Esok!' : days + ' hari lagi'}` : '',
+    // poster dikongsi sekali sahaja: tunjuk had sahaja, bukan bilangan semasa/baki atau kiraan hari (cepat lapuk)
+    slots: t.regMax ? `👥 Terhad ${t.regMax} penyertaan` : t.regMaxText ? `👥 Had: ${t.regMaxText}` : '',
+    countdown: '',
     url: shareUrl(t), status: live ? '' : full ? 'TEMPAT PENUH' : 'JOM SAKSIKAN', clubShort: c.short || '',
     dateParts: d ? { day: String(d.getDate()), mon: ['JAN', 'FEB', 'MAC', 'APR', 'MEI', 'JUN', 'JUL', 'OGO', 'SEP', 'OKT', 'NOV', 'DIS'][d.getMonth()], monN: String(d.getMonth() + 1).padStart(2, '0'), year: String(d.getFullYear()), wd: HARI[d.getDay()] } : null,
   };
