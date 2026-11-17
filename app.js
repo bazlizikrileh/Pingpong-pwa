@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.9.3';
+const VERSION = '3.9.4';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1912,12 +1912,13 @@ async function shareResultCard(t, m, treat) {
 // ---------- Skor langsung (setiap meja) ----------
 // Penjaga skor (penganjur, pengesah, atau sesiapa dengan PIN acara) tekan separuh skrin untuk tambah mata.
 // Skor disegerakkan ke awan; penonton nampak di tab Langsung dan Mod TV. Bila tamat → simpan / hantar untuk pengesahan.
-const LS_FRESH = 45 * 60e3, _lsHist = {};
+const LS_STALE = 10 * 60e3, LS_FRESH = 12 * 3600e3, _lsHist = {};   // skor langsung kekal dipapar sehingga perlawanan tamat (had 12 jam)
 let _lsTimer = null, _lsOnLive = null;
 function liveOf(t, m) {
   const x = ((cloud.state.live || {})[t.id] || {})[m.id];
-  return x && Date.now() - x.at < LS_FRESH ? x : null;
+  return x && m.status !== 'done' && Date.now() - x.at < LS_FRESH ? x : null;
 }
+const liveAgo = x => { const mi = Math.floor((Date.now() - x.at) / 60e3); return Date.now() - x.at > LS_STALE ? ` <span class="lv-ago">· ⏸️ ${mi < 60 ? mi + ' min' : Math.floor(mi / 60) + ' jam'} lalu</span>` : ''; };
 function liveBadge(t, m, cls = 'lv-sc') {
   const x = liveOf(t, m); if (!x) return '';
   const g = x.rs[x.ri] || [], wa = g.filter(s => s[0] > s[1]).length, wb = g.filter(s => s[1] > s[0]).length;
@@ -2128,7 +2129,7 @@ function viewLive(t) {
   const tableCard = ({ k }) => {
     const m = occ[k], mine = m && me && (m.a === me || m.b === me || m.ump === me), u = m ? LV.umpireOf(t, m, U) : '';
     const x = m ? liveOf(t, m) : null, iUmp = m && me && u === me;
-    return `<div class="tt${mine ? ' me' : ''}${m ? '' : ' free'}${x ? ' on' : ''}"><div class="tt-h"><b>MEJA ${k}</b>${m ? `<small>${x ? `<span class="lv-dot"></span> <b class="lv-set">${setTag(t, x)}</b> · ` : ''}${esc(E.matchCode(m) || '')} · ${esc(E.stageLabel(t, m))}</small>` : ''}</div>
+    return `<div class="tt${mine ? ' me' : ''}${m ? '' : ' free'}${x ? ' on' : ''}"><div class="tt-h"><b>MEJA ${k}</b>${m ? `<small>${x ? `<span class="lv-dot"></span> <b class="lv-set">${setTag(t, x)}</b>${liveAgo(x)} · ` : ''}${esc(E.matchCode(m) || '')} · ${esc(E.stageLabel(t, m))}</small>` : ''}</div>
       ${m ? `<a class="tt-top${x ? ' live' : ''}" href="#/t/${t.id}/m/${m.id}">${x && x.sw ? courtSide(t, m, 1, x) : courtSide(t, m, 0, x)}<div class="tt-net"></div>${x && x.sw ? courtSide(t, m, 0, x) : courtSide(t, m, 1, x)}</a>
         ${x && edit ? `<div class="lv-by2">🎯 Dijaga oleh <b>${esc(x.by || 'tanpa nama')}</b><button type="button" class="pill-btn small light" data-rel="${m.id}">🔓 Lepaskan</button></div>` : ''}
         ${u ? `<div class="tt-u">🟣 Pengadil: <b>${esc(E.pname(t, u))}</b></div>` : ''}
