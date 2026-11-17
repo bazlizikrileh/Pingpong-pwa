@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.9.6';
+const VERSION = '3.10.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -491,6 +491,7 @@ function settingsFormAll(t, locked) {
       <div><label data-label="gf">Format kumpulan</label><select name="groupFormat">${opt(setOpts, t.groupFormat)}</select></div>
       <div data-show="ko"><label>Format kalah mati</label><select name="koFormat">${opt(setOpts, t.koFormat)}</select></div>
     </div>
+    <label class="check" style="margin-top:10px"><input type="checkbox" name="liveAuto" ${t.liveAuto !== false ? 'checked' : ''}> <span>🎯 Jaga skor: <b>simpan / hantar automatik</b> bila perlawanan tamat<br><small class="muted">Jika tidak ditanda, penjaga skor perlu menekan butang Simpan / Hantar sendiri. Skor boleh sentiasa diisi manual di tab 📝 Keputusan.</small></span></label>
     <label>Handicap</label><select name="hcMode">${opt({ off: 'Tiada', manual: 'Manual (0–5)', ksas: 'Tahap KSAS dalaman', kroni: 'Tahap Kroni Shell' }, t.hcMode || (t.handicap ? 'manual' : 'off'))}</select>
 
     <div data-show="groups">
@@ -567,7 +568,7 @@ function readSettings(form, t) {
   t.sessionMin = Math.max(5, Number(v('sessionMin')) || 30);
   t.hcMode = v('hcMode'); t.handicap = t.hcMode !== 'off';
   t.tieRule = v('tieRule') || 'draw';
-  t.groupFormat = v('groupFormat'); t.koFormat = v('koFormat');
+  t.groupFormat = v('groupFormat'); t.koFormat = v('koFormat'); if (form.liveAuto) t.liveAuto = form.liveAuto.checked;
   t.koMode = v('koMode'); t.pool = v('pool'); t.poolMode = v('poolMode');
   t.venue = v('venue'); t.numTables = Number(v('numTables')) || 0; t.venueName = v('venueName').trim();
   t.waEnabled = form.waEnabled.checked;
@@ -898,7 +899,20 @@ function wirePending(t, root = $app) {
 
 // ---------- Jadual ----------
 let jsel = null, jses = 'ALL', jst = 'belum';
+// Penerangan format set yang mudah difahami
+function fmtText(f) {
+  if (!f) return '';
+  return f.full ? `<b>${f.bo} set</b> · semua ${f.bo === 2 ? 'kedua-dua' : f.bo} set dimainkan${f.bo % 2 === 0 ? ' (boleh seri)' : ''}`
+    : `<b>Terbaik ${f.bo} set</b> · menang ${Math.ceil(f.bo / 2)} set dahulu`;
+}
+function liveLine(t, m) {
+  const x = liveOf(t, m); if (!x) return '';
+  const parts = m.rubbers.map((_, i) => (x.rs[i] || []).map((g, k) => `S${k + 1} ${g[0]}–${g[1]}`).join(' · ')).map((p, i) => (E.isTeam(t) && p ? `${esc(E.rubberLabel(t, i))}: ` : '') + p).filter(Boolean);
+  const fin = liveDone(t, m, x);
+  return `<div class="mr-live"><span class="lv-dot"></span> ${fin ? '🏁 Tamat di Jaga skor · menunggu disimpan' : 'Sedang dijaga skor'}${parts.length ? ' · ' + parts.join(' · ') : ''}${fin ? '' : ` · <b>(${x.cur[0]}–${x.cur[1]})</b>`}</div>`;
+}
 function viewResults(t) {
+  if (store.isCloud(t.id)) cloud.watchLive(t.id);
   const playable = t.matches.filter(m => m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE' && m.status !== 'bye');
   const opts = [...t.groups.map(g => [g.name, t.format === 'rr' ? 'Liga' : `Kumpulan ${g.name}`]),
     ...(t.rounds.ko ? [['K', 'Kalah mati']] : []), ...(t.rounds.pool ? [['L', 'Pool kalah']] : []), ['ALL', 'Semua perlawanan']];
@@ -914,6 +928,7 @@ function viewResults(t) {
   let lastS = null;
   $app.innerHTML = `
     ${section('Keputusan', 'Skor Perlawanan')}
+    <div class="fmt-box">🏓 Format set: ${t.groups.length ? `${t.rounds.ko || t.format === 'group_ko' ? 'Kumpulan — ' : ''}${fmtText(E.fmtFor(t, 'group'))}` : ''}${t.format === 'group_ko' || t.rounds.ko ? `<br>Kalah mati — ${fmtText(E.fmtFor(t, 'ko'))}` : ''}<br><span class="muted small">Setiap set hingga 11 mata (beza 2).${E.isTeam(t) ? ' Format ini untuk setiap perlawanan dalam pertemuan pasukan.' : ''}</span></div>
     ${store.isLocal(t.id) && t.matches.length ? testBar(t) : ''}
     <div class="card soft noprint">
       <div class="grid2">
@@ -935,7 +950,7 @@ function viewResults(t) {
     ${t.groups.some(g => g.name === jsel) ? `<details class="card fold" ${ls.get('pingpong:mx:' + jsel) === '0' ? '' : 'open'} id="mxBox"><summary>🔢 Matriks keputusan · ${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(jsel)}</summary>${matrixHtml(t, t.groups.find(g => g.name === jsel))}</details>` : ''}
     <div class="card">${shown.length ? shown.map(m => {
       const head = m.session !== lastS ? `<div class="sess">Sesi ${m.session} · ${E.sessionTime(t, m.session)}</div>` : '';
-      lastS = m.session; return head + matchRow(t, m);
+      lastS = m.session; return head + matchRow(t, m) + liveLine(t, m);
     }).join('') : '<div class="empty">Tiada perlawanan.</div>'}</div>
     ${t.format === 'group_ko' && E.groupStageComplete(t) && !t.rounds.ko && canAdmin(t) ? `<div class="notice">Semua perlawanan kumpulan selesai. <a href="#/t/${t.id}/kalahmati"><b>Jana kalah mati →</b></a></div>` : ''}`;
   document.getElementById('jsel').onchange = e => { jsel = e.target.value; viewResults(t); };
@@ -983,12 +998,12 @@ function viewMatch(t, mid) {
     if (h.missing) return '<div class="hc-r warn">⚠️ Ada pemain belum ditetapkan tahap handicap (tab 👥 ' + esc(UNIT(t)) + ').</div>';
     if (!h.n) return '<div class="hc-r">Handicap: sama (tiada mata mula)</div>';
     const who = team ? (h.to === m.a ? A.name : B.name) + (h.kind === 'D' ? ' (regu)' : '') : E.pname(t, h.to);
-    return `<div class="hc-r">Handicap: <b>${esc(who)}</b> mula <b>${h.n}-0</b> setiap game${h.sa != null ? ` <span class="muted">(nilai ${h.sa} lwn ${h.sb})</span>` : ''}</div>`;
+    return `<div class="hc-r">Handicap: <b>${esc(who)}</b> mula <b>${h.n}-0</b> setiap set${h.sa != null ? ` <span class="muted">(nilai ${h.sa} lwn ${h.sb})</span>` : ''}</div>`;
   };
   const rubberHtml = (r, i) => {
     const rows = Array.from({ length: f.bo }, (_, k) => (src[i] || [])[k] || ['', '']);
     return `<div class="rubber">${team ? `<h3>${rubTitle(i)}</h3>${lineupHtml(i)}<div id="hc${i}">${hcText(E.handicapInfo(t, m.a, m.b, i, L), L)}</div>` : ''}
-      <div class="sets">${rows.map((s, k) => `<div class="set"><span class="muted small">G${k + 1}</span>
+      <div class="sets">${rows.map((s, k) => `<div class="set"><span class="muted small">Set ${k + 1}</span>
         <input inputmode="numeric" data-r="${i}" data-i="${k}" data-s="0" value="${s[0]}">–<input inputmode="numeric" data-r="${i}" data-i="${k}" data-s="1" value="${s[1]}"></div>`).join('')}</div></div>`;
   };
   const h = E.handicapInfo(t, m.a, m.b);
@@ -997,6 +1012,8 @@ function viewMatch(t, mid) {
     <div class="eyebrow">${esc(E.matchCode(m))} · ${esc(E.stageLabel(t, m))}</div>
     <h2 class="h-big" style="font-size:24px">${esc(A.name)} <span class="muted" style="font-weight:500">lwn</span> ${esc(B.name)}</h2>
     <div class="rule"></div>
+    <div class="fmt-box">🏓 ${fmtText(f)}${team ? ' <span class="muted small">(setiap perlawanan)</span>' : ''}</div>
+    ${liveLine(t, m)}
     ${m.status === 'done' ? `<div class="row noprint" style="margin:-4px 0 10px"><button type="button" class="pill-btn orange small" data-rcard="${t.id}|${m.id}"><span class="dot"></span>📸 Kongsi kad keputusan</button></div>` : ''}
     <div class="card">
       <div class="muted small">${m.session ? `Sesi ${m.session} · ${E.sessionTime(t, m.session)} · ` : ''}${esc(f.label)}</div>
@@ -1919,7 +1936,7 @@ async function shareResultCard(t, m, treat) {
 // Penjaga skor (penganjur, pengesah, atau sesiapa dengan PIN acara) tekan separuh skrin untuk tambah mata.
 // Skor disegerakkan ke awan; penonton nampak di tab Langsung dan Mod TV. Bila tamat → simpan / hantar untuk pengesahan.
 const LS_STALE = 10 * 60e3, LS_FRESH = 12 * 3600e3, _lsHist = {};   // skor langsung kekal dipapar sehingga perlawanan tamat (had 12 jam)
-let _lsTimer = null, _lsOnLive = null;
+let _lsTimer = null, _lsOnLive = null, _lsAuto = null; const _lsAutoOff = {};
 function liveOf(t, m) {
   const x = ((cloud.state.live || {})[t.id] || {})[m.id];
   return x && m.status !== 'done' && Date.now() - x.at < LS_FRESH ? x : null;
@@ -2081,7 +2098,8 @@ function viewLiveScore(t, mid) {
       ${h && h.n && !h.pending && !h.missing ? `<p class="hc-r">Handicap: <b>${esc(E.pname(t, h.to))}</b> mula ${h.n}-0 setiap set</p>` : h && (h.pending || h.missing) ? '<p class="hc-r warn">Handicap belum dapat dikira (pemain/tahap belum ditetapkan). Mula dari 0-0.</p>' : ''}
       ${done ? `<div class="card sb-end"><div class="section-title" style="margin-top:0">🏁 Perlawanan tamat</div>
         <p>${r && r.winner ? `Pemenang: <b>${esc(E.pname(t, r.winner))}</b>` : r && r.draw ? '<b>Seri</b>' : 'Keputusan perlu ditentukan penganjur'}</p>
-        <button class="pill-btn ${edit ? 'brand' : 'orange'}" id="sbFin"><span class="dot"></span>${edit ? '✅ Simpan keputusan' : '📤 Hantar kepada penganjur'}</button></div>` : ''}
+        <button class="pill-btn ${edit ? 'brand' : 'orange'}" id="sbFin"><span class="dot"></span>${edit ? '✅ Simpan keputusan' : '📤 Hantar kepada penganjur'}</button>
+        ${t.liveAuto !== false && !_lsAutoOff[m.id] ? `<p class="small" id="sbAutoTx" style="margin:8px 0 0">⏳ ${edit ? 'Disimpan' : 'Dihantar'} automatik dalam <b id="sbCd">8</b> saat… <button type="button" class="pill-btn light small" id="sbAutoNo">Tunggu, saya semak dulu</button></p>` : ''}</div>` : ''}
       <div class="row" style="margin-top:12px;gap:8px"><button type="button" class="pill-btn light small" id="sbStop">⏹️ Henti skor langsung</button><button type="button" class="pill-btn light small" id="sbSnd">${ls.get('pingpong:lsSound') === '0' ? '🔇 Bunyi: tutup' : '🔊 Bunyi: buka'}</button><button type="button" class="pill-btn light small" id="sbVib">Getaran: ${VIB[vibMode()][0]}</button></div>
       <p class="muted small">Tekan nama pemain untuk tambah 1 mata. <b>−1</b> tolak satu mata pemain itu dalam set semasa. <b>↶ Undur</b> batalkan tindakan terakhir, termasuk set yang baru tamat. Set tamat sendiri pada 11 (beza 2). Skrin tidak akan padam semasa halaman ini dibuka. Penonton nampak skor ini di tab Langsung dan Mod TV.</p>`;
     $app.querySelectorAll('[data-pt]').forEach(b => (b.onclick = () => point(+b.dataset.pt, 1)));
@@ -2098,6 +2116,11 @@ function viewLiveScore(t, mid) {
       location.hash = `#/t/${t.id}/langsung`;
     };
     const fin = document.getElementById('sbFin');
+    clearInterval(_lsAuto);
+    if (fin && document.getElementById('sbCd')) {
+      let n = 8; _lsAuto = setInterval(() => { const cd = document.getElementById('sbCd'); if (!cd || !document.body.contains(fin)) return clearInterval(_lsAuto); n--; cd.textContent = n; if (n <= 0) { clearInterval(_lsAuto); fin.click(); } }, 1000);
+      document.getElementById('sbAutoNo').onclick = () => { clearInterval(_lsAuto); _lsAutoOff[m.id] = 1; draw(); };
+    }
     if (fin) fin.onclick = async () => {
       fin.disabled = true; clearTimeout(_lsTimer);
       const rs = S.rs.map(s => s.map(g => [...g]));
