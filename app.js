@@ -5,15 +5,15 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.10.1';
+const VERSION = '3.11.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const ENTRY = { single: 'Perseorangan', double: 'Regu (pasangan pilihan)', double_draw: 'Regu (pasangan diundi)', team: 'Trio / Kuartet (diundi)' };
-const ENTRY_SHORT = { single: 'Perseorangan', double: 'Regu', double_draw: 'Regu diundi', team: 'Trio' };
-const UNIT = t => t.entryMode === 'single' ? 'Pemain' : t.entryMode === 'team' ? E.teamWord(t) : t.entryMode === 'double_draw' ? 'Regu' : 'Pasangan';
+const ENTRY = { single: 'Perseorangan', double: 'Regu (pasangan pilihan)', double_draw: 'Regu (pasangan diundi)', mixer: 'Regu bertukar (pasangan diundi setiap pusingan)', team: 'Trio / Kuartet (diundi)' };
+const ENTRY_SHORT = { single: 'Perseorangan', double: 'Regu', double_draw: 'Regu diundi', mixer: 'Regu bertukar', team: 'Trio' };
+const UNIT = t => t.entryMode === 'single' || t.entryMode === 'mixer' ? 'Pemain' : t.entryMode === 'team' ? E.teamWord(t) : t.entryMode === 'double_draw' ? 'Regu' : 'Pasangan';
 const FORMAT = { group_ko: 'Kumpulan + kalah mati', rr: 'Liga (semua lawan semua)', ko: 'Kalah mati sahaja' };
 const POOL = { '0': 'Tiada pool kalah', '3': 'Tempat ke-3 sahaja', '34': 'Tempat ke-3 & ke-4' };
 const STAGE = { setup: 'Persediaan', group: 'Langsung', ko: 'Langsung', done: 'Tamat' };
@@ -51,7 +51,7 @@ function pushEvents(a, b) {
 function pushStatusDiff(a, b) {
   const key = (t, pid) => { const st = LV.myStatus(t, pid); return st && ['play', 'ump', 'ready'].includes(st.kind) ? `${st.kind}:${st.table}:${st.m.id}` : ''; };
   const TXT = { play: '🔴 Anda bermain SEKARANG', ump: '🟣 Anda pengadil SEKARANG', ready: '🟡 Sila bersedia: anda seterusnya' };
-  for (const p of b.participants) {
+  for (const p of (E.isMixer(b) ? b.individuals : b.participants)) {
     const kb = key(b, p.id);
     if (!kb || kb === key(a, p.id)) continue;
     const st = LV.myStatus(b, p.id);
@@ -305,7 +305,7 @@ function renderHead(t, page) {
   const play = t.matches.filter(m => m.status !== 'bye' && m.a !== 'BYE' && m.b !== 'BYE');
   const done = play.filter(m => m.status === 'done').length, pct = play.length ? Math.round(done / play.length * 100) : 0;
   const nT = E.numTablesOf(t), onT = LV.liveState(t).live.length;
-  const stg = t.stage === 'setup' ? 'Persediaan' : t.stage === 'done' ? 'Tamat' : t.stage === 'group' ? (t.format === 'rr' ? 'Liga' : 'Kumpulan') : 'Kalah mati';
+  const stg = t.stage === 'setup' ? 'Persediaan' : t.stage === 'done' ? 'Tamat' : t.stage === 'group' ? (E.isMixer(t) ? 'Regu bertukar' : t.format === 'rr' ? 'Liga' : 'Kumpulan') : 'Kalah mati';
   const sub = [c.short, fmtDate(t.date), E.isTeam(t) ? E.teamWord(t) + (t.tieFormat === 'SSD' ? ' S+S+D' : '') : ENTRY_SHORT[t.entryMode], (f.full ? `${f.bo} set` : `Best of ${f.bo}`)].filter(Boolean).map(esc).join(' · ');
   $head.innerHTML = `${store.isLocal(t.id) ? '<div class="hb-test">🧪 MOD UJIAN · telefon ini sahaja</div>' : ''}<div class="hb-top">${c.logos.length ? `<div class="hb-logos">${c.logos.map(src => `<img src="${esc(src)}" alt="">`).join('')}</div>` : ''}
       <div class="hb-tt"><h1>${esc(t.name)}</h1><p>${sub}<span class="hb-cl" title="${store.isCloud(t.id) ? 'Dikongsi di awan' : 'Disimpan di peranti ini sahaja'}">${store.isCloud(t.id) ? '☁️' : '📱'}</span></p></div></div>
@@ -317,7 +317,7 @@ function renderHead(t, page) {
     </div>${sponsorStrip(t)}`;
   const pw = UNIT(t) === 'Pemain' ? 'Pemain' : UNIT(t);
   const tabs = [['tetapan', '⚙️', 'Tetapan'], ['pemain', '👥', UNIT(t)], ['langsung', '🟢', 'Langsung'], ['jadual', '📋', 'Jadual'],
-    ['kumpulan', '📊', t.format === 'rr' ? 'Liga' : 'Kumpulan'], ['keputusan', '📝', 'Keputusan']];
+    ['kumpulan', '📊', E.isMixer(t) ? 'Individu' : t.format === 'rr' ? 'Liga' : 'Kumpulan'], ['keputusan', '📝', 'Keputusan']];
   if (t.format !== 'rr') tabs.push(['kalahmati', '⚔️', 'Knockout'], ['pool', '🥉', 'Pool']);
   tabs.push(['laporan', '🖨️', 'Laporan']);
   const alias = { m: (t.matches.find(x => x.id === location.hash.split('/')[4]) || {}).stage === 'group' ? 'keputusan' : 'kalahmati', ranking: 'kalahmati', peraturan: 'pemain' };
@@ -486,7 +486,13 @@ function settingsFormAll(t, locked) {
     <div data-show="team"><label>Saiz</label><select name="teamSize" ${dis}>${opt({ 3: 'Trio (3 orang)', 4: 'Kuartet (4 orang)' }, t.teamSize)}</select></div>
     <div data-show="team"><label>Setiap pertemuan</label><select name="tieFormat" ${dis}>${opt({ SD: 'Single + Double', SSD: 'Single + Single + Double (ikut markah)' }, t.tieFormat)}</select></div>
     <div data-show="tieRule"><label>Keputusan sama (kumpulan)</label><select name="tieRule">${opt({ draw: 'Seri', next: 'Tiada seri (beza set, kemudian mata)' }, t.tieRule || 'draw')}</select></div>
-    <label>Struktur</label><select name="format" ${dis}>${opt(FORMAT, t.format)}</select>
+    <div data-show="mixer" class="notice small" style="margin:8px 0">🔀 <b>Regu bertukar:</b> setiap pusingan pemain diundi menjadi regu baharu. Mata dikira untuk setiap individu (menang, kemudian beza set dan beza mata). Pasangan yang sama dielakkan.</div>
+    <div data-show="mixer" class="grid2">
+      <div><label>Bilangan pusingan</label><input name="mixRounds" type="number" min="1" max="40" value="${t.mixRounds || ''}" placeholder="Auto: ${E.mixRoundsAuto(Math.max(4, t.individuals.length))}" ${dis}></div>
+      <div><label>Imbang regu ikut tahap</label><select name="mixLv" ${dis}>${opt({ '': 'Tidak (undian bebas)', ksas: 'Tahap KSAS', kroni: 'Tahap Kroni Shell' }, t.mixLv || '')}</select></div>
+    </div>
+    <p data-show="mixer" class="muted small" style="margin:4px 0 0">Auto = setiap pemain berpasangan dengan semua pemain lain sekali. Tahap ditulis dalam senarai individu, cth. <i>Ali (Naga)</i>. Jika Handicap ikut tahap dipilih, tahap itu juga digunakan untuk imbang.</p>
+    <div data-show="notmixer"><label>Struktur</label><select name="format" ${dis}>${opt(FORMAT, t.format)}</select></div>
     <div class="grid2">
       <div><label data-label="gf">Format kumpulan</label><select name="groupFormat">${opt(setOpts, t.groupFormat)}</select></div>
       <div data-show="ko"><label>Format kalah mati</label><select name="koFormat">${opt(setOpts, t.koFormat)}</select></div>
@@ -538,9 +544,11 @@ function wireForm(form) {
   const sync = () => {
     const f = form.format.value;
     const show = (k, on) => form.querySelectorAll(`[data-show="${k}"]`).forEach(el => (el.hidden = !on));
+    const mx = form.entryMode.value === 'mixer';
     show('team', form.entryMode.value === 'team');
-    show('groups', f === 'group_ko');
-    show('ko', f !== 'rr');
+    show('mixer', mx); show('notmixer', !mx);
+    show('groups', f === 'group_ko' && !mx);
+    show('ko', f !== 'rr' && !mx);
     show('venueX', form.venue.value === 'X');
     show('clubX', form.clubId.value === 'lain');
     show('tieRule', (form.entryMode.value === 'team' && form.tieFormat.value === 'SSD' && Number(form.teamSize.value) >= 4) || (form.entryMode.value !== 'team' && form.groupFormat.value === 'F2'));
@@ -548,7 +556,7 @@ function wireForm(form) {
     show('wa', form.waEnabled.checked);
     show('reg', form.regOpen.checked);
     show('waG', form.waMode.value === 'G'); show('waN', form.waMode.value === 'N');
-    form.querySelector('[data-label="gf"]').textContent = f === 'rr' ? 'Format liga' : f === 'ko' ? 'Format (tidak digunakan)' : 'Format kumpulan';
+    form.querySelector('[data-label="gf"]').textContent = mx ? 'Format setiap perlawanan' : f === 'rr' ? 'Format liga' : f === 'ko' ? 'Format (tidak digunakan)' : 'Format kumpulan';
     const c = CLUBS[form.clubId.value];
     form.querySelector('#clubPrev').innerHTML = c ? `${c.logos.map(src => `<span class="logo-badge"><img src="${src}" alt=""></span>`).join('')}<span class="muted small">${esc(c.name)}</span>` : '';
   };
@@ -578,6 +586,7 @@ function readSettings(form, t) {
   t.waMode = v('waMode'); t.waGroup = v('waGroup').trim(); t.waNumber = v('waNumber').replace(/\D/g, '');
   if (!form.entryMode.disabled) {
     t.entryMode = v('entryMode'); t.teamSize = Number(v('teamSize')) || 3; t.format = v('format');
+    if (t.entryMode === 'mixer') { t.format = 'rr'; t.mixRounds = Math.max(0, Math.min(40, Number(v('mixRounds')) || 0)); t.mixLv = v('mixLv') || ''; E.relevel(t); }
     t.tieFormat = t.teamSize >= 4 ? v('tieFormat') || 'SD' : 'SD';
     t.numGroups = Number(v('numGroups')) || 0; t.groupSize = Number(v('groupSize')) || 4; t.bestThirds = Number(v('bestThirds')) || 0;
   }
@@ -641,9 +650,13 @@ function viewSetupCore(t, part = 'tetapan') {
   const isTest = store.isLocal(t.id);
   const op = k => (ls.get('pingpong:fold:' + t.id + ':' + k) ?? '') === '1' ? 'open' : (ls.get('pingpong:fold:' + t.id + ':' + k) ?? '') === '0' ? '' : null;
   const fo = (k, def) => { const v = op(k); return v === null ? (def ? 'open' : '') : v; };
-  const listCard = draw
+  const mixer = E.isMixer(t);
+  const listCard = mixer
+    ? `<h3>Pemain (${t.individuals.length})</h3>${t.individuals.length ? `<div class="mlist">${t.individuals.map((x, i) => `<div class="list-item"><span class="row" style="flex-wrap:nowrap"><span class="muted small" style="width:22px">${i + 1}.</span>${pn(t, x.id)}</span><span class="muted small">${esc([x.unit, E.levelOf(t, x.name) && E.levelInfo(t, E.levelOf(t, x.name)) ? E.levelInfo(t, E.levelOf(t, x.name))[1] : ''].filter(Boolean).join(' · '))}</span></div>`).join('')}</div>
+       <p class="muted small">${t.individuals.length >= 4 ? `${E.mixRoundsAuto(t.individuals.length)} pusingan (auto) · ${Math.floor(t.individuals.length / 4)} perlawanan setiap pusingan${t.individuals.length % 4 ? ` · ${t.individuals.length % 4} pemain rehat bergilir setiap pusingan` : ''}. Regu diundi bila jadual dijana di ⚙️ Tetapan.` : 'Perlu sekurang-kurangnya 4 pemain.'}</p>` : '<p class="muted">Tambah senarai pemain di bawah.</p>'}`
+    : draw
     ? `<h3>${unit} (${t.participants.length})</h3>${plist || `<p class="muted">Belum diundi. ${t.individuals.length ? `${t.individuals.length} individu sedia. Tekan <b>Undi ${unit.toLowerCase()}</b> di bawah.` : 'Tambah senarai individu di bawah.'}</p>`}
-       ${t.participants.length ? `<button type="button" class="pill-btn small" id="playU"><span class="dot"></span>▶ Tonton undian</button>` : ''}`
+       ${t.participants.length && !E.isMixer(t) ? `<button type="button" class="pill-btn small" id="playU"><span class="dot"></span>▶ Tonton undian</button>` : ''}`
     : `<h3>${unit} (${t.participants.length})</h3>${plist || '<p class="muted">Belum ada peserta. Tambah di bawah.</p>'}`;
   const P = part === 'pemain';
   $app.innerHTML = P ? `
@@ -656,15 +669,15 @@ function viewSetupCore(t, part = 'tetapan') {
         <p class="muted small">${entryHint(t)}</p>
         <label>Senarai individu (${t.individuals.length})</label>
         <p class="muted small" style="margin:0 0 4px">Nama dalam kotak ini ialah senarai rasmi dan dikira ✅ disahkan.</p>
-        <textarea id="ind">${esc(t.individuals.map(x => x.name + (x.unit ? ', ' + x.unit : '') + (E.HC_SCHEMES[t.hcMode] && E.levelOf(t, x.name) ? ` (${E.levelInfo(t, E.levelOf(t, x.name))[1]})` : '')).join('\n'))}</textarea>
+        <textarea id="ind">${esc(t.individuals.map(x => x.name + (x.unit ? ', ' + x.unit : '') + (E.lvScheme(t) && E.levelOf(t, x.name) && E.levelInfo(t, E.levelOf(t, x.name)) ? ` (${E.levelInfo(t, E.levelOf(t, x.name))[1]})` : x.lv ? ` (${x.lv})` : '')).join('\n'))}</textarea>
         <div class="row" style="margin-top:10px"><button type="button" class="pill-btn light" id="saveP">Simpan senarai</button>
-          <button type="button" class="pill-btn orange" id="undi"><span class="dot"></span>Undi ${unit.toLowerCase()}</button></div>` : `
+          ${mixer ? '' : `<button type="button" class="pill-btn orange" id="undi"><span class="dot"></span>Undi ${unit.toLowerCase()}</button>`}</div>` : `
         <p class="muted small">${entryHint(t)}</p>
         <textarea id="people">${esc(t.participants.map(p => p.name + (p.unit ? ', ' + p.unit : '') + (t.hcMode === 'manual' && p.hc ? ` (${p.hc})` : '') + (E.HC_SCHEMES[t.hcMode] && !p.name.includes(' & ') && E.levelOf(t, p.name) ? ` (${E.levelInfo(t, E.levelOf(t, p.name))[1]})` : '')).join('\n'))}</textarea>
         <div class="row" style="margin-top:10px"><button type="button" class="pill-btn light" id="saveP">Simpan senarai</button></div>`}
       ${!locked && isTest ? `<div class="test-seed"><button type="button" class="pill-btn small seed" id="seed24">👥 Isi 24 peserta (UJIAN)</button>
         <span class="muted small">${t.entryMode === 'single' ? '24 pemain' : t.entryMode === 'double' ? '12 pasangan' : '24 individu sedia untuk diundi'}</span></div>` : ''}
-      ${!locked && t.format !== 'ko' ? `<details class="fold sub"><summary>Import kumpulan yang telah diundi</summary>
+      ${!locked && t.format !== 'ko' && !mixer ? `<details class="fold sub"><summary>Import kumpulan yang telah diundi</summary>
         <p class="muted small">Satu kumpulan setiap baris, cth. <i>A | Azim | Dora | Alex</i></p>
         <textarea id="mgt" rows="4"></textarea>
         <button type="button" class="pill-btn light small" id="impg" style="margin-top:8px">Import kumpulan</button></details>` : ''}
@@ -684,7 +697,7 @@ function viewSetupCore(t, part = 'tetapan') {
       ${settingsForm(t, locked, 'fmt')}
       <div class="row" style="margin-top:14px">
         <button class="pill-btn light">Simpan format</button>
-        ${!locked ? `<button type="button" class="pill-btn brand" id="draw"><span class="dot"></span>Jana ${t.format === 'ko' ? 'carta kalah mati' : 'kumpulan & jadual'}</button>` : ''}
+        ${!locked ? `<button type="button" class="pill-btn brand" id="draw"><span class="dot"></span>Jana ${E.isMixer(t) ? 'pusingan & jadual' : t.format === 'ko' ? 'carta kalah mati' : 'kumpulan & jadual'}</button>` : ''}
       </div>
       <p class="muted small">${locked ? `Status: ${t.matches.length} perlawanan telah dijana.` : 'Status: jadual belum dijana.'}</p>
       <div class="row noprint" style="margin-top:6px">
@@ -764,6 +777,14 @@ function viewSetupCore(t, part = 'tetapan') {
   const drawBtn = document.getElementById('draw');
   if (drawBtn) drawBtn.onclick = () => {
     readSettings(f, t);
+    if (E.isMixer(t)) {
+      const n = t.individuals.length;
+      if (n < 4) return toast('Perlu sekurang-kurangnya 4 pemain dalam senarai individu (tab 👥 Pemain).', 4000);
+      const R = t.mixRounds || E.mixRoundsAuto(n);
+      if (!confirm(`Jana ${R} pusingan regu bertukar untuk ${n} pemain?${n % 4 ? `\n${n % 4} pemain akan rehat secara bergilir setiap pusingan.` : ''}`)) return;
+      try { E.buildMixer(t); save(t); toast(`${t.matches.length} perlawanan dalam ${R} pusingan dijana`); location.hash = `#/t/${t.id}/jadual`; } catch (err) { toast(err.message, 4000); }
+      return;
+    }
     if (draw) readRenames(); else readEntries();
     if (t.participants.length < 2) return toast(draw ? `Tekan Undi ${unit.toLowerCase()} dahulu di tab 👥 ${unit} sebelum menjana jadual.` : `Perlu sekurang-kurangnya 2 ${unit.toLowerCase()}`);
     if (t.format === 'rr' && t.participants.length > 16 && !confirm('Liga disyorkan sehingga 16 peserta sahaja. Teruskan?')) return;
@@ -810,7 +831,7 @@ function sideName(t, id, src) {
   if (!id) return `<span class="mc-n ph">${esc(E.placeholderLabel(src) || 'Menunggu')}</span>`;
   if (id === 'BYE') return '<span class="mc-n ph">BYE</span>';
   const p = E.pobj(t, id) || {}, mem = p.members || [], draw = E.usesDraw(t);
-  if (mem.length > 1 && draw) {
+  if (mem.length > 1 && draw && !E.isMixer(t)) {
     const i = t.participants.indexOf(p) + 1, label = E.isTeam(t) ? p.name : `Regu ${i}`;
     return `<span class="mc-n" data-pid="${id}"><b>${esc(label)}</b><small>${mem.map(esc).join(' · ')}</small></span>`;
   }
@@ -819,7 +840,7 @@ function sideName(t, id, src) {
 function sideAv(t, id) {
   if (!id || id === 'BYE') return '<span class="av av-ph"></span>';
   const p = E.pobj(t, id) || {}, n = E.pname(t, id);
-  if ((p.members || []).length > 1 && E.usesDraw(t)) {
+  if ((p.members || []).length > 1 && E.usesDraw(t) && !E.isMixer(t)) {
     const i = t.participants.indexOf(p) + 1, tag = E.isTeam(t) ? E.teamWord(t)[0] + ((n.match(/\d+/) || [i])[0]) : 'R' + i;
     return `<span class="av av-n" style="background:${avColor(n)}">${esc(tag)}</span>`;
   }
@@ -847,7 +868,7 @@ function matchRow(t, m, no) {
         return ss; })();
   const [ta, tb] = E.tieScore(t, r);
   const h = E.handicapInfo(t, m.a, m.b);
-  const ctx = m.stage !== 'group' ? E.stageLabel(t, m) : (t.format === 'rr' ? 'Liga' : `Kumpulan ${m.group}`);
+  const ctx = m.mr ? `Pusingan ${m.mr}` : m.stage !== 'group' ? E.stageLabel(t, m) : (t.format === 'rr' ? 'Liga' : `Kumpulan ${m.group}`);
   const status = done ? '<span class="mc-st ok">✓ Selesai</span>'
     : m.lt ? `<span class="mc-st on"><i class="pulse"></i>Meja ${m.lt}</span>`
     : has ? '<span class="mc-st on">Sedang dimainkan</span>'
@@ -934,10 +955,11 @@ function liveLine(t, m) {
 function viewResults(t) {
   if (store.isCloud(t.id)) cloud.watchLive(t.id);
   const playable = t.matches.filter(m => m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE' && m.status !== 'bye');
-  const opts = [...t.groups.map(g => [g.name, t.format === 'rr' ? 'Liga' : `Kumpulan ${g.name}`]),
+  const mxR = E.isMixer(t) ? [...new Set(t.matches.map(m => m.mr))].sort((a, b) => a - b) : [];
+  const opts = [...mxR.map(r => ['mr' + r, `Pusingan ${r}`]), ...t.groups.map(g => [g.name, t.format === 'rr' ? 'Liga' : `Kumpulan ${g.name}`]),
     ...(t.rounds.ko ? [['K', 'Kalah mati']] : []), ...(t.rounds.pool ? [['L', 'Pool kalah']] : []), ['ALL', 'Semua perlawanan']];
-  if (!jsel || !opts.some(o => o[0] === jsel)) jsel = t.stage === 'ko' ? (t.rounds.ko ? 'K' : 'ALL') : (opts[0] || ['ALL'])[0];
-  const inSel = m => jsel === 'ALL' || (jsel === 'K' ? m.bracket === 'ko' : jsel === 'L' ? m.bracket === 'pool' : m.stage === 'group' && m.group === jsel);
+  if (!jsel || !opts.some(o => o[0] === jsel)) jsel = mxR.length ? 'ALL' : t.stage === 'ko' ? (t.rounds.ko ? 'K' : 'ALL') : (opts[0] || ['ALL'])[0];
+  const inSel = m => jsel === 'ALL' || (jsel.startsWith('mr') ? m.mr === +jsel.slice(2) : jsel === 'K' ? m.bracket === 'ko' : jsel === 'L' ? m.bracket === 'pool' : m.stage === 'group' && m.group === jsel);
   if (jst === 'belum' && !playable.some(m => m.status !== 'done')) jst = 'semua';
   const sessions = [...new Set(t.matches.filter(m => m.session).map(m => m.session))].sort((a, b) => a - b);
   const shown = playable.filter(inSel).filter(m => jses === 'ALL' || m.session === +jses)
@@ -948,7 +970,7 @@ function viewResults(t) {
   let lastS = null;
   $app.innerHTML = `
     ${section('Keputusan', 'Skor Perlawanan')}
-    <div class="fmt-box">🏓 Format set: ${t.groups.length ? `${t.rounds.ko || t.format === 'group_ko' ? 'Kumpulan — ' : ''}${fmtText(E.fmtFor(t, 'group'))}` : ''}${t.format === 'group_ko' || t.rounds.ko ? `<br>Kalah mati — ${fmtText(E.fmtFor(t, 'ko'))}` : ''}<br><span class="muted small">Setiap set hingga 11 mata (beza 2).${E.isTeam(t) ? ' Format ini untuk setiap perlawanan dalam pertemuan pasukan.' : ''}</span></div>
+    <div class="fmt-box">🏓 Format set: ${t.groups.length || E.isMixer(t) ? `${t.rounds.ko || t.format === 'group_ko' ? 'Kumpulan — ' : ''}${fmtText(E.fmtFor(t, 'group'))}` : ''}${t.format === 'group_ko' || t.rounds.ko ? `<br>Kalah mati — ${fmtText(E.fmtFor(t, 'ko'))}` : ''}<br><span class="muted small">Setiap set hingga 11 mata (beza 2).${E.isTeam(t) ? ' Format ini untuk setiap perlawanan dalam pertemuan pasukan.' : ''}</span></div>
     ${store.isLocal(t.id) && t.matches.length ? testBar(t) : ''}
     <div class="card soft noprint">
       <div class="grid2">
@@ -1153,7 +1175,7 @@ function viewMatch(t, mid) {
 // ---------- Kumpulan ----------
 // Regu diundi / trio: nama unit tebal, ahli di bawah (regu dua baris, trio sebaris " · ")
 function pnUnit(t, id) {
-  const p = E.pobj(t, id); if (!p) return pn(t, id);
+  const p = E.pobj(t, id); if (!p || E.isMixer(t)) return pn(t, id);
   const i = t.participants.indexOf(p) + 1, team = E.isTeam(t);
   const label = team ? p.name : `Regu ${i}`, tag = team ? (E.teamWord(t)[0] + ((p.name.match(/\d+/) || [i])[0])) : 'R' + i;
   const mem = team ? `<span class="mem">${p.members.map(esc).join(' · ')}</span>` : p.members.map(x => `<span class="mem">${esc(x)}</span>`).join('');
@@ -1174,7 +1196,20 @@ function matrixHtml(t, g) {
     ${M.ids.map((id, i) => { const r = st.find(x => x.id === id); const d = r.sf - r.sa; return `<tr><td class="l">${i + 1}. ${esc(E.pname(t, id))}</td>${M.rows[i].map(c => c === 'self' ? '<td class="self"></td>' : c ? `<td class="${c.win ? 'win' : ''}">${c.v[0]}-${c.v[1]}</td>` : '<td>·</td>').join('')}<td>${d > 0 ? '+' : ''}${d}</td></tr>`; }).join('')}
   </tbody></table></div><p class="muted small">Baca mengikut baris: skor set pemain di baris itu menentang pemain di lajur. Hijau = menang.</p>`;
 }
+function viewMixStandings(t) {
+  const S = E.mixStandings(t), done = t.matches.filter(m => m.status === 'done').length;
+  const nm = id => esc(E.pname(t, id)), sgn = x => (x > 0 ? '+' : '') + x;
+  $app.innerHTML = `${section('Keputusan', 'Kedudukan Individu')}
+    <div class="fmt-box">🔀 Regu bertukar · ${done}/${t.matches.length} perlawanan selesai<br><span class="muted small">Kedudukan: menang → beza set → beza mata. Tekan nama untuk lihat rekod dengan setiap pasangan.</span></div>
+    <div class="card"><div class="tw"><table class="mx-st"><thead><tr><th>#</th><th class="l">Pemain</th><th>Main</th><th>M</th><th>K</th><th>±Set</th><th>±Mata</th></tr></thead><tbody>
+    ${S.map((r, i) => `<tr><td>${i + 1}</td><td class="l"><details class="mx-d"><summary><b>${nm(r.id)}</b>${E.levelOf(t, E.pname(t, r.id)) && E.levelInfo(t, E.levelOf(t, E.pname(t, r.id))) ? ` <span class="muted small">${esc(E.levelInfo(t, E.levelOf(t, E.pname(t, r.id)))[1])}</span>` : ''}</summary>
+      ${r.with.length ? `<div class="mx-w">${r.with.map(w => `<span class="${w.draw ? '' : w.win ? 'ok' : 'no'}">P${w.mr} · ${nm(w.mate)} · ${w.draw ? 'Seri' : w.win ? 'Menang' : 'Kalah'} ${w.s}</span>`).join('')}</div>` : '<span class="muted small">Belum bermain</span>'}</details></td>
+      <td>${r.p}</td><td><b>${r.w}</b></td><td>${r.l}</td><td>${sgn(r.sf - r.sa)}</td><td>${sgn(r.pf - r.pa)}</td></tr>`).join('')}
+    </tbody></table></div></div>
+    <details class="card fold"><summary>🔁 Senarai pusingan & pemain rehat</summary>${[...new Set(t.matches.map(m => m.mr))].map(r => `<div class="sess">Pusingan ${r}${(t.mixRest || {})[r] && t.mixRest[r].length ? ` · rehat: ${t.mixRest[r].map(nm).join(', ')}` : ''}</div><div class="mlist">${t.matches.filter(m => m.mr === r).map(m => matchRow(t, m)).join('')}</div>`).join('')}</details>`;
+}
 function viewGroups(t) {
+  if (E.isMixer(t)) return viewMixStandings(t);
   const T = E.tablesOf(t);
   $app.innerHTML = `
     ${section('Keputusan', t.format === 'rr' ? 'Kedudukan Liga' : 'Peringkat Kumpulan')}
@@ -2173,13 +2208,13 @@ function viewLive(t) {
   const me = ls.get(meKey(t)) || '', st = LV.myStatus(t, me);
   const playable = t.matches.filter(m => m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE' && m.status !== 'bye');
   const allDone = playable.length && playable.every(m => m.status === 'done');
-  const people = t.participants.slice().sort((a, b) => a.name.localeCompare(b.name, 'ms'));
+  const people = (E.isMixer(t) ? t.individuals : t.participants).slice().sort((a, b) => a.name.localeCompare(b.name, 'ms'));
   let stTxt = '';
   if (me && st && STAT[st.kind]) {
-    const [bg, fg, ic, tx] = STAT[st.kind], m = st.m, opp = m.a === me ? m.b : m.a;
+    const [bg, fg, ic, tx] = STAT[st.kind], m = st.m, opp = m.px ? (m.px.slice(0, 2).includes(me) ? m.b : m.a) : m.a === me ? m.b : m.a;
     stTxt = `<div class="me-card" style="background:${bg};color:${fg}"><div class="me-big">${ic} ${tx}</div><div class="me-tb">MEJA ${st.table}</div>
       <div class="small">${st.kind === 'ump' ? vsTxt(t, m) : 'Lawan: <b>' + esc(E.pname(t, opp)) + '</b>'} · ${esc(E.stageLabel(t, m))}</div></div>`;
-  } else if (me && st && st.kind === 'wait') stTxt = `<div class="me-card wait"><div class="me-big">⏳ Menunggu</div><div class="small">${st.ahead ? `${st.ahead} perlawanan lagi sebelum giliran anda` : 'Anda dalam giliran seterusnya'} · lawan <b>${esc(E.pname(t, st.m.a === me ? st.m.b : st.m.a))}</b></div></div>`;
+  } else if (me && st && st.kind === 'wait') stTxt = `<div class="me-card wait"><div class="me-big">⏳ Menunggu</div><div class="small">${st.ahead ? `${st.ahead} perlawanan lagi sebelum giliran anda` : 'Anda dalam giliran seterusnya'} · lawan <b>${esc(E.pname(t, st.m.px ? (st.m.px.slice(0, 2).includes(me) ? st.m.b : st.m.a) : st.m.a === me ? st.m.b : st.m.a))}</b></div></div>`;
   else if (me && st && st.kind === 'none') stTxt = '<div class="me-card wait"><div class="small">Tiada perlawanan menunggu untuk anda buat masa ini.</div></div>';
   else if (me && !st) stTxt = '<div class="me-card wait"><div class="small">Perlawanan belum bermula. Status anda akan dipaparkan di sini.</div></div>';
   const T = LV.tableList(t), halls = [...new Set(T.map(x => x.hall))];

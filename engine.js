@@ -28,12 +28,13 @@ export const fmtFor = (t, stage) => SET_FORMATS[stage === 'group' ? t.groupForma
 // ---------- Jenis acara ----------
 // single · double (regu pilihan) · double_draw (regu diundi) · team (trio/kuartet diundi: 1 perseorangan + 1 regu)
 export const isTeam = t => t.entryMode === 'team';
-export const usesDraw = t => t.entryMode === 'double_draw' || t.entryMode === 'team';
+export const usesDraw = t => t.entryMode === 'double_draw' || t.entryMode === 'team' || t.entryMode === 'mixer';
+export const isMixer = t => t.entryMode === 'mixer';
 export const teamWord = t => (Number(t.teamSize) === 4 ? 'Kuartet' : 'Trio');
 
 // ---------- Meja ----------
 export const VENUES = { B: 'Balai B (Meja 1–4) · Balai C (Meja 5–8)', C: 'Balai C (Meja 5–8)', X: 'Lain-lain' };
-export const numTablesOf = t => Number(t.numTables) || (t.participants.length <= 16 ? 4 : 8);
+export const numTablesOf = t => Number(t.numTables) || (isMixer(t) ? Math.max(1, Math.min(8, Math.floor((t.individuals || []).length / 4))) : t.participants.length <= 16 ? 4 : 8);
 export function tablesOf(t) {
   const n = numTablesOf(t);
   return Array.from({ length: n }, (_, i) => {
@@ -87,7 +88,7 @@ export function migrate(t) {
 }
 
 export const pobj = (t, id) => t.participants.find(p => p.id === id);
-export const pname = (t, id) => (pobj(t, id) || {}).name || (id === 'BYE' ? 'BYE' : '—');
+export const pname = (t, id) => (pobj(t, id) || {}).name || (id === 'BYE' ? 'BYE' : ((t.individuals || []).find(x => x.id === id) || {}).name || '—');
 
 // "Nama, Unit (2)" → { name, unit, hc }
 export function parseEntry(line) {
@@ -112,7 +113,8 @@ export const setParticipants = setParticipantsFromLines;
 
 export function setIndividualsFromLines(t, lines) {
   const es = lines.map(s => s.trim()).filter(Boolean).map(parseEntry).filter(e => e.name);
-  t.individuals = es.map(e => ({ id: uid(), name: e.name, unit: e.unit }));
+  const old = Object.fromEntries((t.individuals || []).map(x => [x.name, x.id]));
+  t.individuals = es.map(e => ({ id: old[e.name] || uid(), name: e.name, unit: e.unit, ...(e.lv ? { lv: e.lv } : {}) }));
   es.forEach(e => takeLevel(t, e));
 }
 
@@ -585,6 +587,7 @@ export function seedLabel(t, id) {
 // dalam sesi sama. Kalah mati selepas semua kumpulan; pusingan seterusnya selepas pusingan sebelumnya;
 // kalah mati utama didahulukan berbanding pool.
 export function planSchedule(t) {
+  if (isMixer(t)) return; // jadual regu bertukar ditetapkan semasa jana pusingan
   const T = tablesOf(t), N = T.length;
   const real = id => id && id !== 'BYE';
   let s = 0;
@@ -647,6 +650,7 @@ export function playerStats(t, id) {
 // Tempat = pusingan terakhir dicapai (kalah mati, kemudian pool, kemudian peringkat kumpulan).
 // Dalam Tempat sama: (a), (b), purata beza mata; kemudian naik bersemuka kumpulan (†).
 export function finalRanking(t) {
+  if (isMixer(t)) return mixStandings(t).map((r, i) => ({ place: i + 1, ids: [r.id], label: 'Individu', rows: [{ id: r.id, label: i === 0 ? 'Juara individu' : `#${i + 1}`, bumped: false, st: { ...r, a: 0, b: 0, c: 0 } }] }));
   if (t.format === 'rr') {
     const s = t.groups[0] ? groupStandings(t, t.groups[0].name) : [];
     return s.map((r, i) => ({ place: i + 1, ids: [r.id], label: 'Liga', rows: [{ id: r.id, label: i === 0 ? 'Juara liga' : `Liga #${i + 1}`, bumped: false, st: playerStats(t, r.id) }] }));
@@ -707,6 +711,7 @@ export function matrix(t, groupName) {
 
 // ---------- Laporan WhatsApp ----------
 export function stageLabel(t, m) {
+  if (m.mr) return `Pusingan ${m.mr}`;
   if (m.stage === 'group') return t.format === 'rr' ? 'Liga' : `Kumpulan ${m.group}`;
   return roundName(t, m.bracket, m.round);
 }
@@ -762,8 +767,9 @@ export function applyReports(t, text) {
 }
 
 // ---------- Tukar acara, reset & data ujian ----------
-const isDrawMode = m => m === 'double_draw' || m === 'team';
+const isDrawMode = m => m === 'double_draw' || m === 'team' || m === 'mixer';
 const unitWord = t => t.entryMode === 'team' ? teamWord(t).toLowerCase() : 'regu';
+const drawHint = t => isMixer(t) ? 'Tekan Jana pusingan & jadual di Tetapan.' : `Tekan Undi untuk membentuk ${unitWord(t)}.`;
 // Selaraskan senarai peserta selepas jenis acara ditukar (sebelum jadual dijana). Pulangkan notis.
 export function switchEntry(t, from, fromSize) {
   const to = t.entryMode;
@@ -775,9 +781,9 @@ export function switchEntry(t, from, fromSize) {
     let msg;
     if (!t.individuals.length && flat.length) {
       t.individuals = flat.map(x => ({ id: uid(), name: x.name, unit: x.unit }));
-      msg = `Senarai ${t.individuals.length} pemain dipindah ke senarai individu. Tekan Undi untuk membentuk ${unitWord(t)}.`;
-    } else if (t.participants.length) msg = `Undian lama dikosongkan. Senarai ${t.individuals.length} individu dikekalkan; tekan Undi untuk membentuk ${unitWord(t)}.`;
-    else msg = t.individuals.length ? `${t.individuals.length} individu sedia. Tekan Undi untuk membentuk ${unitWord(t)}.` : '';
+      msg = `Senarai ${t.individuals.length} pemain dipindah ke senarai individu. ${drawHint(t)}`;
+    } else if (t.participants.length) msg = `Undian lama dikosongkan. Senarai ${t.individuals.length} individu dikekalkan; ${drawHint(t)}`;
+    else msg = t.individuals.length ? `${t.individuals.length} individu sedia. ${drawHint(t)}` : '';
     t.participants = [];
     return msg;
   }
@@ -797,7 +803,7 @@ export function resetSchedule(t, all) {
   t.groups = []; t.matches = []; t.rounds = {}; t.stage = 'setup';
   t.drawOrder = isDrawMode(t.entryMode) && !all ? {} : { ...(t.drawOrder || {}), groups: undefined };
   if (all) { t.participants = []; t.individuals = []; t.drawOrder = {}; return 'Reset selesai. Semua peserta dan perlawanan dipadam.'; }
-  if (isDrawMode(t.entryMode)) { t.participants = []; return `Jadual dipadam. Senarai individu dikekalkan; tekan Undi semula untuk membentuk ${unitWord(t)}.`; }
+  if (isDrawMode(t.entryMode)) { t.participants = []; return `Jadual dipadam. Senarai individu dikekalkan; ${drawHint(t)}`; }
   return 'Jadual dipadam. Senarai peserta dikekalkan.';
 }
 export const TEST24 = ['Anep', 'Xin You', 'Ikram', 'Bazli', 'Andi', 'Wanthul', 'Asyraf', 'Pawi', 'Abg Rosli', 'Noran', 'Cherng bin', 'Fbi', 'AIL', 'Sam50', 'Tad Mad', 'Wan Alif', 'Lymi', 'Jurima', 'Ril', 'Muhaimi', 'Fsl', 'C.A', 'Syamrul', 'Amirul'];
@@ -806,7 +812,7 @@ export function seedTest24(t) {
   t.drawOrder = {};
   if (isDrawMode(t.entryMode)) {
     t.individuals = N.map(n => ({ id: uid(), name: n, unit: '' })); t.participants = [];
-    return `24 individu ujian diisi. Tekan Undi untuk membentuk ${unitWord(t)}.`;
+    return `24 individu ujian diisi. ${drawHint(t)}`;
   }
   if (t.entryMode === 'single') { t.participants = N.map(n => ({ id: uid(), name: n, unit: '', hc: 0, members: [n] })); t.individuals = []; return '24 pemain ujian diisi.'; }
   t.participants = Array.from({ length: 12 }, (_, i) => ({ id: uid(), name: `${N[2 * i]} & ${N[2 * i + 1]}`, unit: '', hc: 0, members: [N[2 * i], N[2 * i + 1]] }));
@@ -901,15 +907,16 @@ export const HC_SCHEMES = {
 export const rubberTypes = t => !isTeam(t) ? ['S'] : t.tieFormat === 'SSD' ? ['S', 'S', 'D'] : ['S', 'D'];
 const lvKey = n => String(n || '').trim().toLowerCase();
 // Teks tahap → kod (cth. "Naga Elit", "ne", "singa", "lion w", "wanita tiger", "Helang (W)")
+export const lvScheme = t => HC_SCHEMES[t.hcMode] ? t.hcMode : HC_SCHEMES[t.mixLv] ? t.mixLv : '';
 export function parseLevel(t, txt) {
-  const S = HC_SCHEMES[t.hcMode]; if (!S || !txt) return '';
+  const S = HC_SCHEMES[lvScheme(t)]; if (!S || !txt) return '';
   let s = lvKey(txt).replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim();
   const w = /\b(w|wanita|perempuan|p|f)\b/.test(s); s = s.replace(/\b(w|wanita|perempuan|lelaki|l|m|p|f)\b/g, '').trim();
   const alias = { 'naga elit': 'NE', 'naga elite': 'NE', 'elit': 'NE', 'elite': 'NE', 'ne': 'NE', naga: 'N', n: 'N', singa: 'S', lion: 'S', s: 'S', rimau: 'R', tiger: 'R', harimau: 'R', r: 'R', helang: 'H', eagle: 'H', h: 'H' };
   let c = alias[s] || '';
-  if (t.hcMode === 'kroni') c = ({ N: 'N', S: 'L', R: 'T', H: 'H' })[c] || '';
+  if (lvScheme(t) === 'kroni') c = ({ N: 'N', S: 'L', R: 'T', H: 'H' })[c] || '';
   if (!c) return S.levels.some(l => l[0] === txt) ? txt : '';
-  if (t.hcMode === 'kroni' && w && c !== 'N') c += 'W';
+  if (lvScheme(t) === 'kroni' && w && c !== 'N') c += 'W';
   return S.levels.some(l => l[0] === c) ? c : '';
 }
 function takeLevel(t, e) {
@@ -918,7 +925,7 @@ function takeLevel(t, e) {
   if (c) e.name.split(' & ').forEach(n => { if (!e.name.includes(' & ') || true) t.levels[lvKey(n)] = c; });
 }
 export const levelOf = (t, name) => (t.levels || {})[lvKey(name)] || '';
-export function levelInfo(t, code) { const S = HC_SCHEMES[t.hcMode]; return S && S.levels.find(l => l[0] === code) || null; }
+export function levelInfo(t, code) { const S = HC_SCHEMES[lvScheme(t)]; return S && S.levels.find(l => l[0] === code) || null; }
 export function setLevel(t, name, code) { t.levels ||= {}; if (code) t.levels[lvKey(name)] = code; else delete t.levels[lvKey(name)]; }
 // Nilai: S = single, D = double
 const lvVal = (t, name, kind) => { const L = levelInfo(t, levelOf(t, name)); return L ? (kind === 'S' ? L[2] : L[3]) : null; };
@@ -951,4 +958,85 @@ export function rubberLabel(t, i) {
   const ty = rubberTypes(t);
   if (t.tieFormat === 'SSD') return ty[i] === 'D' ? 'Double' : `Single ${ty.slice(0, i + 1).filter(x => x === 'S').length}`;
   return i === 0 ? 'Perseorangan' : 'Regu';
+}
+
+
+// ---------- Regu bertukar (pasangan diundi setiap pusingan) ----------
+// Setiap pusingan: pemain diundi menjadi regu baharu. Elak pasangan berulang, kurangkan lawan berulang,
+// dan (jika tahap ditetapkan) imbangkan jumlah tahap dua pihak. Pemain lebihan rehat secara bergilir.
+export const mixRoundsAuto = n => (n % 2 ? n : n - 1);
+export function relevel(t) { (t.individuals || []).forEach(x => { if (x.lv && !levelOf(t, x.name)) takeLevel(t, { name: x.name, lv: x.lv }); }); }
+export function buildMixer(t, tries = 80) {
+  relevel(t);
+  const P = (t.individuals || []).map(x => x.id), n = P.length;
+  if (n < 4) throw new Error('Perlu sekurang-kurangnya 4 pemain');
+  const R = Math.max(1, Number(t.mixRounds) || mixRoundsAuto(n));
+  const nm = id => t.individuals.find(x => x.id === id).name;
+  const bal = !!lvScheme(t);
+  const known = P.map(id => lvVal(t, nm(id), 'D')).filter(v => v != null);
+  const avg = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 0;
+  const LV = Object.fromEntries(P.map(id => { const v = lvVal(t, nm(id), 'D'); return [id, v == null ? avg : v]; }));
+  const k2 = (a, b) => (a < b ? a + '|' + b : b + '|' + a);
+  const pc = {}, oc = {}, rest = Object.fromEntries(P.map(id => [id, 0])), lastRest = new Set();
+  const cost = pos => {
+    let c = 0;
+    for (let j = 0; j < pos.length; j += 4) {
+      const [a1, a2, b1, b2] = pos.slice(j, j + 4);
+      c += 100 * ((pc[k2(a1, a2)] || 0) + (pc[k2(b1, b2)] || 0));
+      c += 10 * ((oc[k2(a1, b1)] || 0) + (oc[k2(a1, b2)] || 0) + (oc[k2(a2, b1)] || 0) + (oc[k2(a2, b2)] || 0));
+      if (bal) c += 8 * Math.abs(LV[a1] + LV[a2] - LV[b1] - LV[b2]);
+    }
+    return c;
+  };
+  const T = tablesOf(t), NT = T.length;
+  t.participants = []; t.matches = []; t.groups = []; t.rounds = {}; t.mixRest = {}; t.format = 'rr';
+  let gn = 0, sess = 0;
+  for (let r = 1; r <= R; r++) {
+    const restN = n % 4;
+    const order = shuffle(P).sort((a, b) => (rest[a] - rest[b]) || (lastRest.has(a) - lastRest.has(b)));
+    const rs = order.slice(0, restN), act = P.filter(id => !rs.includes(id));
+    let best = null, bc = Infinity;
+    for (let k = 0; k < tries; k++) {
+      const pos = shuffle(act); let c = cost(pos), imp = true;
+      while (imp) {
+        imp = false;
+        for (let i = 0; i < pos.length; i++) for (let j = i + 1; j < pos.length; j++) {
+          if ((i >> 2) === (j >> 2) && ((i & 3) >> 1) === ((j & 3) >> 1)) continue;
+          [pos[i], pos[j]] = [pos[j], pos[i]];
+          const c2 = cost(pos);
+          if (c2 < c) { c = c2; imp = true; } else [pos[i], pos[j]] = [pos[j], pos[i]];
+        }
+      }
+      if (c < bc) { bc = c; best = pos.slice(); if (c === 0) break; }
+    }
+    rs.forEach(id => rest[id]++); lastRest.clear(); rs.forEach(id => lastRest.add(id));
+    t.mixRest[r] = rs;
+    const per = best.length / 4;
+    for (let j = 0; j < per; j++) {
+      const [a1, a2, b1, b2] = best.slice(j * 4, j * 4 + 4);
+      pc[k2(a1, a2)] = (pc[k2(a1, a2)] || 0) + 1; pc[k2(b1, b2)] = (pc[k2(b1, b2)] || 0) + 1;
+      [[a1, b1], [a1, b2], [a2, b1], [a2, b2]].forEach(([x, y]) => (oc[k2(x, y)] = (oc[k2(x, y)] || 0) + 1));
+      const mk = (x, y) => { const p = { id: uid(), name: `${nm(x)} & ${nm(y)}`, members: [nm(x), nm(y)], ids: [x, y], unit: '', hc: 0, rd: r }; t.participants.push(p); return p.id; };
+      if (j % NT === 0) sess++;
+      t.matches.push(blankMatch(t, { stage: 'group', group: 'M', gn: ++gn, gi: j % NT, a: mk(a1, a2), b: mk(b1, b2), mr: r, px: [a1, a2, b1, b2], session: sess, table: T[j % NT] }));
+    }
+  }
+  t.stage = 'group';
+}
+export const mixRoundOf = m => m.mr || 0;
+// Kedudukan individu: menang, beza set, beza mata; serta rekod dengan setiap pasangan
+export function mixStandings(t) {
+  const rows = Object.fromEntries((t.individuals || []).map(x => [x.id, { id: x.id, p: 0, w: 0, l: 0, d: 0, sf: 0, sa: 0, pf: 0, pa: 0, with: [] }]));
+  for (const m of t.matches) {
+    if (m.status !== 'done' || !m.px) continue;
+    const r = evaluateMatch(t, m);
+    m.px.forEach((id, i) => {
+      const R = rows[id]; if (!R) return;
+      const A = i < 2, mate = m.px[A ? 1 - i : 5 - i], win = !r.draw && m.winner === (A ? m.a : m.b);
+      R.p++; R.sf += A ? r.sa : r.sb; R.sa += A ? r.sb : r.sa; R.pf += A ? r.pa : r.pb; R.pa += A ? r.pb : r.pa;
+      if (r.draw) R.d++; else if (win) R.w++; else R.l++;
+      R.with.push({ mate, win, draw: !!r.draw, mr: m.mr, s: A ? `${r.sa}-${r.sb}` : `${r.sb}-${r.sa}` });
+    });
+  }
+  return Object.values(rows).sort((x, y) => (y.w - x.w) || ((y.sf - y.sa) - (x.sf - x.sa)) || ((y.pf - y.pa) - (x.pf - x.pa)) || (x.l - y.l) || pname(t, x.id).localeCompare(pname(t, y.id)));
 }

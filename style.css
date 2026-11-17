@@ -649,3 +649,10 @@ body.tv main#app { max-width:none; padding:0; margin:0; }
 .mc-g.cur { opacity:.6; color:#b91c1c; font-style:italic; }
 .mc-t.gh { opacity:.4; }
 .mc-f.gh-note { color:#b91c1c; font-weight:600; }
+.mx-st td { vertical-align: top; }
+.mx-d summary { cursor:pointer; list-style:none; }
+.mx-d summary::-webkit-details-marker { display:none; }
+.mx-w { display:flex; flex-direction:column; gap:3px; margin-top:6px; font-size:12px; }
+.mx-w span { padding:2px 8px; border-radius:8px; background: var(--bg, #f1f5f9); }
+.mx-w .ok { background:#dcfce7; color:#166534; }
+.mx-w .no { background:#fee2e2; color:#991b1b; }

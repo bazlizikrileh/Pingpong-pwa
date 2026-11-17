@@ -3,7 +3,7 @@ import * as E from './engine.js';
 
 const real = id => !!id && id !== 'BYE';
 const isDone = m => m.status === 'done' || m.status === 'bye';
-const pl2 = m => [m.a, m.b];
+const pl2 = m => m.px || [m.a, m.b];
 
 export function tableList(t) {
   const n = E.numTablesOf(t), off = t.venue === 'C' && n <= 4 ? 4 : 0;
