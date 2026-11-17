@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.5.2';
+const VERSION = '3.6.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1400,9 +1400,7 @@ function wirePosterAdmin(t) {
   };
   if (del) del.onclick = async () => { if (!confirm('Buang poster sendiri? Poster automatik akan digunakan semula.')) return; await cloud.delPoster(t.id).catch(e => toast('Gagal: ' + (e.code || e.message))); };
 }
-const RP_STYLES = { editorial: '📰 Editorial', gelap: '🌙 Gelap', klasik: '🏓 Klasik' };
-const rpStyle = () => (RP_STYLES[ls.get('pingpong:posterStyle')] ? ls.get('pingpong:posterStyle') : 'editorial');
-async function showRegPoster(t, auto = false) {
+async function showRegPoster(t, auto = false, combo = null) {
   const own = !auto && posterOf(t);
   if (own) {
     const md = document.getElementById('modal');
@@ -1421,12 +1419,19 @@ async function showRegPoster(t, auto = false) {
   }
   const md = document.getElementById('modal');
   md.innerHTML = `<div class="sheet"><div class="row" style="justify-content:space-between"><h3 style="margin:0">🖼️ Poster</h3><button class="pill-btn light small" id="mx">✕</button></div>
-    <div class="rp-styles">${Object.entries(RP_STYLES).map(([k, v]) => `<button type="button" class="pill-btn small ${k === rpStyle() ? 'brand' : 'light'}" data-rps="${k}">${v}</button>`).join('')}</div>
+    <div class="rp-styles" id="rpBar"></div>
     <div id="rpBox" class="rp-box"><p class="muted">Menjana poster…</p></div></div>`;
   md.hidden = false; md.onclick = e => { if (e.target === md || e.target.id === 'mx') md.hidden = true; };
   try {
-    md.querySelectorAll('[data-rps]').forEach(b => (b.onclick = () => { ls.set('pingpong:posterStyle', b.dataset.rps); showRegPoster(t, true); }));
-    const m = await import('./reg-poster.js'), blob = await m.makeRegPoster(regPosterData(t), rpStyle());
+    const K = await import('./poster-kit.js'), m = await import('./reg-poster.js');
+    const lockKey = 'pingpong:posterLock:' + t.id, locked = ls.get(lockKey);
+    if (!combo) combo = locked && K.COMBOS.includes(locked) ? locked : K.COMBOS[Math.floor(Math.random() * K.COMBOS.length)];
+    document.getElementById('rpBar').innerHTML = `<button type="button" class="pill-btn small orange" id="rpRand">🎲 Rawak lagi</button>
+      <button type="button" class="pill-btn small ${locked === combo ? 'brand' : 'light'}" id="rpLock">${locked === combo ? '📌 Dikunci' : '📌 Kunci gaya ini'}</button>
+      <span class="muted small" style="align-self:center">Gaya ${combo} · ${K.LAYOUT_NAMES[combo[0]]} · ${K.TREAT_NAMES[combo[1]]}</span>`;
+    document.getElementById('rpRand').onclick = () => { let n; do n = K.COMBOS[Math.floor(Math.random() * K.COMBOS.length)]; while (n === combo); showRegPoster(t, true, n); };
+    document.getElementById('rpLock').onclick = () => { ls.set(lockKey, locked === combo ? null : combo); showRegPoster(t, true, combo); };
+    const blob = await K.makeKitPoster(regPosterData(t), combo);
     const name = `Poster-${(t.name || 'pertandingan').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-')}.png`;
     document.getElementById('rpBox').innerHTML = `<img src="${URL.createObjectURL(blob)}" alt="Poster" class="rp-img">
       <div class="btn-stack" style="margin-top:10px"><button class="pill-btn orange" id="rpShare"><span class="dot"></span>📤 Kongsi poster</button></div>
