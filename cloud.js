@@ -96,7 +96,7 @@ export async function signOutAll() { await init(); await F.signOut(auth); }
 // ---------- Pertandingan ----------
 export async function saveTournament(t) {
   await init();
-  const meta = { name: t.name || '', clubId: t.clubId || '', stage: t.stage || '', date: t.date || '', regOpen: !!t.regOpen, updatedAt: F.serverTimestamp(), updatedBy: state.user?.email || '' };
+  const meta = { name: t.name || '', clubId: t.clubId || '', stage: t.stage || '', date: t.date || '', regOpen: !!t.regOpen && t.stage === 'setup' && !(t.matches || []).length, updatedAt: F.serverTimestamp(), updatedBy: state.user?.email || '' };
   await F.setDoc(F.doc(db, 'tournaments', t.id), { ...meta, data: JSON.stringify(t) });
 }
 export async function deleteTournament(id) { await init(); await F.deleteDoc(F.doc(db, 'tournaments', id)); }
