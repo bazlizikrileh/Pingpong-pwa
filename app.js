@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.7.1';
+const VERSION = '3.8.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -120,6 +120,7 @@ function pn(t, id, cls = '', ph = '') {
 }
 
 // ---------- Penghala ----------
+document.addEventListener('click', e => { const b = e.target.closest('[data-rcard]'); if (!b) return; const [tid, mid] = b.dataset.rcard.split('|'), t = load(tid), m = t && t.matches.find(x => x.id === mid); if (m) shareResultCard(t, m).catch(err => toast('Gagal: ' + (err.message || err))); });
 window.addEventListener('hashchange', () => { if (window._lsWake && !/\/ls\//.test(location.hash)) window._lsWake.release().catch(() => {}); const md = document.getElementById('modal'); if (md) md.hidden = true; render(); });
 window.addEventListener('load', () => { render(); cloud.init(); });
 let _dirty = false;
@@ -250,11 +251,11 @@ function render(keep = false) {
     _cur = t.id;
     applyTheme(t);
     const page = parts[2] || defaultPage(t);
-    if (page !== 'm' && page !== 'ls') _back = page;
+    if (page !== 'm' && page !== 'ls' && page !== 'kadskor') _back = page;
     renderHead(t, page);
     const views = { tetapan: viewSetup, pemain: viewPemain, langsung: viewLive, jadual: viewJadual, kumpulan: viewGroups, keputusan: viewResults, kalahmati: viewKnockout, pool: viewPool, laporan: viewReport, ranking: viewRanking, peraturan: viewRules };
     updateTop();
-    if (page === 'm') viewMatch(t, parts[3]); else if (page === 'ls') viewLiveScore(t, parts[3]); else if (views[page]) views[page](t); else { location.hash = '#/'; return; }
+    if (page === 'm') viewMatch(t, parts[3]); else if (page === 'ls') viewLiveScore(t, parts[3]); else if (page === 'kadskor') viewKadSkor(t); else if (views[page]) views[page](t); else { location.hash = '#/'; return; }
     if (page === 'kumpulan' && t.format === 'rr' && t.stage === 'done') { $app.insertAdjacentHTML('beforeend', '<div class="row" style="margin:12px 0"><button class="pill-btn orange" id="posterBtn"><span class="dot"></span>🏆 Kongsi poster juara</button></div>'); wirePoster(t); }
     guideCard(t, page);
     if (page !== 'langsung') myStrip(t);
@@ -295,7 +296,7 @@ function renderHead(t, page) {
         : `<div class="seg"><small>Peringkat</small><b class="${t.stage === 'group' || t.stage === 'ko' ? 'on' : ''}">${t.stage === 'group' || t.stage === 'ko' ? '<i class="pulse"></i>' : ''}${stg}</b></div>`}
       <div class="seg wide"><small>Perlawanan</small><b>${done}<em>/${play.length}</em></b><span class="rally"><span class="fill" style="width:${pct}%"></span><span class="ball" style="left:${pct}%"></span></span></div>
       <div class="seg"><small>Meja</small><b>${onT ? `${onT}<em>/${nT}</em>` : nT}</b></div>
-    </div>`;
+    </div>${sponsorStrip(t)}`;
   const pw = UNIT(t) === 'Pemain' ? 'Pemain' : UNIT(t);
   const tabs = [['tetapan', '⚙️', 'Tetapan'], ['pemain', '👥', UNIT(t)], ['langsung', '🟢', 'Langsung'], ['jadual', '📋', 'Jadual'],
     ['kumpulan', '📊', t.format === 'rr' ? 'Liga' : 'Kumpulan'], ['keputusan', '📝', 'Keputusan']];
@@ -640,11 +641,13 @@ function viewSetupCore(t, part = 'tetapan') {
       <p class="muted small" id="pinMsg"></p></div>
       <div class="card"><label class="test-chk" style="margin:0"><input type="checkbox" id="hideChk" ${isHidden(t) ? 'checked' : ''}> <span>🙈 <b>Sembunyikan dari senarai awam</b><br><small class="muted">Peserta tidak nampak di laman utama, tetapi pautan terus masih boleh dibuka.</small></span></label></div>`
       : `<div class="notice">📱 Pertandingan ini disimpan dalam peranti ini sahaja. ${cloud.isAdmin() ? '<button class="pill-btn small brand" id="upNow">☁️ Pindah ke awan</button>' : 'Log masuk sebagai admin untuk memindahkannya ke awan supaya semua orang boleh melihat dan menghantar skor.'}</div><br>`}
+    ${extrasCard(t)}
     ${testTools(t)}
     <div class="card noprint"><button class="pill-btn danger small" id="del">Padam pertandingan</button></div>`;
   $app.querySelectorAll('details[data-fold]').forEach(d => (d.ontoggle = () => ls.set('pingpong:fold:' + t.id + ':' + d.dataset.fold, d.open ? '1' : '0')));
 
   const f = document.getElementById('f');
+  wireExtras(t);
   const hc = document.getElementById('hideChk');
   if (hc) hc.onchange = () => { t.hidden = hc.checked; save(t); toast(hc.checked ? '🙈 Disembunyikan dari senarai awam' : '👁 Dipaparkan dalam senarai awam'); };
   if (f) wireForm(f);
@@ -932,6 +935,7 @@ function viewMatch(t, mid) {
     <div class="eyebrow">${esc(E.matchCode(m))} · ${esc(E.stageLabel(t, m))}</div>
     <h2 class="h-big" style="font-size:24px">${esc(A.name)} <span class="muted" style="font-weight:500">lwn</span> ${esc(B.name)}</h2>
     <div class="rule"></div>
+    ${m.status === 'done' ? `<div class="row noprint" style="margin:-4px 0 10px"><button type="button" class="pill-btn orange small" data-rcard="${t.id}|${m.id}"><span class="dot"></span>📸 Kongsi kad keputusan</button></div>` : ''}
     <div class="card">
       <div class="muted small">${m.session ? `Sesi ${m.session} · ${E.sessionTime(t, m.session)} · ` : ''}${esc(f.label)}</div>
       ${h && !team ? hcText(h) : ''}
@@ -1433,7 +1437,7 @@ async function showRegPoster(t, auto = false, combo = null) {
       <span class="muted small" style="align-self:center">Gaya ${combo} · ${K.LAYOUT_NAMES[combo.slice(0, -1)]} · ${K.TREAT_NAMES[combo.slice(-1)]}</span>`;
     document.getElementById('rpRand').onclick = () => { let n; do n = K.COMBOS[Math.floor(Math.random() * K.COMBOS.length)]; while (n === combo); showRegPoster(t, true, n); };
     document.getElementById('rpLock').onclick = () => { ls.set(lockKey, locked === combo ? null : combo); showRegPoster(t, true, combo); };
-    const blob = await K.makeKitPoster(regPosterData(t), combo);
+    const blob = await K.withSponsors(await K.makeKitPoster(regPosterData(t), combo), sponsorsOf(t));
     const name = `Poster-${(t.name || 'pertandingan').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-')}.png`;
     document.getElementById('rpBox').innerHTML = `<img src="${URL.createObjectURL(blob)}" alt="Poster" class="rp-img">
       <div class="btn-stack" style="margin-top:10px"><button class="pill-btn orange" id="rpShare"><span class="dot"></span>📤 Kongsi poster</button></div>
@@ -1565,6 +1569,7 @@ function viewDaftar(t) {
     <div class="card daftar-info">
       <div class="eyebrow">${esc(c.name || c.short || '')}</div>
       <div class="d-info">${info.map(([i, v]) => `<div><span>${i}</span>${esc(v)}</div>`).join('')}</div>
+      ${attachLinks(t)}
       ${prizes.length ? `<div class="d-prize">${prizes.map((p, i) => `<div><span>${['🥇', '🥈', '🥉'][i] || '🏅'}</span>${esc(p)}</div>`).join('')}</div>` : ''}
       ${t.regNote ? `<p class="d-note">${esc(t.regNote)}</p>` : ''}
       <div class="row" style="gap:6px;margin-top:8px"><span class="role-chip">${regLive(t) ? '🟢 Pendaftaran dibuka' : t.regOpen ? '🔒 Penuh' : '🔒 Pendaftaran ditutup'}</span><span class="role-chip">${active}${t.regMax ? '/' + t.regMax : ''} peserta · ${ok.length} disahkan</span></div>
@@ -1602,6 +1607,7 @@ function viewPemain(t) {
 function viewInfo(t) {
   const f = E.SET_FORMATS;
   $app.innerHTML = `${section('Tetapan', 'Maklumat Pertandingan')}
+    ${(t.attachments || []).length ? `<div class="card"><div class="section-title" style="margin-top:0">📎 Lampiran</div>${attachLinks(t)}</div>` : ''}
     <div class="card"><table class="rp-info">
       <tr><td>Tarikh</td><td>${esc(fmtDate(t.date) || '-')}</td></tr>
       <tr><td>Mula</td><td>${esc(E.sessionTime(t, 1))} · ${t.sessionMin} minit setiap sesi</td></tr>
@@ -1653,6 +1659,117 @@ function myStrip(t) {
   $app.insertAdjacentHTML('afterbegin', `<a class="mystrip noprint" href="#/t/${t.id}/langsung" style="background:${bg};color:${fg}">${ic} ${tx} di Meja ${st.table} <span>· lihat tab Langsung ›</span></a>`);
 }
 const vsTxt = (t, m) => `<b>${esc(E.pname(t, m.a))}</b> <small>lwn</small> <b>${esc(E.pname(t, m.b))}</b>`;
+
+// ---------- Penaja (pilihan) & lampiran ----------
+const sponsorsOf = t => (t.sponsorOn && (t.sponsors || []).length ? t.sponsors : []);
+async function shrinkLogo(file) {
+  const url = URL.createObjectURL(file), im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+  const k = Math.min(1, 360 / im.width, 160 / im.height), cv = document.createElement('canvas');
+  cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k); cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); URL.revokeObjectURL(url);
+  let d = cv.toDataURL('image/webp', .85); if (!d.startsWith('data:image/webp')) d = cv.toDataURL('image/png'); return d;
+}
+function extrasCard(t) {
+  if (!canAdmin(t)) return '';
+  const sp = t.sponsors || [], at = t.attachments || [];
+  return `<details class="card fold" data-fold="extra" ${ls.get('pingpong:fold:' + t.id + ':extra') === '1' ? 'open' : ''}><summary>🤝 Penaja &amp; 📎 Lampiran <span class="muted small">(pilihan)</span></summary>
+    <label class="test-chk" style="margin:8px 0"><input type="checkbox" id="spOn" ${t.sponsorOn ? 'checked' : ''}> <span><b>Paparkan penaja</b><br><small class="muted">Logo dipaparkan di bawah tajuk pertandingan, di Mod TV, dan di bawah poster serta kad keputusan.</small></span></label>
+    ${sp.length ? `<div class="sp-list">${sp.map((x, i) => `<div class="sp-item">${x.logo ? `<img src="${x.logo}" alt="">` : ''}<span>${esc(x.name)}</span><button type="button" class="pill-btn light small" data-spdel="${i}">✕</button></div>`).join('')}</div>` : '<p class="muted small">Belum ada penaja.</p>'}
+    <div class="grid2"><div><label>Nama penaja</label><input id="spName" maxlength="40" placeholder="cth. Klinik Pergigian ABC"></div>
+      <div><label>Logo (pilihan)</label><input id="spLogo" type="file" accept="image/*"></div></div>
+    <button type="button" class="pill-btn light small" id="spAdd" style="margin-top:8px">➕ Tambah penaja</button>
+    <div class="rule" style="margin:16px 0 10px"></div>
+    <div class="section-title" style="margin-top:0">📎 Lampiran</div>
+    <p class="muted small" style="margin-top:0">Pautan kepada kertas kerja, peraturan, peta lokasi dan sebagainya (contoh pautan Google Drive yang dikongsi).</p>
+    ${at.length ? `<div class="sp-list">${at.map((x, i) => `<div class="sp-item"><span>📎 ${esc(x.name)}</span><button type="button" class="pill-btn light small" data-atdel="${i}">✕</button></div>`).join('')}</div>` : ''}
+    <div class="grid2"><div><label>Nama</label><input id="atName" maxlength="40" placeholder="cth. Kertas kerja"></div>
+      <div><label>Pautan (https://…)</label><input id="atUrl" type="url" placeholder="https://drive.google.com/…"></div></div>
+    <button type="button" class="pill-btn light small" id="atAdd" style="margin-top:8px">➕ Tambah lampiran</button>
+  </details>`;
+}
+function wireExtras(t) {
+  const g = id => document.getElementById(id);
+  if (!g('spAdd')) return;
+  g('spOn').onchange = e => { t.sponsorOn = e.target.checked; save(t); toast(t.sponsorOn ? 'Penaja dipaparkan' : 'Penaja disembunyikan'); };
+  g('spAdd').onclick = async () => {
+    const name = g('spName').value.trim(), f = g('spLogo').files[0];
+    if (!name && !f) return toast('Isi nama atau pilih logo penaja');
+    if ((t.sponsors || []).length >= 8) return toast('Maksimum 8 penaja');
+    let logo = ''; try { if (f) logo = await shrinkLogo(f); } catch { return toast('Logo tidak dapat dibaca'); }
+    t.sponsors = [...(t.sponsors || []), { name: name || 'Penaja', logo }]; if (t.sponsors.length === 1) t.sponsorOn = true;
+    save(t); toast('Penaja ditambah'); render();
+  };
+  $app.querySelectorAll('[data-spdel]').forEach(b => (b.onclick = () => { t.sponsors.splice(+b.dataset.spdel, 1); save(t); render(); }));
+  g('atAdd').onclick = () => {
+    const name = g('atName').value.trim(), url = g('atUrl').value.trim();
+    if (!name || !/^https:\/\/\S+$/i.test(url)) return toast('Isi nama dan pautan https:// yang sah');
+    t.attachments = [...(t.attachments || []), { name, url }]; save(t); toast('Lampiran ditambah'); render();
+  };
+  $app.querySelectorAll('[data-atdel]').forEach(b => (b.onclick = () => { t.attachments.splice(+b.dataset.atdel, 1); save(t); render(); }));
+}
+const sponsorStrip = t => { const sp = sponsorsOf(t); return sp.length ? `<div class="sp-strip"><span>Ditaja oleh</span>${sp.map(x => x.logo ? `<img src="${x.logo}" alt="${esc(x.name)}" title="${esc(x.name)}">` : `<b>${esc(x.name)}</b>`).join('')}</div>` : ''; };
+const attachLinks = t => (t.attachments || []).length ? `<div class="at-row">${t.attachments.map(x => `<a class="pill-btn light small" href="${esc(x.url)}" target="_blank" rel="noopener">📎 ${esc(x.name)}</a>`).join('')}</div>` : '';
+
+// ---------- Kad skor bercetak (sandaran) ----------
+function rubberNames(t, m, i) {
+  if (!E.isTeam(t)) return [E.pname(t, m.a), E.pname(t, m.b)];
+  const L = m.lineup || {}, types = E.rubberTypes(t);
+  if (types[i] === 'D') return [[L.ad1, L.ad2].filter(Boolean).join(' & '), [L.bd1, L.bd2].filter(Boolean).join(' & ')];
+  const n = types.slice(0, i + 1).filter(x => x === 'S').length, k = n === 1 ? 's' : 's' + n;
+  return [L['a' + k] || '', L['b' + k] || ''];
+}
+let _kdSel = 'pending';
+async function viewKadSkor(t) {
+  const K = await import('./poster-kit.js');
+  const ms = t.matches.filter(m => m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE' && m.status !== 'bye' && (_kdSel === 'all' || m.status !== 'done'));
+  const c = clubOf(t), team = E.isTeam(t), base = `${location.origin}${location.pathname}#/t/${t.id}/m/`;
+  const card = m => {
+    const f = E.fmtFor(t, m.stage), cols = f.bo, h = !team ? E.handicapInfo(t, m.a, m.b) : null;
+    const grid = (i) => { const [an, bn] = rubberNames(t, m, i); return `<table class="ks-grid"><tr><th></th>${Array.from({ length: cols }, (_, k) => `<th>Set ${k + 1}</th>`).join('')}</tr>
+      <tr><td class="ks-n">${esc(team ? (an || E.pname(t, m.a) + ': ________________') : E.pname(t, m.a))}</td>${'<td></td>'.repeat(cols)}</tr>
+      <tr><td class="ks-n">${esc(team ? (bn || E.pname(t, m.b) + ': ________________') : E.pname(t, m.b))}</td>${'<td></td>'.repeat(cols)}</tr></table>`; };
+    return `<div class="ks-card">
+      <div class="ks-top"><div><b>${esc(t.name)}</b><br><span>${esc(c.short || '')} · ${esc(E.matchCode(m) || '')} · ${esc(E.stageLabel(t, m))}</span></div><img src="${K.qrDataURL(base + m.id, 120)}" alt=""></div>
+      <div class="ks-vs"><b>${esc(E.pname(t, m.a))}</b> <span>lwn</span> <b>${esc(E.pname(t, m.b))}</b></div>
+      <div class="ks-meta">Meja: ______ &nbsp; Masa: ________ &nbsp; Format: ${esc(f.label.replace(/ \(.*\)/, ''))}${h && h.n && !h.pending && !h.missing ? ` &nbsp; Handicap: <b>${esc(E.pname(t, h.to))}</b> mula ${h.n}-0` : ''}</div>
+      ${m.rubbers.map((_, i) => `${team ? `<div class="ks-rub">${esc(E.rubberLabel(t, i))}</div>` : ''}${grid(i)}`).join('')}
+      <div class="ks-foot"><span>Pemenang: ______________________</span><span>Tandatangan pengadil: ______________</span></div>
+    </div>`;
+  };
+  $app.innerHTML = `<div class="noprint"><a href="#/t/${t.id}/jadual" class="muted">← Kembali ke Jadual</a>
+    <h2 class="h-big" style="font-size:22px">🖨️ Kad skor (sandaran)</h2>
+    <p class="muted small">Untuk digunakan jika internet atau telefon bermasalah. Imbas kod QR pada kad untuk memasukkan skor kemudian.</p>
+    <div class="row" style="gap:6px;margin-bottom:10px">${[['pending', 'Belum tamat'], ['all', 'Semua']].map(([k, v]) => `<button class="pill-btn small ${_kdSel === k ? 'brand' : 'light'}" data-kd="${k}">${v}</button>`).join('')}
+      <button class="pill-btn orange small" id="kdPrint"><span class="dot"></span>Cetak (${ms.length} kad)</button></div></div>
+    <div class="ks-sheet">${ms.map(card).join('') || '<p class="muted">Tiada perlawanan.</p>'}</div>`;
+  $app.querySelectorAll('[data-kd]').forEach(b => (b.onclick = () => { _kdSel = b.dataset.kd; viewKadSkor(t); }));
+  document.getElementById('kdPrint').onclick = () => window.print();
+}
+
+// ---------- Kad keputusan perlawanan (gambar untuk dikongsi) ----------
+async function shareResultCard(t, m, treat) {
+  const K = await import('./poster-kit.js'), RP = await import('./reg-poster.js'), r = E.evaluateMatch(t, m), team = E.isTeam(t), c = clubOf(t);
+  const A = E.pobj(t, m.a) || {}, B = E.pobj(t, m.b) || {};
+  const ssd = team && t.tieFormat === 'SSD';
+  const data = {
+    title: t.name, club: c.name || c.short, logos: c.logos, label: `${E.stageLabel(t, m)} · ${E.matchCode(m) || ''}`, date: fmtDate(t.date),
+    A: { name: E.pname(t, m.a), sub: (A.members || []).length > 1 ? A.members.join(' · ') : '' }, B: { name: E.pname(t, m.b), sub: (B.members || []).length > 1 ? B.members.join(' · ') : '' },
+    win: r.winner === m.a ? 'a' : r.winner === m.b ? 'b' : null, draw: r.draw,
+    big: ssd ? [r.ma, r.mb] : team ? [r.ra, r.rb] : [r.sa, r.sb], bigLabel: ssd ? 'Markah' : team ? 'Perlawanan' : 'Set',
+    rows: m.rubbers.map((rb, i) => { const [an, bn] = rubberNames(t, m, i), ev = r.rubbers[i] || {}; return { label: team ? E.rubberLabel(t, i) : 'Skor setiap set', a: team ? an : '', b: team ? bn : '', sets: rb.sets, w: team ? ev.winner : null }; }),
+    url: `${location.origin}${location.pathname}#/t/${t.id}/m/${m.id}`,
+  };
+  const treats = 'ABCDEFGHIJ'; treat = treat || treats[Math.floor(Math.random() * 10)];
+  const md = document.getElementById('modal');
+  md.innerHTML = `<div class="sheet"><div class="row" style="justify-content:space-between"><h3 style="margin:0">📸 Kad keputusan</h3><button class="pill-btn light small" id="mx">✕</button></div>
+    <div class="rp-styles"><button type="button" class="pill-btn small orange" id="rcRand">🎲 Gaya lain</button><span class="muted small" style="align-self:center">${esc(K.TREAT_NAMES[treat])}</span></div>
+    <div class="rp-box" id="rcBox"><p class="muted">Menjana…</p></div></div>`;
+  md.hidden = false; md.onclick = e => { if (e.target === md || e.target.id === 'mx') md.hidden = true; };
+  document.getElementById('rcRand').onclick = () => { let n; do n = treats[Math.floor(Math.random() * 10)]; while (n === treat); shareResultCard(t, m, n); };
+  const blob = await K.withSponsors(await K.makeResultCard(data, treat), sponsorsOf(t));
+  document.getElementById('rcBox').innerHTML = `<img src="${URL.createObjectURL(blob)}" class="rp-img" alt="Kad keputusan"><div class="btn-stack" style="margin-top:10px"><button class="pill-btn orange" id="rcShare"><span class="dot"></span>📤 Kongsi kad</button></div>`;
+  document.getElementById('rcShare').onclick = async () => { const res = await RP.shareBlob(blob, `Keputusan-${(E.matchCode(m) || m.id)}.png`, t.name); if (res === 'download') toast('Kad dimuat turun ke telefon'); };
+}
+
 // ---------- Skor langsung (setiap meja) ----------
 // Penjaga skor (penganjur, pengesah, atau sesiapa dengan PIN acara) tekan separuh skrin untuk tambah mata.
 // Skor disegerakkan ke awan; penonton nampak di tab Langsung dan Mod TV. Bila tamat → simpan / hantar untuk pengesahan.
@@ -1971,7 +2088,7 @@ function viewTV(t) {
     <div class="tv-top">${c.logos.map(x => `<img src="${esc(x)}" alt="">`).join('')}<div class="tv-title"><b>${esc(t.name)}</b><span>${esc(c.short || '')}${t.date ? ' · ' + esc(fmtDate(t.date)) : ''}</span></div>
       <div class="tv-stat"><small>Perlawanan</small><b>${done}<em>/${play.length}</em></b></div><div class="tv-clock" id="tvClock"></div></div>
     <div class="tv-body" id="tvBody">${tvSlideHtml(t, sl)}</div>
-    <div class="tv-foot"><span class="tv-dots">${S.map((_, i) => `<i class="${i === _tv.i % S.length ? 'on' : ''}"></i>`).join('')}</span>
+    <div class="tv-foot">${sponsorStrip(t)}<span class="tv-dots">${S.map((_, i) => `<i class="${i === _tv.i % S.length ? 'on' : ''}"></i>`).join('')}</span>
       <span class="tv-ctl"><button id="tvPrev">◀</button><button id="tvNext">▶</button><button id="tvFs">⛶ Skrin penuh</button><a href="#/t/${t.id}/langsung">✕ Keluar</a></span></div></div>`;
   const fit = $app.querySelector('.tv-fit');
   if (fit) { const inner = fit.querySelector('.tv-scale'); if (inner) { const sc = Math.min(1.6, (fit.clientWidth - 30) / inner.scrollWidth, (fit.clientHeight - 30) / inner.scrollHeight); inner.style.transform = `scale(${sc})`; inner.style.transformOrigin = 'top center'; } }
@@ -1993,7 +2110,7 @@ document.addEventListener('keydown', e => { if (!document.body.classList.contain
 // ---------- Jadual (ringkas, ikut portal) ----------
 let jdSel = null, jdSes = '';
 function viewJadual(t) {
-  const head = section('Jadual', 'Jadual Perlawanan');
+  const head = section('Jadual', 'Jadual Perlawanan') + (canEdit(t) && t.matches.length ? `<div class="row noprint" style="margin:-4px 0 10px"><a class="pill-btn light small" href="#/t/${t.id}/kadskor">🖨️ Kad skor bercetak (sandaran)</a></div>` : '');
   const all = t.matches.filter(m => m.status !== 'bye' && m.a !== 'BYE' && m.b !== 'BYE');
   if (!all.length) { $app.innerHTML = head + `<div class="card"><p class="muted">Jadual belum dijana.${canAdmin(t) ? ' Jana kumpulan dan jadual di tab ⚙️ Tetapan.' : ''}</p></div>`; return; }
   const opts = [...t.groups.map(g => [g.name, t.format === 'rr' ? 'Liga' : `Kumpulan ${g.name}`]),

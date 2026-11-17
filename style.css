@@ -587,3 +587,28 @@ body.tv main#app { max-width:none; padding:0; margin:0; }
 .rp-box { margin-top:10px; } .rp-img { width:100%; border-radius:14px; box-shadow:0 6px 20px rgba(0,0,0,.25); display:block; }
 .d-poster { width:100%; display:block; border-radius:18px; margin:0 0 12px; box-shadow:0 6px 20px rgba(0,0,0,.18); cursor:zoom-in; }
 .rp-styles { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+/* Penaja & lampiran */
+.sp-list { display:flex; flex-direction:column; gap:6px; margin:8px 0; }
+.sp-item { display:flex; align-items:center; gap:10px; padding:6px 10px; border:1px solid var(--line); border-radius:12px; }
+.sp-item img { height:34px; max-width:90px; object-fit:contain; background:#fff; border-radius:6px; }
+.sp-item span { flex:1; font-weight:600; }
+.sp-strip { display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:8px 12px; margin:10px 0 0; background:rgba(255,255,255,.95); border-radius:12px; }
+.sp-strip span { font:700 10px var(--mono, monospace); letter-spacing:.08em; color:#6b7280; text-transform:uppercase; }
+.sp-strip img { height:30px; max-width:110px; object-fit:contain; } .sp-strip b { color:#111; font-size:13px; }
+.tv-foot .sp-strip { margin:0 12px 0 0; padding:6px 12px; }
+.at-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+/* Kad skor bercetak */
+.ks-sheet { display:grid; grid-template-columns:1fr; gap:14px; }
+.ks-card { border:2px solid #111; border-radius:10px; padding:12px 14px; background:#fff; color:#111; break-inside:avoid; page-break-inside:avoid; font-size:13px; }
+.ks-top { display:flex; justify-content:space-between; gap:10px; } .ks-top span { color:#555; font-size:12px; } .ks-top img { width:72px; height:72px; }
+.ks-vs { font-size:17px; margin:6px 0; } .ks-vs span { color:#666; font-size:13px; margin:0 6px; }
+.ks-meta { font-size:12px; color:#333; margin-bottom:6px; }
+.ks-rub { font-weight:800; margin:8px 0 2px; font-size:12px; text-transform:uppercase; letter-spacing:.05em; }
+.ks-grid { width:100%; border-collapse:collapse; } .ks-grid th, .ks-grid td { border:1.5px solid #111; height:30px; text-align:center; font-size:11px; }
+.ks-grid td.ks-n { text-align:left; padding:0 6px; width:38%; font-size:12px; font-weight:600; }
+.ks-foot { display:flex; justify-content:space-between; gap:10px; margin-top:12px; font-size:12px; flex-wrap:wrap; }
+@media print {
+  .ks-sheet { grid-template-columns:1fr 1fr; gap:8px; }
+  .ks-card { font-size:11px; padding:8px 10px; } .ks-top img { width:60px; height:60px; }
+  .t-head .sp-strip { display:none; }
+}

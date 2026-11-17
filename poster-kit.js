@@ -217,7 +217,7 @@ function background(c, T, R) {
     tape(90, 40, 220, -.6); tape(W - 90, 40, 220, .6); tape(90, H - 40, 220, .6); tape(W - 90, H - 40, 220, -.6);
   }
   if (k === 'J') { // blok geometri Swiss
-    c.fillStyle = alpha(T.ink1, .92); c.fillRect(W * .7, 0, W * .3, H * .1);
+    c.fillStyle = alpha(T.ink1, .92); c.fillRect(W * .86, 0, W * .14, H * .1);
     c.fillStyle = '#ececec'; c.beginPath(); c.arc(W, H * .55, 190, Math.PI / 2, Math.PI * 1.5); c.fill();
     c.fillStyle = '#111'; c.fillRect(M, H - 46, W - 2 * M, 6);
   }
@@ -530,3 +530,69 @@ export async function makeKitPoster(d, combo) {
   await L[lay](c, T, d);
   return new Promise(res => cv.toBlob(b => res(b), 'image/png'));
 }
+
+// ---------- Jalur penaja (pilihan) di bawah poster/kad ----------
+export async function withSponsors(blob, sponsors) {
+  if (!sponsors || !sponsors.length) return blob;
+  const base = await loadImg(URL.createObjectURL(blob)), sh = 120, cv = document.createElement('canvas');
+  cv.width = base.width; cv.height = base.height + sh; const c = cv.getContext('2d');
+  c.drawImage(base, 0, 0); c.fillStyle = '#ffffff'; c.fillRect(0, base.height, cv.width, sh);
+  c.fillStyle = '#e5e7eb'; c.fillRect(0, base.height, cv.width, 2);
+  font(c, 17, 700, MONO); c.fillStyle = '#6b7280'; c.fillText('DITAJA OLEH', M, base.height + 30);
+  const imgs = await Promise.all(sponsors.map(s => (s.logo ? loadImg(s.logo) : null)));
+  let x = M; const lh = 58, y = base.height + 44;
+  sponsors.forEach((s, i) => {
+    const im = imgs[i];
+    if (im) { const w = Math.min(220, lh * im.width / im.height); c.drawImage(im, x, y, w, lh * Math.min(1, 220 / (lh * im.width / im.height))); x += w + 34; }
+    else { font(c, 26, 800); c.fillStyle = '#111'; c.fillText(s.name, x, y + 40); x += c.measureText(s.name).width + 34; }
+  });
+  return new Promise(res => cv.toBlob(b => res(b), 'image/png'));
+}
+
+// ---------- Kad keputusan perlawanan ----------
+// r: { title, club, logos, label, date, A:{name,sub}, B:{name,sub}, win:'a'|'b'|null, draw, big:[a,b], bigLabel, rows:[{label, a, b, sets:[[x,y]], w}], url }
+export async function makeResultCard(r, treat) {
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const c = cv.getContext('2d');
+  const club = { tb: css('--tb') || '#1f4aa8', or: css('--or') || '#ff7a1a', hd1: css('--hd1') || '#0b1a3f', hd2: css('--hd2') || '#1d3f8c' };
+  const T = treatment(treat, club); SX = T.sx; background(c, T, rand(hash(r.url + treat))); c.textAlign = 'left';
+  await header(c, T, { logos: r.logos, club: r.club }, M, 52, W - 2 * M, 72);
+  let y = 190; font(c, 22, 700, MONO); c.fillStyle = T.label; c.fillText(('KEPUTUSAN · ' + r.label).toUpperCase(), M, y);
+  const hl = fitTitle(c, r.title, W - 2 * M, 150, 2, T.sx, 90); y = title(c, T, hl.lines, M - 3, y + 6, hl.size) + 40;
+  // papan skor besar
+  const bh = 430; panel(c, T, M - 20, y, W - 2 * (M - 20), bh, 30);
+  const cx = W / 2, side = (k, nm, sub, win) => {
+    const x = k ? W - M - 20 : M + 20, al = k ? 'right' : 'left', w = 330;
+    c.save(); c.textAlign = al;
+    if (win) { font(c, 20, 900, MONO); c.fillStyle = T.titleB; c.fillText('🏆 MENANG', x, y + 60); }
+    font(c, 44, 900); c.fillStyle = win ? T.titleA : T.text; wrap(c, nm, w, 3).forEach((l, i) => c.fillText(l, x, y + 112 + i * 48));
+    if (sub) { font(c, 20, 600); c.fillStyle = T.soft; wrap(c, sub, w, 3).forEach((l, i) => c.fillText(l, x, y + 280 + i * 26)); }
+    c.restore();
+  };
+  side(0, r.A.name, r.A.sub, r.win === 'a'); side(1, r.B.name, r.B.sub, r.win === 'b');
+  c.save(); const bs = 200; c.textAlign = 'center';
+  c.fillStyle = r.win === 'a' ? T.titleB : T.text; if (T.titleFx === 'glow') { c.shadowColor = T.ink2; c.shadowBlur = 30; } ctext(c, String(r.big[0]), cx - 95, y + 250, bs, { align: 'center', sx: .8 });
+  c.fillStyle = r.win === 'b' ? T.titleB : T.text; ctext(c, String(r.big[1]), cx + 95, y + 250, bs, { align: 'center', sx: .8 });
+  c.fillStyle = T.soft; ctext(c, '–', cx, y + 215, 90, { align: 'center' });
+  font(c, 20, 700, MONO); c.fillStyle = T.soft; c.fillText(r.draw ? 'SERI' : r.bigLabel.toUpperCase(), cx, y + 300); c.restore();
+  illBall(c, T, cx, y + 370, 30);
+  y += bh + 40;
+  // butiran set / perlawanan
+  for (const row of r.rows) {
+    if (y > H - 170) break;
+    if (row.label) { font(c, 19, 700, MONO); c.fillStyle = T.label; c.fillText(row.label.toUpperCase(), M, y); }
+    if (row.a || row.b) { font(c, 22, 700); c.fillStyle = T.text; c.fillText(wrap(c, `${row.a || '—'}  lwn  ${row.b || '—'}`, W - 2 * M - 150, 1)[0], M, y + 32); }
+    if (row.w) { font(c, 20, 800, MONO); c.fillStyle = T.titleB; c.textAlign = 'right'; c.fillText(row.w === 'a' ? '◀ MENANG' : 'MENANG ▶', W - M, y); c.textAlign = 'left'; }
+    let x = M, yy = y + (row.a || row.b ? 52 : 14);
+    for (const [k, [a, b]] of row.sets.entries()) {
+      const txt = `${a}–${b}`; font(c, 26, 800, MONO); const w0 = c.measureText(txt).width + 30;
+      if (x + w0 > W - M) { x = M; yy += 52; }
+      c.fillStyle = a > b ? alpha(T.light ? T.ink1 : '#ffffff', .14) : T.chip; rr(c, x, yy, w0, 42, 21); c.fill();
+      if (T.chipStroke) { c.strokeStyle = T.chipStroke; c.lineWidth = 2; c.stroke(); }
+      c.fillStyle = T.text; c.fillText(txt, x + 15, yy + 30); x += w0 + 10;
+    }
+    y = yy + 72;
+  }
+  font(c, 19, 600, MONO); c.fillStyle = T.soft; c.fillText(r.date || '', M, H - M + 8); c.textAlign = 'right'; c.fillText('🏓 Pingpong Portal', W - M, H - M + 8); c.textAlign = 'left';
+  return new Promise(res => cv.toBlob(b => res(b), 'image/png'));
+}
+export const qrDataURL = (text, size = 160) => { const cv = document.createElement('canvas'); cv.width = cv.height = size; drawQR(cv.getContext('2d'), text, 0, 0, size); return cv.toDataURL('image/png'); };
