@@ -53,7 +53,7 @@ export const store = {
     const t = readLocal().tournaments.find(x => x.id === id);
     if (!t) return;
     if (!cloud.isAdmin()) throw new Error('Log masuk sebagai admin dahulu');
-    await cloud.saveTournament(t);
+    await cloud.saveTournament(t, { created: true });
     const db = readLocal(); db.tournaments = db.tournaments.filter(x => x.id !== id); writeLocal(db);
   },
   exportJSON() { return JSON.stringify({ tournaments: store.list() }, null, 2); },

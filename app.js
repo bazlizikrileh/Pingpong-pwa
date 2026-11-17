@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.9.5';
+const VERSION = '3.9.6';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -401,6 +401,7 @@ function viewHome() {
       t.regCond ? `<span class="tg">${esc(t.regCond)}</span>` : '',
       store.isCloud(t.id) && isHidden(t) ? '<span class="tg mute">🙈 Tersembunyi</span>' : '',
       store.isLocal(t.id) ? '<span class="tg mute">📱 Peranti ini</span>' : '',
+      cloud.isAdmin() ? `<span class="tg mute">👤 ${esc(t.createdBy ? t.createdBy.name : 'pencipta tidak direkod')}</span>` : '',
     ].join('');
     return `<div class="hc">
       <a class="hc-thumb" href="#/t/${t.id}">${own ? `<img src="${own}" alt="">` : `<span class="hc-logo">${c.thumb || c.logos[0] ? `<img src="${esc(c.thumb || c.logos[0])}" alt="">` : '🏓'}</span>`}</a>
@@ -589,6 +590,7 @@ async function readLogo(form, t) {
 
 function viewNew() {
   const t = E.newTournament();
+  if (cloud.state.user && !cloud.state.user.anon) t.createdBy = { name: cloud.state.user.name || (cloud.state.user.email || '').split('@')[0], at: Date.now() };
   t.clubId = ls.get('pingpong:lastClub') ?? 'ksas';
   t.waGroup = (CLUBS[t.clubId] || {}).waGroup || '';
   $app.innerHTML = `${section('Pertandingan', 'Cipta baharu')}
@@ -697,6 +699,10 @@ function viewSetupCore(t, part = 'tetapan') {
       <p class="muted small" id="pinMsg"></p></div>
       <div class="card"><label class="test-chk" style="margin:0"><input type="checkbox" id="hideChk" ${isHidden(t) ? 'checked' : ''}> <span>🙈 <b>Sembunyikan dari senarai awam</b><br><small class="muted">Peserta tidak nampak di laman utama, tetapi pautan terus masih boleh dibuka.</small></span></label></div>`
       : `<div class="notice">📱 Pertandingan ini disimpan dalam peranti ini sahaja. ${cloud.isAdmin() ? '<button class="pill-btn small brand" id="upNow">☁️ Pindah ke awan</button>' : 'Log masuk sebagai admin untuk memindahkannya ke awan supaya semua orang boleh melihat dan menghantar skor.'}</div><br>`}
+    ${canAdmin(t) ? `<div class="card owner-card"><div class="section-title" style="margin-top:0">👤 Rekod pentadbir</div>
+      <p class="small" style="margin:0">Dicipta oleh: <b>${esc(t.createdBy ? t.createdBy.name : 'tidak direkod')}</b>${t.createdBy && t.createdBy.at ? ` · ${esc(new Date(t.createdBy.at).toLocaleString('ms-MY', { dateStyle: 'medium', timeStyle: 'short' }))}` : ''}</p>
+      ${t.lastEdit ? `<p class="small" style="margin:4px 0 0">Kemas kini terakhir: <b>${esc(t.lastEdit.name)}</b> · ${esc(new Date(t.lastEdit.at).toLocaleString('ms-MY', { dateStyle: 'medium', timeStyle: 'short' }))}</p>` : ''}
+      ${!t.createdBy ? '<p class="muted small" style="margin:4px 0 0">Pertandingan ini dicipta sebelum rekod pencipta wujud.</p>' : ''}</div>` : ''}
     ${extrasCard(t)}
     ${testTools(t)}
     <div class="card noprint"><button class="pill-btn danger small" id="del">Padam pertandingan</button></div>`;

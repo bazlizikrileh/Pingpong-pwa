@@ -94,9 +94,12 @@ export async function ensureAnon() {
 export async function signOutAll() { await init(); await F.signOut(auth); }
 
 // ---------- Pertandingan ----------
-export async function saveTournament(t) {
+export async function saveTournament(t, opts = {}) {
   await init();
-  const meta = { name: t.name || '', clubId: t.clubId || '', stage: t.stage || '', date: t.date || '', regOpen: !!t.regOpen && t.stage === 'setup' && !(t.matches || []).length, updatedAt: F.serverTimestamp(), updatedBy: state.user?.email || '' };
+  // Siapa cipta / kemas kini (nama sahaja; e-mel tidak disimpan kerana data pertandingan boleh dibaca umum)
+  const who = state.user && !state.user.anon ? (state.user.name || (state.user.email || '').split('@')[0] || 'Admin') : '';
+  if (who) { if (opts.created && !t.createdBy) t.createdBy = { name: who, at: Date.now() }; t.lastEdit = { name: who, at: Date.now() }; }
+  const meta = { name: t.name || '', clubId: t.clubId || '', stage: t.stage || '', date: t.date || '', regOpen: !!t.regOpen && t.stage === 'setup' && !(t.matches || []).length, updatedAt: F.serverTimestamp(), updatedBy: who };
   await F.setDoc(F.doc(db, 'tournaments', t.id), { ...meta, data: JSON.stringify(t) });
 }
 export async function deleteTournament(id) { await init(); await F.deleteDoc(F.doc(db, 'tournaments', id)); }
