@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.10.0';
+const VERSION = '3.10.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -828,10 +828,23 @@ function sideAv(t, id) {
 function matchRow(t, m, no) {
   const r = E.evaluateMatch(t, m), team = E.isTeam(t);
   const has = m.rubbers.some(x => x.sets.length), done = m.status === 'done', live = !done && (m.lt || has);
-  // lajur: game (single/regu) atau pertemuan (trio: Single, Regu → set dimenangi)
+  // Skor belum disahkan (Jaga skor / dihantar) → dipapar samar-samar dalam kotak
+  let ghost = null, cur = null;
+  if (!done && !has) {
+    const x = liveOf(t, m);
+    if (x) { ghost = x.rs || []; if (!liveDone(t, m, x) && x.cur && (x.cur[0] || x.cur[1])) cur = { ri: x.ri || 0, g: x.cur }; }
+    else { const sub = _cur === t.id && pendingFor(t.id).filter(y => y.matchId === m.id).pop();
+      if (sub && sub.rubbers) ghost = sub.rubbers.map(r => (Array.isArray(r) ? r : String(r || '').split(',').map(g => g.split('-').map(Number))).filter(g => g.length === 2 && !isNaN(g[0]) && !isNaN(g[1]))); }
+  }
+  const setsOf = i => (ghost ? ghost[i] || [] : (m.rubbers[i] || { sets: [] }).sets);
+  const f = E.fmtFor(t, m.stage);
+  // lajur: set (single/regu) atau pertemuan (trio: Single, Regu → set dimenangi)
   const cols = team
-    ? m.rubbers.map((rb, i) => { const a = rb.sets.filter(([x, y]) => x > y).length, b = rb.sets.filter(([x, y]) => y > x).length; return { a: rb.sets.length ? a : '', b: rb.sets.length ? b : '', lab: i ? 'R' : 'P' }; })
-    : (m.rubbers[0] || { sets: [] }).sets.map(([x, y]) => ({ a: x, b: y }));
+    ? m.rubbers.map((rb, i) => { const ss = setsOf(i), a = ss.filter(([x, y]) => x > y).length, b = ss.filter(([x, y]) => y > x).length;
+        const c = cur && cur.ri === i && !ss.length; return { a: ss.length ? a : c ? 0 : '', b: ss.length ? b : c ? 0 : '', cur: c }; })
+    : (() => { const ss = setsOf(0).map(([x, y]) => ({ a: x, b: y }));
+        if (cur && cur.ri === 0) ss.push({ a: cur.g[0], b: cur.g[1], cur: true });
+        return ss; })();
   const [ta, tb] = E.tieScore(t, r);
   const h = E.handicapInfo(t, m.a, m.b);
   const ctx = m.stage !== 'group' ? E.stageLabel(t, m) : (t.format === 'rr' ? 'Liga' : `Kumpulan ${m.group}`);
@@ -842,8 +855,14 @@ function matchRow(t, m, no) {
   const side = (id, src, mine, other, key) => {
     const win = done && m.winner && m.winner === id;
     return `<div class="mc-r ${win ? 'w' : done ? 'l' : ''}">${sideAv(t, id)}${sideName(t, id, src)}
-      ${cols.map(c => `<span class="mc-g ${c[key] !== '' && c[key] > c[key === 'a' ? 'b' : 'a'] ? 'gw' : ''}">${c[key]}</span>`).join('')}
-      <span class="mc-t">${has || done ? mine : ''}</span></div>`;
+      ${cols.map(c => `<span class="mc-g ${ghost ? 'gh' : ''} ${c.cur ? 'cur' : ''} ${!c.cur && c[key] !== '' && c[key] > c[key === 'a' ? 'b' : 'a'] ? 'gw' : ''}">${c[key]}</span>`).join('')}
+      <span class="mc-t ${ghost ? 'gh' : ''}">${has || done ? mine : ghostTot(key)}</span></div>`;
+  };
+  const ghostTot = key => {
+    if (!ghost || !ghost.some(s => s.length)) return '';
+    const a = team ? cols.filter(c => !c.cur && c.a !== '' && c.a > c.b).length : cols.filter(c => !c.cur && c.a !== '' && c.a > c.b).length;
+    const b = team ? cols.filter(c => !c.cur && c.b !== '' && c.b > c.a).length : cols.filter(c => !c.cur && c.b !== '' && c.b > c.a).length;
+    return key === 'a' ? a : b;
   };
   const notes = [h && h.n ? `HC: ${esc(E.pname(t, h.to))} +${h.n}` : '',
     ls.get('pingpong:draft:' + m.id) && !done ? '<span class="draft">✏️ draf</span>' : '',
@@ -852,6 +871,7 @@ function matchRow(t, m, no) {
   return `<a class="mc ${done ? 'done' : live ? 'live' : ''}" href="#/t/${t.id}/m/${m.id}" style="--cols:28px minmax(0,1fr) ${'24px '.repeat(cols.length)}40px">
     <div class="mc-h"><span class="mc-code">${esc(no ?? (E.matchCode(m) || ''))}</span><span class="mc-ctx">${esc(ctx)}</span>${status}</div>
     ${side(m.a, m.srcA, ta, tb, 'a')}${side(m.b, m.srcB, tb, ta, 'b')}
+    ${ghost ? `<div class="mc-f gh-note">${liveOf(t, m) ? (liveDone(t, m, liveOf(t, m)) ? '🏁 Tamat di Jaga skor' : '<i class="pulse"></i> Sedang dijaga skor') : ''}${liveOf(t, m) ? ' · ' : ''}skor samar = belum disahkan</div>` : ''}
     ${notes ? `<div class="mc-f">${notes}</div>` : ''}
   </a>`;
 }
@@ -950,7 +970,7 @@ function viewResults(t) {
     ${t.groups.some(g => g.name === jsel) ? `<details class="card fold" ${ls.get('pingpong:mx:' + jsel) === '0' ? '' : 'open'} id="mxBox"><summary>🔢 Matriks keputusan · ${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(jsel)}</summary>${matrixHtml(t, t.groups.find(g => g.name === jsel))}</details>` : ''}
     <div class="card">${shown.length ? shown.map(m => {
       const head = m.session !== lastS ? `<div class="sess">Sesi ${m.session} · ${E.sessionTime(t, m.session)}</div>` : '';
-      lastS = m.session; return head + matchRow(t, m) + liveLine(t, m);
+      lastS = m.session; return head + matchRow(t, m);
     }).join('') : '<div class="empty">Tiada perlawanan.</div>'}</div>
     ${t.format === 'group_ko' && E.groupStageComplete(t) && !t.rounds.ko && canAdmin(t) ? `<div class="notice">Semua perlawanan kumpulan selesai. <a href="#/t/${t.id}/kalahmati"><b>Jana kalah mati →</b></a></div>` : ''}`;
   document.getElementById('jsel').onchange = e => { jsel = e.target.value; viewResults(t); };

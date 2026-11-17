@@ -645,3 +645,7 @@ body.tv main#app { max-width:none; padding:0; margin:0; }
 .lv-ago { color:var(--muted, #6b7280); font-weight:600; }
 .fmt-box { padding:10px 14px; border-radius:14px; background:color-mix(in srgb, var(--tb, #1f4aa8) 9%, var(--card, #fff)); border:1.5px solid color-mix(in srgb, var(--tb, #1f4aa8) 25%, transparent); font-size:14px; margin:0 0 12px; line-height:1.5; }
 .mr-live { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:12.5px; color:#b91c1c; margin:-4px 0 10px 4px; font-weight:600; }
+.mc-g.gh { opacity:.45; font-style:italic; }
+.mc-g.cur { opacity:.6; color:#b91c1c; font-style:italic; }
+.mc-t.gh { opacity:.4; }
+.mc-f.gh-note { color:#b91c1c; font-weight:600; }
