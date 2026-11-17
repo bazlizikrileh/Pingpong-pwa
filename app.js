@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.5.1';
+const VERSION = '3.5.2';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1400,6 +1400,8 @@ function wirePosterAdmin(t) {
   };
   if (del) del.onclick = async () => { if (!confirm('Buang poster sendiri? Poster automatik akan digunakan semula.')) return; await cloud.delPoster(t.id).catch(e => toast('Gagal: ' + (e.code || e.message))); };
 }
+const RP_STYLES = { editorial: '📰 Editorial', gelap: '🌙 Gelap', klasik: '🏓 Klasik' };
+const rpStyle = () => (RP_STYLES[ls.get('pingpong:posterStyle')] ? ls.get('pingpong:posterStyle') : 'editorial');
 async function showRegPoster(t, auto = false) {
   const own = !auto && posterOf(t);
   if (own) {
@@ -1419,10 +1421,12 @@ async function showRegPoster(t, auto = false) {
   }
   const md = document.getElementById('modal');
   md.innerHTML = `<div class="sheet"><div class="row" style="justify-content:space-between"><h3 style="margin:0">🖼️ Poster</h3><button class="pill-btn light small" id="mx">✕</button></div>
+    <div class="rp-styles">${Object.entries(RP_STYLES).map(([k, v]) => `<button type="button" class="pill-btn small ${k === rpStyle() ? 'brand' : 'light'}" data-rps="${k}">${v}</button>`).join('')}</div>
     <div id="rpBox" class="rp-box"><p class="muted">Menjana poster…</p></div></div>`;
   md.hidden = false; md.onclick = e => { if (e.target === md || e.target.id === 'mx') md.hidden = true; };
   try {
-    const m = await import('./reg-poster.js'), blob = await m.makeRegPoster(regPosterData(t));
+    md.querySelectorAll('[data-rps]').forEach(b => (b.onclick = () => { ls.set('pingpong:posterStyle', b.dataset.rps); showRegPoster(t, true); }));
+    const m = await import('./reg-poster.js'), blob = await m.makeRegPoster(regPosterData(t), rpStyle());
     const name = `Poster-${(t.name || 'pertandingan').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-')}.png`;
     document.getElementById('rpBox').innerHTML = `<img src="${URL.createObjectURL(blob)}" alt="Poster" class="rp-img">
       <div class="btn-stack" style="margin-top:10px"><button class="pill-btn orange" id="rpShare"><span class="dot"></span>📤 Kongsi poster</button></div>
