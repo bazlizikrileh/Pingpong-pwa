@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.12.1';
+const VERSION = '3.12.2';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -490,10 +490,10 @@ function settingsFormAll(t, locked) {
     <div data-show="tieRule"><label>Keputusan sama (kumpulan)</label><select name="tieRule">${opt({ draw: 'Seri', next: 'Tiada seri (beza set, kemudian mata)' }, t.tieRule || 'draw')}</select></div>
     <div data-show="mixer" class="notice small" style="margin:8px 0">🔀 <b>Regu bertukar:</b> setiap pusingan pemain diundi menjadi regu baharu. Mata dikira untuk setiap individu (menang, kemudian beza set dan beza mata). Pasangan yang sama dielakkan.</div>
     <div data-show="mixer" class="grid2">
-      <div><label>Bilangan pusingan</label><input name="mixRounds" type="number" min="1" max="40" value="${t.mixRounds || ''}" placeholder="Auto: ${E.mixPlan(t, Math.max(4, t.individuals.length)).R}" ${dis}></div>
+      <div><label>Bilangan pusingan</label><input name="mixRounds" type="number" min="1" max="40" value="${t.mixRounds || ''}" placeholder="Kosong = penuh (semua berpasangan sekali)" ${dis}></div>
       <div><label>Imbang regu ikut tahap</label><select name="mixLv" ${dis}>${opt({ '': 'Tidak (undian bebas)', ksas: 'Tahap KSAS', kroni: 'Tahap Kroni Shell' }, t.mixLv || '')}</select></div>
     </div>
-    <p data-show="mixer" class="muted small" style="margin:4px 0 0">Auto = setiap pemain berpasangan dengan semua pemain lain sekali. Tahap ditulis dalam senarai individu, cth. <i>Ali (Naga)</i>. Jika Handicap ikut tahap dipilih, tahap itu juga digunakan untuk imbang.</p>
+    <p data-show="mixer" class="muted small" style="margin:4px 0 0">Kosong = penuh: setiap pemain berpasangan dengan semua pemain lain sekali (cth. 12 pemain → 11 kali main). Isi nombor untuk pusingan lebih pendek. Tahap ditulis dalam senarai individu, cth. <i>Ali (Naga)</i>. Jika Handicap ikut tahap dipilih, tahap itu juga digunakan untuk imbang.</p>
     <div data-show="notmixer"><label>Struktur</label><select name="format" ${dis}>${opt(FORMAT, t.format)}</select></div>
     <div class="grid2">
       <div><label data-label="gf">Format kumpulan</label><select name="groupFormat">${opt(setOpts, t.groupFormat)}</select></div>
@@ -1203,7 +1203,8 @@ function matrixHtml(t, g) {
 }
 function mixPlanText(t) {
   const P = E.mixPlan(t);
-  return `${P.R} pusingan${P.auto ? ' (auto)' : ''} · ${P.per} perlawanan setiap pusingan (${P.nt} meja)${P.rest ? ` · ${P.rest} pemain rehat bergilir` : ''} · jumlah <b>${P.matches} perlawanan</b> · setiap pemain main ${P.min === P.max ? P.min : `${P.min}–${P.max}`} kali${P.min !== P.max ? ' <span style="color:#b45309">(tidak sama rata — cuba ubah bilangan pusingan)</span>' : ''}.`;
+  const [h, mi] = String(t.startTime || '').split(':').map(Number), end = isNaN(h) ? '' : (() => { const x = h * 60 + (mi || 0) + P.sessions * (Number(t.sessionMin) || 30); return ` · anggaran tamat <b>${String(Math.floor(x / 60) % 24).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}</b>`; })();
+  return `${P.auto ? `<b>Penuh</b>: setiap pemain berpasangan dengan semua pemain lain sekali · ` : `${P.R} pusingan · `}jumlah <b>${P.matches} perlawanan</b> · ${P.nt} meja → <b>${P.sessions} sesi</b>${end}${!P.auto && P.rest ? ` · ${P.rest} pemain rehat bergilir setiap pusingan` : ''} · setiap pemain main ${P.min === P.max ? P.min : `${P.min}–${P.max}`} kali${P.min !== P.max ? ' <span style="color:#b45309">(tidak sama rata — cuba ubah bilangan pusingan)</span>' : ''}.`;
 }
 function viewMixStandings(t) {
   const S = E.mixStandings(t), done = t.matches.filter(m => m.status === 'done').length;

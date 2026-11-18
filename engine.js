@@ -968,11 +968,14 @@ export const mixRoundsAuto = n => (n % 2 ? n : n - 1);
 // Bilangan pemain yang bermain setiap pusingan (dihadkan oleh bilangan meja) dan pusingan auto supaya semua main sama banyak
 export const mixActive = (n, nt) => Math.min(n - (n % 4), 4 * Math.max(1, nt));
 export function mixPlan(t, n = (t.individuals || []).length) {
-  const nt = numTablesOf(t), act = mixActive(n, nt);
+  const nt = numTablesOf(t);
   let R = Number(t.mixRounds) || 0, auto = !R;
+  // Auto = penuh: setiap pemain berpasangan dengan semua pemain lain sekali (semua bermain setiap pusingan;
+  // jika meja tidak cukup, perlawanan disusun ke sesi berikutnya). Manual = pusingan dihadkan oleh bilangan meja.
+  const act = auto ? n - (n % 4) : mixActive(n, nt);
   if (auto) { R = mixRoundsAuto(n); if (act && act < n) while ((R * act) % n) R++; }
-  const per = act / 4, slots = R * act;
-  return { n, nt, act, rest: n - act, per, R, auto, matches: R * per, min: Math.floor(slots / n), max: Math.ceil(slots / n) };
+  const per = act / 4, slots = R * act, matches = R * per;
+  return { n, nt, act, rest: n - act, per, R, auto, matches, sessions: Math.ceil(matches / nt), min: Math.floor(slots / n), max: Math.ceil(slots / n) };
 }
 export function relevel(t) { (t.individuals || []).forEach(x => { if (x.lv && !levelOf(t, x.name)) takeLevel(t, { name: x.name, lv: x.lv }); }); }
 export function buildMixer(t, tries = 80) {
@@ -1030,17 +1033,24 @@ export function buildMixer(t, tries = 80) {
     }
   }
   // Susun ke sesi: isi semua meja; perlawanan pusingan seterusnya boleh bermula awal jika pemainnya tidak sedang bermain
-  const left = t.matches.slice();
-  while (left.length) {
-    sess++; const busy = new Set(), take = [];
-    for (const m of left) {
-      if (take.length >= NT) break;
-      const free = m.px.every(id => !busy.has(id));
-      m.px.forEach(id => busy.add(id)); // pemain perlawanan yang ditangguh juga disekat supaya turutan pusingan kekal
-      if (free) take.push(m);
+  // Susun ke sesi: isi semua meja; perlawanan boleh bermula awal jika pemainnya tidak sedang bermain. Cuba beberapa kali, ambil yang paling pendek.
+  let bestPlan = null;
+  for (let k = 0; k < 40; k++) {
+    const left = t.matches.slice(), played = {}, jit = Object.fromEntries(left.map(m => [m.id, k ? Math.random() : 0])), plan = [];
+    while (left.length) {
+      const busy = new Set(), take = [];
+      const score = m => m.mr * 2 + m.px.reduce((a, id) => a + (played[id] || 0), 0) * 0.3 + jit[m.id];
+      for (const m of left.slice().sort((x, y) => score(x) - score(y))) {
+        if (take.length >= NT) break;
+        if (m.px.every(id => !busy.has(id))) { take.push(m); m.px.forEach(id => busy.add(id)); }
+      }
+      take.forEach(m => { m.px.forEach(id => (played[id] = (played[id] || 0) + 1)); left.splice(left.indexOf(m), 1); });
+      plan.push(take);
     }
-    take.forEach((m, i) => { m.session = sess; m.table = T[i]; m.gi = i; left.splice(left.indexOf(m), 1); });
+    if (!bestPlan || plan.length < bestPlan.length) bestPlan = plan;
+    if (plan.length === Math.ceil(t.matches.length / NT)) break;
   }
+  bestPlan.forEach((take, si) => take.forEach((m, i) => { m.session = si + 1; m.table = T[i]; m.gi = i; }));
   t.stage = 'group';
 }
 export const mixRoundOf = m => m.mr || 0;
