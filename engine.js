@@ -84,6 +84,7 @@ export function migrate(t) {
     if (!m.rubbers) m.rubbers = [{ type: 'S', sets: m.sets || [] }];
     if (m.stage === 'ko' && !m.bracket) m.bracket = 'ko';
   }
+  if (t.entryMode === 'mixer') mixCompact(t);
   return t;
 }
 
@@ -1058,9 +1059,27 @@ export function buildMixer(t, tries = 80) {
   }
   bestPlan.forEach((take, si) => take.forEach((m, i) => { m.session = si + 1; m.table = T[i]; m.gi = i; }));
   t.mixG = {}; t.matches.forEach(m => m.px.forEach(id => (t.mixG[id] = (t.mixG[id] || 0) + 1))); // sasaran bilangan main setiap pemain (tetap)
+  mixCompact(t);
   t.stage = 'group';
 }
 export const mixRoundOf = m => m.mr || 0;
+// Sesi yang tidak penuh (meja tidak digunakan semua) dipindah ke hujung, supaya meja kosong hanya berlaku di sesi akhir.
+// Hanya sesi yang belum bermula (tiada perlawanan tamat / di meja) diubah.
+export function mixCompact(t) {
+  if (!isMixer(t) || !t.matches.length) return false;
+  const NT = numTablesOf(t), by = {};
+  t.matches.forEach(m => { if (m.px && m.session) (by[m.session] = by[m.session] || []).push(m); });
+  const S = Object.keys(by).map(Number).sort((a, b) => a - b);
+  const started = s => by[s].some(m => m.status === 'done' || m.lt);
+  const firstFree = S.findIndex(s => !S.slice(S.indexOf(s)).some(started));
+  if (firstFree < 0) return false;
+  const tail = S.slice(firstFree), full = tail.filter(s => by[s].length >= NT), part = tail.filter(s => by[s].length < NT);
+  const order = [...full, ...part];
+  if (order.every((s, i) => s === tail[i])) return false;
+  const map = {}; order.forEach((s, i) => (map[s] = tail[i]));
+  t.matches.forEach(m => { if (m.px && map[m.session]) m.session = map[m.session]; });
+  return true;
+}
 // Kedudukan individu: menang, beza set, beza mata; serta rekod dengan setiap pasangan
 export function mixStandings(t) {
   const rows = Object.fromEntries((t.individuals || []).map(x => [x.id, { id: x.id, p: 0, w: 0, l: 0, d: 0, sf: 0, sa: 0, pf: 0, pa: 0, with: [] }]));
