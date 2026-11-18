@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.11.1';
+const VERSION = '3.11.2';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -547,6 +547,7 @@ function wireForm(form) {
     const mx = form.entryMode.value === 'mixer';
     show('team', form.entryMode.value === 'team');
     show('mixer', mx); show('notmixer', !mx);
+    { const gf = form.groupFormat; [...gf.options].forEach(o => { o.hidden = o.disabled = mx && !['3', '5'].includes(o.value); }); if (mx && !['3', '5'].includes(gf.value)) gf.value = '3'; }
     show('groups', f === 'group_ko' && !mx);
     show('ko', f !== 'rr' && !mx);
     show('venueX', form.venue.value === 'X');
@@ -586,7 +587,7 @@ function readSettings(form, t) {
   t.waMode = v('waMode'); t.waGroup = v('waGroup').trim(); t.waNumber = v('waNumber').replace(/\D/g, '');
   if (!form.entryMode.disabled) {
     t.entryMode = v('entryMode'); t.teamSize = Number(v('teamSize')) || 3; t.format = v('format');
-    if (t.entryMode === 'mixer') { t.format = 'rr'; t.mixRounds = Math.max(0, Math.min(40, Number(v('mixRounds')) || 0)); t.mixLv = v('mixLv') || ''; E.relevel(t); }
+    if (t.entryMode === 'mixer') { t.format = 'rr'; t.mixRounds = Math.max(0, Math.min(40, Number(v('mixRounds')) || 0)); t.mixLv = v('mixLv') || ''; if (!['3', '5'].includes(t.groupFormat)) t.groupFormat = '3'; E.relevel(t); }
     t.tieFormat = t.teamSize >= 4 ? v('tieFormat') || 'SD' : 'SD';
     t.numGroups = Number(v('numGroups')) || 0; t.groupSize = Number(v('groupSize')) || 4; t.bestThirds = Number(v('bestThirds')) || 0;
   }
@@ -1200,7 +1201,7 @@ function viewMixStandings(t) {
   const S = E.mixStandings(t), done = t.matches.filter(m => m.status === 'done').length;
   const nm = id => esc(E.pname(t, id)), sgn = x => (x > 0 ? '+' : '') + x;
   $app.innerHTML = `${section('Keputusan', 'Kedudukan Individu')}
-    <div class="fmt-box">🔀 Regu bertukar · ${done}/${t.matches.length} perlawanan selesai<br><span class="muted small">Mata: Menang 3 · Seri 1 · Kalah 0. Sama mata → beza set → beza mata. Tekan nama untuk lihat rekod dengan setiap pasangan.</span></div>
+    <div class="fmt-box">🔀 Regu bertukar · ${done}/${t.matches.length} perlawanan selesai<br><span class="muted small">Mata: Menang 3 · Kalah 0. Sama mata → beza set → beza mata. Tekan nama untuk lihat rekod dengan setiap pasangan.</span></div>
     <div class="card"><div class="tw"><table class="mx-st"><thead><tr><th>#</th><th class="l">Pemain</th><th>Main</th><th>M</th><th>K</th><th>±Set</th><th>±Skor</th><th>Mata</th></tr></thead><tbody>
     ${S.map((r, i) => `<tr><td>${i + 1}</td><td class="l"><details class="mx-d"><summary><b>${nm(r.id)}</b>${E.levelOf(t, E.pname(t, r.id)) && E.levelInfo(t, E.levelOf(t, E.pname(t, r.id))) ? ` <span class="muted small">${esc(E.levelInfo(t, E.levelOf(t, E.pname(t, r.id)))[1])}</span>` : ''}</summary>
       ${r.with.length ? `<div class="mx-w">${r.with.map(w => `<span class="${w.draw ? '' : w.win ? 'ok' : 'no'}">P${w.mr} · ${nm(w.mate)} · ${w.draw ? 'Seri' : w.win ? 'Menang' : 'Kalah'} ${w.s}</span>`).join('')}</div>` : '<span class="muted small">Belum bermain</span>'}</details></td>
