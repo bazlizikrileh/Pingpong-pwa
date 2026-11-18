@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.15.1';
+const VERSION = '3.15.2';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1268,7 +1268,7 @@ function viewMixStandings(t) {
   const S = E.mixStandings(t), done = t.matches.filter(m => m.status === 'done').length;
   const nm = id => esc(E.pname(t, id)), sgn = x => (x > 0 ? '+' : '') + x;
   $app.innerHTML = `${section('Keputusan', 'Kedudukan Individu')}
-    <div class="fmt-box">🔀 Regu bertukar · ${done}/${t.matches.length} perlawanan selesai<br><span class="muted small">Mata: Menang 3 · Kalah 0. Sama mata → beza set → beza mata. Tekan nama untuk lihat rekod dengan setiap pasangan.</span></div>
+    <div class="fmt-box">🔀 Regu bertukar · ${done}/${t.matches.length} perlawanan selesai<br><span class="muted small">Mata: Menang 3 · Kalah 0. Sama mata → beza set → beza skor. Tekan nama untuk lihat rekod dengan setiap pasangan. <a href="#/t/${t.id}/peraturan">📜 Peraturan penuh</a></span></div>
     <div class="card"><div class="tw"><table class="mx-st"><thead><tr><th>#</th><th class="l">Pemain</th><th>Main</th><th>M</th><th>K</th><th>±Set</th><th>±Skor</th><th>Mata</th></tr></thead><tbody>
     ${S.map((r, i) => `<tr><td>${i + 1}</td><td class="l"><details class="mx-d"><summary><b>${nm(r.id)}</b>${E.levelOf(t, E.pname(t, r.id)) && E.levelInfo(t, E.levelOf(t, E.pname(t, r.id))) ? ` <span class="muted small">${esc(E.levelInfo(t, E.levelOf(t, E.pname(t, r.id)))[1])}</span>` : ''}</summary>
       ${r.with.length ? `<div class="mx-w">${r.with.map(w => `<span class="${w.draw ? '' : w.win ? 'ok' : 'no'}">P${w.mr} · ${nm(w.mate)} · ${w.draw ? 'Seri' : w.win ? 'Menang' : 'Kalah'} ${w.s}</span>`).join('')}</div>` : '<span class="muted small">Belum bermain</span>'}</details></td>
@@ -1466,10 +1466,20 @@ function rankingHtml(t) {
 }
 
 // ---------- Peraturan & panduan ----------
-function rulesHtml(t) {
+function rulesOf(t) {
   const gf = E.SET_FORMATS[t.groupFormat].label, kf = E.SET_FORMATS[t.koFormat].label;
   const rules = [];
-  if (t.format === 'rr') rules.push('Format liga: setiap peserta bertemu semua peserta lain sekali. Juara ialah peserta di tangga teratas selepas semua perlawanan selesai.', `Format perlawanan: ${gf}.`);
+  if (E.isMixer(t)) {
+    const P = E.mixPlan(t), n = t.individuals.length;
+    rules.push(`Format Regu bertukar: setiap perlawanan ialah regu (2 lwn 2), tetapi pasangan dan lawan bertukar setiap perlawanan. Mata dikira untuk setiap individu.`);
+    if (P.auto && n >= 4) rules.push(`Setiap pemain berpasangan dengan setiap pemain lain tepat sekali${n % 4 === 0 || n % 4 === 1 ? ' dan menentang setiap pemain lain sebanyak 2 kali' : ''}. Setiap pemain bermain ${P.min === P.max ? P.min : P.min + '–' + P.max} perlawanan (jumlah ${P.matches} perlawanan dalam ${E.lastSession(t) || P.sessions} sesi).`);
+    else if (n >= 4) rules.push(`${P.R} pusingan; setiap pemain bermain ${P.min === P.max ? P.min : P.min + '–' + P.max} perlawanan dengan pasangan berbeza.`);
+    rules.push(`Format setiap perlawanan: ${E.fmtFor(t, 'group').label}. Tiada keputusan seri.`);
+    if (E.lvScheme(t)) rules.push('Regu diimbangkan mengikut tahap pemain supaya kekuatan kedua-dua pihak hampir sama.');
+    rules.push('Mata individu: kedua-dua pemain dalam regu yang menang mendapat 3 mata; regu yang kalah 0 mata.');
+    rules.push('Kedudukan individu ditentukan mengikut turutan: (1) jumlah mata, (2) beza set (set menang tolak set kalah), (3) beza skor (jumlah mata permainan dijaringkan tolak dibolosi). Juara ialah pemain di tangga teratas selepas semua perlawanan selesai.');
+    rules.push('Pengadil: pemain yang tidak bermain dalam sesi itu, secara bergilir. Pemain selebihnya berehat.');
+  } else if (t.format === 'rr') rules.push('Format liga: setiap peserta bertemu semua peserta lain sekali. Juara ialah peserta di tangga teratas selepas semua perlawanan selesai.', `Format perlawanan: ${gf}.`);
   else if (t.format === 'ko') rules.push(`Kalah mati sahaja: ${kf}.`);
   else {
     rules.push(`Format perlawanan - peringkat kumpulan: ${gf}; kalah mati: ${kf}.`);
@@ -1478,18 +1488,22 @@ function rulesHtml(t) {
       : `Kalah mati: BYE diberi kepada johan kumpulan terbaik (ikut mata, kemudian beza menang-kalah perlawanan, set dan mata permainan). Johan dan naib johan dari kumpulan yang sama diletakkan di separuh bracket berbeza.${t.bestThirds ? ` ${t.bestThirds} tempat ketiga terbaik turut layak.` : ''} Jika saiz kumpulan tidak sama, perbandingan antara kumpulan tidak mengambil kira keputusan menentang pemain tempat terakhir kumpulan yang lebih besar.`);
     if (t.pool !== '0') rules.push(`Pool kalah: ${t.pool === '34' ? 'peserta tempat ketiga yang tidak layak ke kalah mati utama dan semua peserta tempat keempat' : 'peserta tempat ketiga yang tidak layak ke kalah mati utama'} bermain kalah mati berasingan menggunakan format kalah mati yang sama. BYE (jika ada) diberi kepada peserta terbaik.`);
   }
-  rules.push(!E.isTeam(t) ? 'Menang: 3 mata. Kalah: 0 mata.'
+  if (!E.isMixer(t)) rules.push(!E.isTeam(t) ? 'Menang: 3 mata. Kalah: 0 mata.'
     : t.tieFormat === 'SSD' ? `Pertemuan ${E.teamWord(t).toLowerCase()}: Single 1 + Single 2 + Double, ketiga-tiga dimainkan. Setiap ahli bermain sekali sahaja (dua pemain single, dua lagi double). Setiap perlawanan: menang 3 markah, seri (1-1) 1 markah, kalah 0. Pemenang pertemuan = jumlah markah tertinggi. ${t.tieRule === 'next' ? 'Jika markah sama: beza set, kemudian jumlah mata.' : 'Jika markah sama di peringkat kumpulan: seri.'} Kedudukan kumpulan: jumlah markah, kemudian beza set, kemudian bersemuka. Kalah mati: jika markah sama, penentu beza set, kemudian jumlah mata.`
     : `Pertemuan ${E.teamWord(t).toLowerCase()}: 1 perlawanan perseorangan + 1 perlawanan regu. Menang 2-0: 3 mata. Seri 1-1: 1 mata. Kalah: 0 mata.`);
-  rules.push('Jika mata sama, susunan ditentukan mengikut turutan: (1) beza menang-kalah bilangan perlawanan, (2) beza menang-kalah bilangan set, (3) keputusan bersemuka (pertemuan sesama peserta yang masih sama; jika tiga atau lebih, bilangan kemenangan sesama mereka), (4) beza menang-kalah bilangan mata permainan. Contoh: 5-2 (+3).');
+  if (!E.isMixer(t)) rules.push('Jika mata sama, susunan ditentukan mengikut turutan: (1) beza menang-kalah bilangan perlawanan, (2) beza menang-kalah bilangan set, (3) keputusan bersemuka (pertemuan sesama peserta yang masih sama; jika tiga atau lebih, bilangan kemenangan sesama mereka), (4) beza menang-kalah bilangan mata permainan. Contoh: 5-2 (+3).');
   const HS = E.HC_SCHEMES[t.hcMode];
   if (t.hcMode === 'manual') rules.push('Handicap (mata mula): angka dalam kurungan ialah mata yang diberi kepada pihak lawan, maksimum 5. Mata mula = beza antara angka kedua-dua pihak. Pihak dengan angka lebih rendah mula dengan mata tersebut pada setiap game.');
   else if (HS) rules.push(`Handicap ${HS.name} (mata mula setiap game). Nilai single: ${HS.levels.map(l => `${l[1]} ${l[2]}`).join(', ')}. Single: pihak bernilai rendah mula dengan beza nilai (cth. ${HS.levels[HS.levels.length - 1][1]} lwn ${HS.levels[0][1]}: mula ${HS.levels[0][2] - HS.levels[HS.levels.length - 1][2]}-0). Nilai double: ${HS.levels.map(l => `${l[1]} ${l[3]}`).join(', ')}. Double: nilai dua ahli dijumlahkan, beza maksimum ${HS.capD} mata.`);
   rules.push('Jika kaedah di atas gagal, penganjur berhak menggunakan kaedah yang difikirkan perlu dan munasabah. Keputusan penganjur adalah muktamad.');
+  return rules;
+}
+function rulesHtml(t) {
+  const rules = rulesOf(t);
   return `<div class="card"><ol class="rules">${rules.map(r => `<li>${esc(r)}</li>`).join('')}</ol></div>
     <div class="card"><div class="section-title" style="margin-top:0">📖 Panduan peserta</div>
       <p><b>1️⃣ Pilih nama anda</b> di tab 🟢 <b>Langsung</b> (👤 Saya). Telefon akan ingat pilihan ini. Status anda:<br>🔴 <b>Bermain sekarang</b>: terus ke meja yang dinyatakan.<br>🟡 <b>Sila bersedia</b>: anda bermain selepas perlawanan semasa di meja itu.<br>🟣 <b>Pengadil</b>: pergi ke meja itu dan catat skor.<br>⏳ <b>Menunggu</b>: dipaparkan berapa perlawanan lagi sebelum giliran anda.<br>📌 Meja tidak tetap. Jika meja lain kosong lebih awal, perlawanan anda mungkin dipindahkan. Bila anda perlu ke meja, jalur berwarna juga dipaparkan di atas tab lain.</p>
-      <p><b>2️⃣ Melapor skor.</b> Peringkat kumpulan: pengadil (rakan sekumpulan yang tidak bermain) melapor. Kalah mati &amp; pool: salah seorang pemain melapor. Buka tab 📝 <b>Keputusan</b>, ketik perlawanan bertanda 🟢, isi skor setiap game (disimpan sebagai draf di telefon), masukkan <b>PIN acara</b> dari penganjur dan tekan <b>📤 Hantar skor</b>.</p>
+      <p><b>2️⃣ Melapor skor.</b> ${E.isMixer(t) ? 'Pengadil (pemain yang tidak bermain dalam sesi itu) melapor.' : 'Peringkat kumpulan: pengadil (rakan sekumpulan yang tidak bermain) melapor.'} Kalah mati &amp; pool: salah seorang pemain melapor. Buka tab 📝 <b>Keputusan</b>, ketik perlawanan bertanda 🟢, isi skor setiap game (disimpan sebagai draf di telefon), masukkan <b>PIN acara</b> dari penganjur dan tekan <b>📤 Hantar skor</b>.</p>
       ${t.waEnabled ? `<p><b>Sandaran:</b> jika tidak dapat menghantar, tekan <b>📲 Lapor via WhatsApp</b> dan hantar ke ${t.waMode === 'N' ? 'nombor penganjur' : `group <b>${esc(t.waGroup || 'laporan skor')}</b>`}.</p>` : ''}
       <p><b>3️⃣ Keputusan rasmi.</b> Skor menjadi rasmi selepas penganjur menekan ✓ Sahkan (🔔 di tab Keputusan). Kedudukan, bracket dan tab Langsung dikemas kini secara automatik.</p>
     </div>
@@ -2515,6 +2529,7 @@ function viewReport(t) {
     ${t.groups.length ? `<h3>Keputusan Peringkat ${t.format === 'rr' ? 'Liga' : 'Kumpulan'}</h3>${t.groups.map(g => { const ms = played.filter(m => m.stage === 'group' && m.group === g.name).sort((x, y) => x.gn - y.gn); return ms.length ? `<h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${resTable(ms)}` : ''; }).join('') || '<p class="muted small">Belum ada keputusan.</p>'}` : ''}
     ${ko('ko')}${ko('pool')}
     ${t.stage === 'done' && t.format !== 'rr' ? rankingHtml(t).replace(/<button[^>]*>Cetak<\/button>/, '') : ''}
+    <h3>Peraturan &amp; Penentuan Kedudukan</h3><ol class="rules small">${rulesOf(t).map(r => `<li>${esc(r)}</li>`).join('')}</ol>
     <p class="muted small rp-foot">Dijana oleh Pingpong Portal · ${new Date().toLocaleString('ms-MY')}</p>`;
   $app.innerHTML = `${section('Laporan', 'Laporan Pertandingan')}
     <div class="card noprint"><p class="muted small" style="margin-top:0">Laporan lengkap: maklumat, kedudukan, keputusan semua perlawanan${t.rounds.ko ? ', kalah mati' : ''}${t.stage === 'done' ? ' dan ranking' : ''}. Tekan butang di bawah dan pilih <b>Simpan sebagai PDF</b>.</p>
