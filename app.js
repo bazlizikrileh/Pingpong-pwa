@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.14.0';
+const VERSION = '3.14.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -367,22 +367,25 @@ function playUnitDraw(t) {
     boxes: P.map((p, i) => ({ label: team ? p.name : `Regu ${i + 1}`, slots: p.members.length })), seq, doneText: 'Undian selesai',
   });
 }
-// Undian regu bertukar ikut sesi: pemain di setiap meja, pengadil dan rehat
+// Undian regu bertukar ikut sesi: setiap nama dicabut secara rawak ke slot (Meja 1 A1/A2 lwn B1/B2, Meja 2 C1/C2 lwn D1/D2, pengadil, rehat)
 function playMixDraw(t, s = 1) {
   const ms = t.matches.filter(m => m.px && m.session === s).sort((x, y) => String(x.table).localeCompare(String(y.table), 'ms', { numeric: true }));
   if (!ms.length) return toast('Jadual belum dijana');
-  const NS = E.lastSession(t), U = LV.umpirePlan(t), nm = id => E.pname(t, id), seq = [];
-  const tl = m => (/meja/i.test(m.table) ? m.table : 'Meja ' + m.table);
-  [0, 1, 2, 3].forEach(k => ms.forEach((m, j) => seq.push({ box: j, name: nm(m.px[k]), head: `SESI ${s} · ${tl(m).toUpperCase()} · ${k < 2 ? 'REGU KIRI' : 'REGU KANAN'}` })));
+  const NS = E.lastSession(t), U = LV.umpirePlan(t), nm = id => E.pname(t, id), cards = [];
+  const tl = m => (/meja/i.test(m.table) ? m.table : 'Meja ' + m.table), tn = m => tl(m).replace(/\s*\(.*\)/, '');
+  const L = 'ABCDEFGHIJKLMNOP';
+  const boxes = ms.map((m, j) => { const a = L[j * 2], b = L[j * 2 + 1]; m.px.forEach((id, k) => cards.push({ box: j, slot: k, name: nm(id) })); return { label: tl(m), slots: 4, vs: true, slotLabels: [a + '1', a + '2', b + '1', b + '2'] }; });
   const umps = ms.map(m => [m, LV.umpireOf(t, m, U)]).filter(([, u]) => u), rest = LV.mixRestOf(t, s, U);
-  const boxes = ms.map(m => ({ label: tl(m), slots: 4, vs: true }));
-  if (umps.length) { const bi = boxes.length; boxes.push({ label: '🟣 Pengadil', slots: umps.length }); umps.forEach(([m, u]) => seq.push({ box: bi, name: `${nm(u)} · ${tl(m).replace(/\s*\(.*\)/, '')}`, head: `SESI ${s} · PENGADIL` })); }
-  if (rest.length) { const bi = boxes.length; boxes.push({ label: '💤 Rehat', slots: rest.length }); rest.forEach(id => seq.push({ box: bi, name: nm(id), head: `SESI ${s} · REHAT` })); }
+  if (umps.length) { const bi = boxes.length; boxes.push({ label: '🟣 Pengadil', slots: umps.length, slotLabels: umps.map(([m]) => tn(m)) }); umps.forEach(([, u], k) => cards.push({ box: bi, slot: k, name: nm(u) })); }
+  if (rest.length) { const bi = boxes.length; boxes.push({ label: '💤 Rehat', slots: rest.length, slotLabels: rest.map((_, k) => 'Rehat ' + (k + 1)) }); rest.forEach((id, k) => cards.push({ box: bi, slot: k, name: nm(id) })); }
+  // susunan cabutan rawak (suspens) — tetapi keputusan akhir tetap sama dengan jadual
+  for (let i = cards.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cards[i], cards[j]] = [cards[j], cards[i]]; }
+  const seq = cards.map(c => ({ ...c, head: `SESI ${s} · KAD DICABUT` }));
   playDeal({
     title: `Undian Regu Bertukar · Sesi ${s}`, subtitle: `${subtitleOf(t)} · ${E.sessionTime(t, s)}`, logos: clubOf(t).logos,
-    intro: `<small>${LV.mixFast(t) && s > 1 ? '⚡ Meja pantas aktif: undian sesi ini ialah anggaran — pasangan sebenar diundi bila meja kosong. ' : ''}Sesi ${s} daripada ${NS}: nama diagih ke setiap meja, kemudian pengadil dan pemain rehat. Pasangan dan lawan bertukar setiap sesi — tiada pasangan berulang${E.lvScheme(t) ? ', regu diimbangkan ikut tahap' : ''}.</small>`,
-    boxes, seq, doneText: `Sesi ${s} sedia`, introMs: s > 1 ? 600 : undefined,
-    next: s < NS ? { label: `▶ Sesi ${s + 1}`, fn: () => playMixDraw(t, s + 1) } : null,
+    intro: `<small>${LV.mixFast(t) && s > 1 ? '⚡ Meja pantas aktif: undian sesi ini ialah anggaran. ' : ''}Sesi ${s} daripada ${NS}. Kad dicabut secara rawak ke meja, pengadil dan rehat.</small>`,
+    prep: 'Mengocok kad…', boxes, seq, hideTo: true, fast: true, speed: 650, introMs: 700, shufMs: 800, doneText: `Sesi ${s} sedia`,
+    nav: [{ label: '◀ Sesi lepas', fn: s > 1 ? () => playMixDraw(t, s - 1) : null }, { label: '🔁 Ulang', fn: () => playMixDraw(t, s) }, { label: 'Sesi seterusnya ▶', fn: s < NS ? () => playMixDraw(t, s + 1) : null }],
   });
 }
 function playBracketDraw(t, b) {
@@ -511,7 +514,7 @@ function settingsFormAll(t, locked) {
       <div><label>Bilangan pusingan</label><input name="mixRounds" type="number" min="1" max="40" value="${t.mixRounds || ''}" placeholder="Kosong = penuh (semua berpasangan sekali)" ${dis}></div>
       <div><label>Imbang regu ikut tahap</label><select name="mixLv" ${dis}>${opt({ '': 'Tidak (undian bebas)', ksas: 'Tahap KSAS', kroni: 'Tahap Kroni Shell' }, t.mixLv || '')}</select></div>
     </div>
-    <label data-show="mixer" class="check" style="margin-top:10px"><input type="checkbox" name="mixFast" ${t.mixFast !== false ? 'checked' : ''} ${dis}> <span>⚡ <b>Meja pantas</b>: meja yang tamat terus diisi dengan 4 pemain yang bebas (pasangan diundi ketika itu)<br><small class="muted">Lebih cepat (anggaran jimat ~40 minit untuk 12 pemain / 2 meja) kerana tiada meja menunggu meja lain. Semua pemain tetap main sama banyak; pasangan berulang sangat jarang. Jadual sesi 2 dan seterusnya menjadi anggaran sahaja. Jika tidak ditanda, ikut jadual sesi yang tetap.</small></span></label>
+    <label data-show="mixer" class="check" style="margin-top:10px"><input type="checkbox" name="mixFast" ${t.mixFast === true ? 'checked' : ''} ${dis}> <span>⚡ <b>Meja pantas</b>: meja yang tamat terus diisi dengan 4 pemain yang bebas (pasangan diundi ketika itu)<br><small class="muted">Lebih cepat (anggaran jimat ~40 minit untuk 12 pemain / 2 meja) kerana tiada meja menunggu meja lain. Semua pemain tetap main sama banyak; pasangan berulang sangat jarang. Jadual sesi 2 dan seterusnya menjadi anggaran sahaja. Jika tidak ditanda, ikut jadual sesi yang tetap.</small></span></label>
     <p data-show="mixer" class="muted small" style="margin:4px 0 0">Kosong = penuh: setiap pemain berpasangan dengan semua pemain lain sekali (cth. 12 pemain → 11 kali main). Isi nombor untuk pusingan lebih pendek. Tahap ditulis dalam senarai individu, cth. <i>Ali (Naga)</i>. Jika Handicap ikut tahap dipilih, tahap itu juga digunakan untuk imbang.</p>
     <div data-show="notmixer"><label>Struktur</label><select name="format" ${dis}>${opt(FORMAT, t.format)}</select></div>
     <div class="grid2">

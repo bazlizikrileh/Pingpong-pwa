@@ -41,7 +41,7 @@ function pick(t, k, cand, busy, used) {
 }
 // Regu bertukar, mod meja pantas: bila meja kosong, 4 pemain yang bebas & paling sedikit bermain diundi terus menjadi
 // dua regu (elak pasangan berulang, kurangkan lawan berulang, imbang tahap) dan ditulis ke perlawanan seterusnya.
-export const mixFast = t => t.entryMode === 'mixer' && t.mixFast !== false;
+export const mixFast = t => t.entryMode === 'mixer' && t.mixFast === true;
 function planMixFast(t) {
   const { occ, live } = liveState(t), busy = new Set(), as = [];
   live.forEach(m => { (m.px || []).forEach(id => busy.add(id)); if (m.ump) busy.add(m.ump); });

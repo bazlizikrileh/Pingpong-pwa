@@ -666,3 +666,9 @@ body.tv main#app { max-width:none; padding:0; margin:0; }
 .mx-mat td.l { background:#fee2e2; color:#991b1b; font-weight:700; }
 .mx-mat td.d { background:#fef9c3; color:#854d0e; font-weight:700; }
 .mx-now { display:flex; flex-direction:column; gap:6px; font-size:14px; margin-top:10px; }
+.drw-sl { display:inline-block; min-width:26px; font-size:11px; font-weight:800; color:#94a3b8; margin-right:4px; }
+.drw-slot.filled .drw-sl { color:#64748b; }
+.drw-slot.hl .drw-sl { color:#ffe2c7; }
+.drw-nav { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:12px; }
+.drw-nav .btn { background:#1e293b; color:#fff; border:1px solid #334155; }
+.drw-nav .btn[disabled] { opacity:.35; }

@@ -1,7 +1,8 @@
 // Video cabutan (MP4) untuk dikongsi ke WhatsApp — dilukis pada kanvas & dikod dalam telefon.
 // Utama: WebCodecs (H.264) + mp4-muxer (lebih laju dari masa nyata). Sandaran: MediaRecorder.
 const W = 720, H = 1280, FPS = 30;
-const INTRO = 2.2, SHUF = 1.4, STEP = 0.75, FLY = 0.45, OUTRO = 3;
+const T_STD = { INTRO: 2.2, SHUF: 1.4, STEP: 0.75, FLY: 0.45, OUTRO: 3 }, T_FAST = { INTRO: 1.4, SHUF: 0.8, STEP: 0.45, FLY: 0.3, OUTRO: 2.2 };
+const TM = o => (o.fast ? T_FAST : T_STD);
 
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const loadImg = src => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
@@ -16,7 +17,7 @@ function fitText(c, s, maxW, size, weight = 700, min = 12) {
   return t === s ? s : t + '…';
 }
 
-export function duration(o) { return INTRO + SHUF + o.seq.length * STEP + OUTRO; }
+export function duration(o) { const { INTRO, SHUF, STEP, OUTRO } = TM(o); return INTRO + SHUF + o.seq.length * STEP + OUTRO; }
 
 function layout(o) {
   const n = o.boxes.length, cols = n <= 2 ? n : n <= 6 ? 2 : n <= 12 ? 3 : 4;
@@ -41,8 +42,8 @@ function makeDrawer(o, logos) {
   const L = layout(o);
   // tempat setiap kad: kotak & slot ke-berapa
   const cnt = o.boxes.map(() => 0);
-  const dest = o.seq.map(s => ({ ...s, slot: cnt[s.box]++ }));
-  const T0 = INTRO + SHUF;
+  const dest = o.seq.map(s => ({ ...s, slot: s.slot != null ? s.slot : cnt[s.box]++ }));
+  const { INTRO, SHUF, STEP, FLY } = TM(o), T0 = INTRO + SHUF;
 
   const draw = t => {
     // latar
@@ -77,7 +78,7 @@ function makeDrawer(o, logos) {
     } else if (cur) {
       c.fillStyle = 'rgba(255,255,255,.7)'; c.fillText(fitText(c, cur.head || '', W - 120, 22, 700), W / 2, 225);
       c.fillStyle = '#fff'; c.fillText(fitText(c, cur.name, W - 120, 54, 800), W / 2, 300);
-      c.fillStyle = or; c.fillText(fitText(c, '→ ' + o.boxes[cur.box].label, W - 120, 42, 800), W / 2, 362);
+      if (!o.hideTo) { c.fillStyle = or; c.fillText(fitText(c, '→ ' + o.boxes[cur.box].label, W - 120, 42, 800), W / 2, 362); }
       c.fillStyle = 'rgba(255,255,255,.65)'; c.fillText(fitText(c, `${dest.length - k - 1} kad lagi`, W - 120, 22, 600), W / 2, 412);
     } else {
       c.fillStyle = '#7ee2a0'; c.fillText(fitText(c, '✅ ' + (o.doneText || 'Cabutan selesai'), W - 120, 48, 800), W / 2, 300);
@@ -92,7 +93,8 @@ function makeDrawer(o, logos) {
       if (hot) { c.strokeStyle = or; c.lineWidth = 5; rr(c, B.x, B.y, B.w, B.h, 16); c.stroke(); }
       c.fillStyle = '#0f172a'; c.fillText(fitText(c, b.label, B.w - 24, Math.min(26, B.lh * .7), 800), B.x + 12, B.y + B.lh * .78);
       if (b.vs) { c.fillStyle = '#94a3b8'; c.textAlign = 'center'; c.fillText(fitText(c, 'lwn', 60, 15, 700), B.x + B.w / 2, B.vsY + 12); c.textAlign = 'left'; }
-      B.slots.forEach(S => { c.strokeStyle = '#cbd5e1'; c.setLineDash([6, 5]); c.lineWidth = 2; rr(c, S.x, S.y, S.w, S.h, 10); c.stroke(); c.setLineDash([]); });
+      B.slots.forEach((S, si) => { c.strokeStyle = '#cbd5e1'; c.setLineDash([6, 5]); c.lineWidth = 2; rr(c, S.x, S.y, S.w, S.h, 10); c.stroke(); c.setLineDash([]);
+        if (b.slotLabels && b.slotLabels[si]) { c.fillStyle = '#94a3b8'; c.fillText(fitText(c, b.slotLabels[si], S.w - 20, Math.min(20, S.h * .45), 600), S.x + 10, S.y + S.h * .65); } });
     });
     for (let j = 0; j < shown; j++) {
       const d = dest[j], S = L[d.box].slots[d.slot];
@@ -103,7 +105,8 @@ function makeDrawer(o, logos) {
       c.save(); c.translate(x + S.w / 2, y + S.h / 2); c.scale(sc, sc);
       c.fillStyle = j === shown - 1 && cur ? or : '#e2e8f0'; rr(c, -S.w / 2, -S.h / 2, S.w, S.h, 10); c.fill();
       c.fillStyle = j === shown - 1 && cur ? '#fff' : '#0f172a';
-      c.fillText(fitText(c, d.name, S.w - 20, Math.min(26, S.h * .55), 700), -S.w / 2 + 10, S.h * .2);
+      const sl = (o.boxes[d.box].slotLabels || [])[d.slot];
+      c.fillText(fitText(c, (sl ? sl + ' · ' : '') + d.name, S.w - 20, Math.min(26, S.h * .55), 700), -S.w / 2 + 10, S.h * .2);
       c.restore();
     }
     // kaki

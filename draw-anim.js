@@ -6,6 +6,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
  *  title, subtitle, intro (html), prep (teks semasa mengocok)
  *  boxes: [{ label, slots, vs }]   vs=true → paparan "A lwn B"
  *  seq:   [{ box, name, head }]    head = teks kecil di atas nama
+ *  slot (dalam seq) = slot tertentu dalam kotak; boxes[].slotLabels = label slot kosong; hideTo = jangan tunjuk destinasi
+ *  nav: [{ label, fn }] butang navigasi (cth. sesi lepas / ulang / seterusnya)
  *  doneText, next: { label, fn } → butang selepas selesai (cth. sesi seterusnya)
  */
 export function playDeal(o) {
@@ -22,8 +24,9 @@ export function playDeal(o) {
     <div class="drw-stat" id="drs">${o.intro || ''}</div>
     <div class="drw-grid">${o.boxes.map((b, i) => `
       <div class="drw-box" id="drb${i}"><b>${esc(b.label)}</b>
-        ${Array.from({ length: b.slots }, (_, k) => `${b.vs && k === Math.floor(b.slots / 2) ? '<div class="drw-vs">lwn</div>' : ''}<div class="drw-slot"></div>`).join('')}
+        ${Array.from({ length: b.slots }, (_, k) => `${b.vs && k === Math.floor(b.slots / 2) ? '<div class="drw-vs">lwn</div>' : ''}<div class="drw-slot">${b.slotLabels ? `<small class="drw-sl">${esc(b.slotLabels[k] || '')}</small>` : ''}</div>`).join('')}
       </div>`).join('')}</div>
+    ${o.nav && o.nav.length ? `<div class="drw-nav">${o.nav.map((n, i) => `<button class="btn" data-nav="${i}" ${n.fn ? '' : 'disabled'}>${esc(n.label)}</button>`).join('')}</div>` : ''}
     <div style="text-align:center;margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
       <button class="btn" data-skip style="background:#fff;color:#000">⏭️ Langkau ke keputusan</button>
       <button class="btn" data-vid style="background:#25d366;color:#fff">📤 Kongsi video (WhatsApp)</button></div>
@@ -35,10 +38,12 @@ export function playDeal(o) {
   const stat = ov.querySelector('#drs');
   const fill = (s, hl) => {
     const box = ov.querySelector('#drb' + s.box);
-    const slot = [...box.querySelectorAll('.drw-slot')].find(x => !x.dataset.f);
-    if (!slot) return;
+    const all = [...box.querySelectorAll('.drw-slot')];
+    const slot = s.slot != null ? all[s.slot] : all.find(x => !x.dataset.f);
+    if (!slot || slot.dataset.f) return;
     slot.dataset.f = 1;
-    slot.textContent = s.name;
+    const lab = slot.querySelector('.drw-sl');
+    slot.innerHTML = (lab ? lab.outerHTML + ' ' : '') + esc(s.name);
     slot.className = 'drw-slot filled' + (hl ? ' hl' : '');
     if (hl) {
       box.classList.add('hl');
@@ -54,13 +59,14 @@ export function playDeal(o) {
     }
     const s = o.seq[k++];
     stat.innerHTML = `<small>${esc(s.head || '')}</small>
-      <div class="drw-now">🎴 ${esc(s.name)} <span class="drw-to">→ ${esc(o.boxes[s.box].label)}</span></div>
+      <div class="drw-now">🎴 ${esc(s.name)}${o.hideTo ? '' : ` <span class="drw-to">→ ${esc(o.boxes[s.box].label)}</span>`}</div>
       <small>${o.seq.length - k} kad lagi</small>`;
     fill(s, true);
     tm = setTimeout(step, o.speed || 1300);
   };
   const close = () => { clearTimeout(tm); ov.remove(); document.body.style.overflow = ''; };
   ov.querySelector('[data-x]').onclick = close;
+  ov.querySelectorAll('[data-nav]').forEach(b => (b.onclick = () => { const n = o.nav[+b.dataset.nav]; if (!n || !n.fn) return; close(); n.fn(); }));
   const vb = ov.querySelector('[data-vid]'), vm = ov.querySelector('#drv');
   // Langkah 1: sediakan video. Langkah 2: pengguna tekan sekali lagi untuk kongsi
   // (Android hanya membenarkan menu kongsi terus selepas ketikan, bukan selepas menunggu video siap).
@@ -91,6 +97,6 @@ export function playDeal(o) {
   };
   tm = setTimeout(() => {
     stat.innerHTML = `<b style="font-size:18px">🔀 ${esc(o.prep || 'Mengocok dek…')}</b>`;
-    tm = setTimeout(step, 1500);
+    tm = setTimeout(step, o.shufMs ?? 1500);
   }, o.introMs ?? 1800);
 }
