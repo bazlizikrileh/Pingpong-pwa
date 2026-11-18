@@ -95,7 +95,7 @@ export function playDeal(o) {
       return;
     }
     vb.disabled = true;
-    vm.textContent = 'Video cabutan sedang disediakan dalam telefon ini. Jangan tutup skrin…';
+    vm.textContent = `Video cabutan sedang disediakan dalam telefon ini. Jangan tutup skrin…${o.auto ? ' (Undian di skrin dijeda dahulu; ia bersambung selepas video dikongsi.)' : ''}`;
     try {
       const m = await import('./draw-video.js');
       const vo = o.video || o, tot = m.duration(vo);

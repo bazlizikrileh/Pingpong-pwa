@@ -215,8 +215,8 @@ async function encodeWebCodecs(o, D, onP, cfg, snd) {
     await aenc.flush(); aenc.close();
     if (aerr) throw aerr;
   }
-  let err = null;
-  const enc = new VideoEncoder({ output: (ch, meta) => muxer.addVideoChunk(ch, meta), error: e => (err = e) });
+  let err = null, lastOut = Date.now();
+  const enc = new VideoEncoder({ output: (ch, meta) => { lastOut = Date.now(); muxer.addVideoChunk(ch, meta); }, error: e => (err = e) });
   const br = bitrateFor(o); // video panjang: kadar bit lebih rendah supaya saiz < ~12 MB untuk WhatsApp
   const conf = { codec: cfg.codec, width: VW, height: VH, bitrate: br, framerate: FPS, avc: { format: 'avc' }, latencyMode: 'realtime' };
   try { if (!(await VideoEncoder.isConfigSupported(conf)).supported) delete conf.latencyMode; } catch { delete conf.latencyMode; }
@@ -229,8 +229,13 @@ async function encodeWebCodecs(o, D, onP, cfg, snd) {
     const vf = new VideoFrame(D.cv, { timestamp: Math.round(i * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
     enc.encode(vf, { keyFrame: i % (FPS * 2) === 0 }); vf.close();
     // tunggu pengekod (telefon lebih perlahan) — elak barisan bingkai bertimbun dalam memori sehingga telefon hang
-    const w0 = Date.now();
-    while (enc.encodeQueueSize > 3) { if (err) throw err; if (Date.now() - w0 > 6000) { try { enc.close(); } catch {} throw STALL; } await new Promise(r => setTimeout(r, 10)); }
+    // Pengekod perkakasan telefon memegang beberapa bingkai sebelum mengeluarkan hasil — jadi benarkan barisan hingga 12.
+    // Dianggap tersekat hanya jika tiada output langsung selama 8 saat.
+    while (enc.encodeQueueSize > 12) {
+      if (err) throw err;
+      if (Date.now() - lastOut > 8000) { try { enc.close(); } catch {} throw STALL; }
+      await new Promise(r => setTimeout(r, 10));
+    }
     if (i % 6 === 0) { onP && onP(i / total); await new Promise(r => setTimeout(r, 0)); }
   }
   onP && onP(0.99);
@@ -314,8 +319,8 @@ export async function makeDrawVideo(o, onP) {
     try {
       onP && onP(0, 'audio');
       const acfg = await pickAudio(), sr = acfg ? acfg.sampleRate : 44100;
-      const { renderSoundtrack } = await import('./sound.js');
-      snd = { cfg: acfg, buf: await renderSoundtrack(duration(o), soundEvents(o), sr, true) };
+      const { buildSoundtrack } = await import('./sound.js');
+      snd = { cfg: acfg, buf: await buildSoundtrack(duration(o), soundEvents(o), sr) };
     } catch (e) { snd = null; }
   }
   if (cfg) {

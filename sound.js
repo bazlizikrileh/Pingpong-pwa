@@ -88,3 +88,28 @@ export function musicOff(delay = 500) {
   clearTimeout(offT);
   offT = setTimeout(() => { if (loopSrc) { try { loopGain.gain.setTargetAtTime(0.0001, AC.currentTime, 0.15); const s = loopSrc; setTimeout(() => { try { s.stop(); } catch {} }, 600); } catch {} loopSrc = null; } }, delay);
 }
+
+// Versi pantas untuk video panjang: muzik dirender sekali (gelung ~17 s) dan disalin berulang,
+// setiap kesan bunyi dirender sekali dan dicampur terus — jauh lebih ringan untuk telefon.
+export async function buildSoundtrack(dur, events, sr = 44100) {
+  const LOOP = 8 * 4 * 60 / 112, LEAD = 0.3;
+  const loopB = await renderSoundtrack(LOOP + LEAD + 0.3, [], sr, true, false);
+  const kinds = {}; const need = new Set(events.map(e => e.kind === 'card' ? 'card' + (e.i % 12) : e.kind));
+  await Promise.all([...need].map(async k => {
+    const ev = k.startsWith('card') ? { t: 0.01, kind: 'card', i: +k.slice(4) } : { t: 0.01, kind: k };
+    kinds[k] = (await renderSoundtrack(k === 'end' ? 3 : 1.2, [ev], sr, false, false)).getChannelData(0);
+  }));
+  const N = Math.ceil(dur * sr), out = new Float32Array(N), lp = loopB.getChannelData(0);
+  const l0 = Math.round(LEAD * sr), ll = Math.round(LOOP * sr);
+  for (let i = l0; i < N; i++) out[i] = lp[l0 + ((i - l0) % ll)] * 0.75;
+  for (const e of events) {
+    const b = kinds[e.kind === 'card' ? 'card' + (e.i % 12) : e.kind]; if (!b) continue;
+    const o = Math.round(e.t * sr);
+    for (let j = 0; j < b.length && o + j < N; j++) out[o + j] += b[j];
+  }
+  const fo = Math.round(1.2 * sr);
+  for (let i = 0; i < N; i++) { let v = Math.tanh(out[i] * 1.2); if (i > N - fo) v *= (N - i) / fo; out[i] = v; }
+  const buf = new AudioBuffer({ length: N, numberOfChannels: 1, sampleRate: sr });
+  buf.copyToChannel(out, 0);
+  return buf;
+}
