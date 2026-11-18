@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.17.4';
+const VERSION = '3.17.5';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -337,19 +337,17 @@ const section = (eyebrow, title) => `<div class="eyebrow">${esc(eyebrow)}</div><
 
 // ---------- Video undian ----------
 const subtitleOf = t => [t.name, t.date ? (() => { const d = new Date(t.date + 'T00:00'); return isNaN(d) ? t.date : `${HARI[d.getDay()]}, ${fmtDate(t.date)}`; })() : ''].filter(Boolean).join(' · ');
+// Susunan cabutan rawak (suspens): setiap kad terus ke slotnya, tetapi turutan cabutan dikocok
+const shuffleSeq = seq => { const a = seq.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 function playGroupDraw(t) {
   const G = t.groups;
   if (!G.length) return toast('Kumpulan belum dijana');
-  const seq = [], max = Math.max(...G.map(g => g.members.length));
-  const go = (t.drawOrder || {}).groups;
-  for (let r = 0; r < max; r++) (go && go[r] ? go[r] : G.map((_, gi) => gi)).forEach(gi => {
-    const id = G[gi] && G[gi].members[r];
-    if (id) seq.push({ box: gi, name: E.pname(t, id), head: `PUSINGAN ${r + 1} · SATU NAMA KE SETIAP KUMPULAN` });
-  });
+  const seq = [];
+  G.forEach((g, gi) => g.members.forEach((id, r) => seq.push({ box: gi, slot: r, name: E.pname(t, id), head: 'KAD DICABUT' })));
   playDeal({
     title: 'Cabutan Kumpulan', subtitle: subtitleOf(t), logos: clubOf(t).logos,
-    intro: '<small>1. Semua nama dimasukkan ke dalam satu dek kad &nbsp; 2. Dek dikocok &nbsp; 3. Kad dicabut satu persatu dan dimasukkan ke kumpulan secara rawak. Setiap kumpulan mendapat satu nama dahulu sebelum pusingan seterusnya</small>',
-    boxes: G.map(g => ({ label: `Kumpulan ${g.name}`, slots: g.members.length })), seq, sound: true, music: true, scene: true,
+    intro: '<small>Semua nama dimasukkan ke dalam satu dek kad dan dikocok. Kad dicabut satu persatu secara rawak — tempat setiap nama hanya diketahui bila kad masuk ke kumpulan.</small>',
+    boxes: G.map(g => ({ label: `Kumpulan ${g.name}`, slots: g.members.length, slotLabels: g.members.map((_, r) => g.name + (r + 1)) })), seq: shuffleSeq(seq), hideTo: true, speed: 900, sound: true, music: true, scene: true,
   });
 }
 function playUnitDraw(t) {
@@ -357,14 +355,12 @@ function playUnitDraw(t) {
   if (!P.length) return toast('Belum diundi');
   const team = E.isTeam(t), lab = team ? E.teamWord(t) : 'Regu';
   const seq = [];
-  const uo = (t.drawOrder || {}).units, sz = P[0].members.length;
-  if (uo && uo.length === sz && uo.every(r => r.length === P.length))
-    uo.forEach((perm, r) => perm.forEach(i => seq.push({ box: i, name: P[i].members[r], head: `PUSINGAN ${r + 1} · ${r === 0 ? 'ORANG PERTAMA' : r === 1 ? 'ORANG KEDUA' : 'ORANG KE-' + (r + 1)} SETIAP ${lab.toUpperCase()}` })));
-  else P.forEach((p, i) => p.members.forEach(n => seq.push({ box: i, name: n, head: `${lab.toUpperCase()} ${i + 1}` })));
+  P.forEach((p, i) => p.members.forEach((n, r) => seq.push({ box: i, slot: r, name: n, head: 'KAD DICABUT' })));
   playDeal({
     title: `Undian ${lab}`, subtitle: subtitleOf(t), logos: clubOf(t).logos,
-    intro: `<small>1. Semua ${seq.length} nama peserta dimasukkan ke dalam satu dek kad &nbsp; 2. Dek dikocok &nbsp; 3. Kad dicabut satu persatu dan dimasukkan ke ${lab.toLowerCase()} secara rawak. Setiap ${lab.toLowerCase()} mendapat orang pertama dahulu, barulah orang kedua (${P[0].members.length} orang setiap ${lab.toLowerCase()})</small>`,
-    boxes: P.map((p, i) => ({ label: team ? p.name : `Regu ${i + 1}`, slots: p.members.length })), seq, doneText: 'Undian selesai', sound: true, music: true, scene: true,
+    intro: `<small>Semua ${seq.length} nama peserta dimasukkan ke dalam satu dek kad dan dikocok. Kad dicabut satu persatu secara rawak — tempat setiap nama hanya diketahui bila kad masuk ke ${lab.toLowerCase()}.</small>`,
+    boxes: P.map((p, i) => ({ label: team ? p.name : `Regu ${i + 1}`, slots: p.members.length, slotLabels: p.members.map((_, r) => (team ? 'Ahli ' : 'Pemain ') + (r + 1)) })),
+    seq: shuffleSeq(seq), hideTo: true, speed: 900, doneText: 'Undian selesai', sound: true, music: true, scene: true,
   });
 }
 // Undian regu bertukar ikut sesi: setiap nama dicabut secara rawak ke slot (Meja 1 A1/A2 lwn B1/B2, Meja 2 C1/C2 lwn D1/D2, pengadil, rehat)
@@ -404,11 +400,11 @@ function playBracketDraw(t, b) {
   const ms = t.matches.filter(m => m.bracket === b && m.round === 1).sort((x, y) => x.slot - y.slot);
   if (!ms.length) return toast('Carta belum dijana');
   const seq = [];
-  ms.forEach((m, i) => [m.a, m.b].forEach(id => seq.push({ box: i, name: id === 'BYE' ? 'BYE' : `${E.seedLabel(t, id)} ${E.pname(t, id)}`.trim(), head: `PERLAWANAN ${i + 1}` })));
+  ms.forEach((m, i) => [m.a, m.b].forEach((id, r) => seq.push({ box: i, slot: r, name: id === 'BYE' ? 'BYE' : `${E.seedLabel(t, id)} ${E.pname(t, id)}`.trim(), head: 'KAD DICABUT' })));
   playDeal({
     title: b === 'pool' ? 'Undian Pool Kalah' : 'Undian Kalah Mati', subtitle: subtitleOf(t), logos: clubOf(t).logos,
     intro: '<b>🔀 Menyusun bracket…</b>', prep: 'Menyusun bracket…', introMs: 600, speed: 1200,
-    boxes: ms.map((m, i) => ({ label: `Perlawanan ${i + 1}`, slots: 2, vs: true })), seq, doneText: 'Bracket lengkap', sound: true, music: true, scene: true,
+    boxes: ms.map((m, i) => ({ label: `Perlawanan ${i + 1}`, slots: 2, vs: true })), seq: shuffleSeq(seq), hideTo: true, doneText: 'Bracket lengkap', sound: true, music: true, scene: true,
   });
 }
 

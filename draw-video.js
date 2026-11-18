@@ -331,14 +331,17 @@ export async function makeDrawVideo(o, onP) {
       // Sesetengah pengekod perkakasan (cth. Xiaomi) tidak patuh kadar bit rendah → fail besar.
       // Cuba beberapa tetapan dan ambil yang pertama di bawah sasaran saiz.
       const LIMIT = 8 * 1048576, sn = snd && snd.cfg ? snd : null, fps = fpsFor(o);
-      const tries = duration(o) > 40 ? [{}, { qp: 34 }, { fps: 15, decl: 45 }, { fps: 12, decl: 72 }] : [{}];
+      const ALL = [{}, { qp: 34 }, { fps: 15, decl: 45 }, { fps: 12, decl: 72 }];
+      // telefon ini ingat tetapan yang berjaya kali lepas → terus guna (tidak perlu ulang proses)
+      let pref = 0; try { pref = Math.min(ALL.length - 1, Math.max(0, +localStorage.getItem('pingpong:vidTry') || 0)); } catch {}
+      const order = duration(o) > 40 ? [pref, ...ALL.map((_, i) => i).filter(i => i !== pref && i > pref)] : [0];
       let best = null;
-      for (let k = 0; k < tries.length; k++) {
-        let b;
-        try { b = await encodeWebCodecs(o, D, (p, m) => onP && onP(p, k ? 'shrink' : m), cfg, sn, { fps, ...tries[k] }); }
+      for (let n = 0; n < order.length; n++) {
+        const k = order[n]; let b;
+        try { b = await encodeWebCodecs(o, D, (p, m) => onP && onP(p, n ? 'shrink' : m), cfg, sn, { fps, ...ALL[k] }); }
         catch (e) { if (e && e.message === 'NOQP') continue; throw e; }
         if (!best || b.size < best.size) best = b;
-        if (b.size <= LIMIT) break;
+        if (b.size <= LIMIT) { if (duration(o) > 40) try { localStorage.setItem('pingpong:vidTry', String(k)); } catch {} break; }
         onP && onP(0, 'shrink');
       }
       return best;
