@@ -1,6 +1,6 @@
 // Service worker: simpan fail app supaya boleh dibuka walaupun internet lemah.
 // Tukar VERSION setiap kali fail app berubah supaya pengguna dapat versi baharu.
-const VERSION = 'v3.14.1';
+const VERSION = 'v3.14.2';
 const CACHE = `pingpong-${VERSION}`;
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'engine.js', 'store.js',
   'draw-anim.js', 'cloud.js', 'live.js', 'draw-video.js', 'poster.js', 'reg-poster.js', 'poster-kit.js', 'vendor/qrcode.js', 'push.js', 'push-config.js', 'firebase-config.js', 'manifest.webmanifest', 'logos/kskpkpjb.webp', 'logos/ksas-pingpong.webp', 'logos/ksas.webp', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-180.png'];

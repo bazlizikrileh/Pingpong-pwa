@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.14.1';
+const VERSION = '3.14.2';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -382,7 +382,7 @@ function playMixDraw(t, s = 1) {
   for (let i = cards.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cards[i], cards[j]] = [cards[j], cards[i]]; }
   const seq = cards.map(c => ({ ...c, head: `SESI ${s} · KAD DICABUT` }));
   playDeal({
-    title: `Undian Regu Bertukar · Sesi ${s}`, subtitle: `${subtitleOf(t)} · ${E.sessionTime(t, s)}`, logos: clubOf(t).logos,
+    title: `Undian Regu Bertukar · Sesi ${s} / ${NS}`, subtitle: `${subtitleOf(t)} · ${E.sessionTime(t, s)}`, logos: clubOf(t).logos,
     intro: `<small>${LV.mixFast(t) && s > 1 ? '⚡ Meja pantas aktif: undian sesi ini ialah anggaran. ' : ''}Sesi ${s} daripada ${NS}. Kad dicabut secara rawak ke meja, pengadil dan rehat.</small>`,
     prep: 'Mengocok kad…', boxes, seq, hideTo: true, fast: true, speed: 650, introMs: 700, shufMs: 800, doneText: `Sesi ${s} sedia`,
     nav: [{ label: '◀ Sesi lepas', fn: s > 1 ? () => playMixDraw(t, s - 1) : null }, { label: '🔁 Ulang', fn: () => playMixDraw(t, s) }, { label: 'Sesi seterusnya ▶', fn: s < NS ? () => playMixDraw(t, s + 1) : null }],
