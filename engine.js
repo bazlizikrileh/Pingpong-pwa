@@ -23,7 +23,7 @@ export const SET_FORMATS = {
   'F3': { bo: 3, full: true, label: '3 set, semua dimainkan (3-0 / 2-1)' },
   'F2': { bo: 2, full: true, label: '2 set, kedua-dua dimainkan (2-0 / 1-1)' },
 };
-export const fmtFor = (t, stage) => SET_FORMATS[stage === 'group' ? t.groupFormat : t.koFormat] || SET_FORMATS['5'];
+export const fmtFor = (t, stage) => (t.entryMode === 'mixer' ? SET_FORMATS[t.groupFormat === '5' ? '5' : '3'] : SET_FORMATS[stage === 'group' ? t.groupFormat : t.koFormat] || SET_FORMATS['5']);
 
 // ---------- Jenis acara ----------
 // single · double (regu pilihan) · double_draw (regu diundi) · team (trio/kuartet diundi: 1 perseorangan + 1 regu)
@@ -84,7 +84,15 @@ export function migrate(t) {
     if (!m.rubbers) m.rubbers = [{ type: 'S', sets: m.sets || [] }];
     if (m.stage === 'ko' && !m.bracket) m.bracket = 'ko';
   }
-  if (t.entryMode === 'mixer') mixCompact(t);
+  if (t.entryMode === 'mixer') {
+    // Regu bertukar hanya terbaik 3 / 5 set (tiada seri). Betulkan data lama yang guna format lain.
+    if (!['3', '5'].includes(t.groupFormat)) {
+      t.groupFormat = '3';
+      t.matches.forEach(m => { if (m.status !== 'done') return; const r = evaluateMatch(t, m);
+        if (!r.complete || !r.winner) { m.winner = null; m.status = m.rubbers.some(x => x.sets.length) ? 'live' : 'pending'; } else m.winner = r.winner; });
+    }
+    mixCompact(t);
+  }
   return t;
 }
 
@@ -190,7 +198,7 @@ export function evaluateMatch(t, m) {
   o.complete = R.length > 0 && R.every(r => r.complete);
   if (!o.complete) return o;
   let side = null;
-  const drawOk = m.stage === 'group' && t.tieRule !== 'next';
+  const drawOk = m.stage === 'group' && t.tieRule !== 'next' && !isMixer(t);
   if (isTeam(t) && t.tieFormat === 'SSD') {
     // S+S+D: semua 3 perlawanan dimainkan; setiap perlawanan menang 3 markah, seri (1-1) 1 markah.
     // Pemenang = jumlah markah. Markah sama → peringkat kumpulan: seri (tieRule 'draw', lalai)

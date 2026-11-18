@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.14.4';
+const VERSION = '3.14.5';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1255,10 +1255,10 @@ function mixMatrix(t, S) {
       const v = cell[r.id + '|' + c.id] || [];
       if (!v.length) return '<td class="e">·</td>';
       const w = v.filter(z => z.win).length, l = v.length - w;
-      return `<td class="${w > l ? 'w' : l > w ? 'l' : 'd'}" title="${v.map(z => (z.win ? 'Menang ' : 'Kalah ') + z.sc).join(', ')}">${v.length === 1 ? v[0].sc : `${w}-${l}`}</td>`;
+      return `<td class="${w > l ? 'w' : l > w ? 'l' : 'm'}" title="${v.map(z => (z.win ? 'Menang ' : 'Kalah ') + z.sc).join(', ')}">${v.length === 1 ? v[0].sc : `${w}M ${l}K`}</td>`;
     }).join('')}</tr>`).join('')}
     </tbody></table></div>
-    <p class="muted small" style="margin-bottom:0">${_mxMode === 'p' ? 'Sel menunjukkan skor set. Jika lajur seorang pemain banyak hijau, pemain itu "membawa" pasangannya.' : 'Sel menunjukkan skor set (atau menang-kalah jika bertemu lebih sekali).'}</p></div>`;
+    <p class="muted small" style="margin-bottom:0">${_mxMode === 'p' ? 'Sel menunjukkan skor set. Jika lajur seorang pemain banyak hijau, pemain itu "membawa" pasangannya.' : 'Sel menunjukkan skor set. Jika bertemu lebih sekali: bilangan Menang (M) dan Kalah (K), cth. <b>1M 1K</b> = sekali menang, sekali kalah (bukan seri). Tekan lama sel untuk lihat skor setiap pertemuan.'}</p></div>`;
 }
 function viewMixStandings(t) {
   const S = E.mixStandings(t), done = t.matches.filter(m => m.status === 'done').length;

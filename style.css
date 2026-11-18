@@ -672,3 +672,4 @@ body.tv main#app { max-width:none; padding:0; margin:0; }
 .drw-nav { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:12px; }
 .drw-nav .btn { background:#1e293b; color:#fff; border:1px solid #334155; }
 .drw-nav .btn[disabled] { opacity:.35; }
+.mx-mat td.m { background:#e2e8f0; color:#334155; font-weight:700; }
