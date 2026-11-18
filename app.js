@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.12.3';
+const VERSION = '3.12.4';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -789,7 +789,7 @@ function viewSetupCore(t, part = 'tetapan') {
       const n = t.individuals.length;
       if (n < 4) return toast('Perlu sekurang-kurangnya 4 pemain dalam senarai individu (tab 👥 Pemain).', 4000);
       const P = E.mixPlan(t), R = P.R;
-      if (!confirm(`Jana ${R} pusingan regu bertukar untuk ${n} pemain?\n${P.per} perlawanan setiap pusingan, jumlah ${P.matches} perlawanan.${P.rest ? `\n${P.rest} pemain rehat bergilir setiap pusingan.` : ''}\nSetiap pemain main ${P.min === P.max ? P.min : P.min + '–' + P.max} kali.`)) return;
+      if (!confirm(`Jana jadual regu bertukar untuk ${n} pemain?\n• Jumlah ${P.matches} perlawanan\n• Setiap pemain main ${P.min === P.max ? P.min : P.min + '–' + P.max} kali, setiap kali dengan pasangan berbeza\n• ${P.nt} meja → ${P.sessions} sesi (${P.nt * 4} orang main, ${Math.max(0, n - P.nt * 4)} rehat setiap sesi)`)) return;
       try { E.buildMixer(t); save(t); toast(`${t.matches.length} perlawanan dalam ${R} pusingan dijana`); location.hash = `#/t/${t.id}/jadual`; } catch (err) { toast(err.message, 4000); }
       return;
     }
