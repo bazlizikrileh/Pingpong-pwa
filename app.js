@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.19.0';
+const VERSION = '3.19.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1976,14 +1976,14 @@ const STAT = {
 // Peserta yang mendaftar dari peranti ini: kenal pasti nama mereka dalam senarai secara automatik (untuk status & notifikasi)
 const normN = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 function autoMe(t) {
-  if (ls.get(meKey(t)) || canAdmin(t)) return;
+  if (ls.get(meKey(t)) || ls.get('pingpong:meSet:' + t.id) || canAdmin(t)) return; // pilihan sendiri ("Saya ialah…") sentiasa diutamakan
   let names = []; try { names = JSON.parse(ls.get('pingpong:regn:' + t.id) || '[]'); } catch {}
   if (!names.length && ls.get('pingpong:regd:' + t.id) && profile().name) names = [profile().name];
   if (!names.length) return;
   const want = names.map(normN);
   const pool = E.isMixer(t) ? t.individuals.map(x => [x.id, [x.name]]) : t.participants.map(p => [p.id, [p.name, ...(p.members || [])]]);
   const hit = pool.find(([, ns]) => ns.some(n => want.includes(normN(n))));
-  if (hit) { ls.set(meKey(t), hit[0]); pushSync(); }
+  if (hit) { ls.set(meKey(t), hit[0]); ls.set('pingpong:meAuto:' + t.id, '1'); pushSync(); }
 }
 // Amaran dalam aplikasi bila status saya berubah (bermain / pengadil / bersedia) — getar, bunyi & sepanduk
 const _myLast = {};
@@ -2398,8 +2398,9 @@ function viewLive(t) {
   };
   const queued = cand.filter(m => !Object.values(nx).includes(m));
   $app.innerHTML = `${head}
-    <div class="card me-box"><label style="margin-top:0">👤 Saya</label>
+    <div class="card me-box"><label style="margin-top:0">👤 Saya ialah…</label>
       <select id="meSel"><option value="">— pilih nama anda —</option>${people.map(p => `<option value="${p.id}" ${p.id === me ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
+      ${me && ls.get('pingpong:meAuto:' + t.id) && !ls.get('pingpong:meSet:' + t.id) ? '<p class="muted small" style="margin:6px 0 0">✨ Dipilih automatik daripada pendaftaran anda. Tukar di atas jika salah.</p>' : ''}
       ${stTxt}${me ? `<div style="margin-top:8px">${notifBtn('🔔 Beritahu saya bila tiba giliran')}</div>` : ''}</div>
     <div class="row" style="justify-content:flex-end;margin-top:8px"><a class="pill-btn light small" href="#/tv/${t.id}">📺 Mod TV</a></div>
     <div class="row" style="justify-content:space-between;margin-top:14px"><div class="section-title" style="margin:0">🟢 Sedang berlangsung <span class="muted small">(${live.length}/${T.length} meja)</span></div>
@@ -2423,7 +2424,7 @@ function viewLive(t) {
   }));
   const smode = document.getElementById('scoreMode');
   if (smode) smode.onclick = e => { e.preventDefault(); ls.set('pingpong:scoremode:' + t.id, '1'); toast('Butang 🎯 Jaga skor dipaparkan. PIN acara diperlukan.', 3500); viewLive(t); };
-  document.getElementById('meSel').onchange = e => { ls.set(meKey(t), e.target.value || null); pushSync(); viewLive(t); };
+  document.getElementById('meSel').onchange = e => { ls.set(meKey(t), e.target.value || null); ls.set('pingpong:meSet:' + t.id, '1'); pushSync(); viewLive(t); };
   const setTb = () => { t.numTables = Number(document.getElementById('ntSel').value) || 0; t.venue = document.getElementById('vnSel').value; E.planSchedule(t); save(t); toast(`${E.numTablesOf(t)} meja digunakan`); render(true); };
   ['ntSel', 'vnSel'].forEach(id => { const el = document.getElementById(id); if (el) el.onchange = setTb; });
   const ag = document.getElementById('agih');
