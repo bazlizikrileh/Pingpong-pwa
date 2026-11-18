@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.15.4';
+const VERSION = '3.16.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1275,6 +1275,7 @@ function viewMixStandings(t) {
       <td>${r.p}</td><td>${r.w}</td><td>${r.l}</td><td>${sgn(r.sf - r.sa)}</td><td>${sgn(r.pf - r.pa)}</td><td><b>${r.pts}</b></td></tr>`).join('')}
     </tbody></table></div></div>
     ${mixMatrix(t, S)}
+    ${done >= 3 ? `<div class="card">${mixAwards(t, S).replace('<section class="rp-sec pb">', '<div>').replace('</section>', '</div>').replace('<h3>', '<h3 style="margin-top:0">')}</div>` : ''}
     <div class="row" style="margin:0 0 12px"><button class="pill-btn small" data-mxp="1"><span class="dot"></span>▶ Tonton undian</button></div>
     <details class="card fold"><summary>🔁 Senarai sesi, pengadil & rehat</summary>${(() => { const U = LV.umpirePlan(t); return [...new Set(t.matches.map(m => m.session))].sort((x, y) => x - y).map(r => { const rs = LV.mixRestOf(t, r, U); return `<div class="sess">Sesi ${r} · ${esc(E.sessionTime(t, r))}${rs.length ? ` · 💤 rehat: ${rs.map(nm).join(', ')}` : ''}</div><div class="mlist">${t.matches.filter(m => m.session === r).sort((x, y) => String(x.table).localeCompare(String(y.table), 'ms', { numeric: true })).map(m => matchRow(t, m)).join('')}</div>`; }).join(''); })()}</details>`;
   $app.querySelectorAll('[data-mxp]').forEach(b => (b.onclick = () => playMixDraw(t, +b.dataset.mxp)));
@@ -2497,6 +2498,43 @@ function viewKnockout(t) {
 
 // ---------- Laporan (PDF melalui cetak) ----------
 const gamesTxt = (m, t) => m.rubbers.map((r, i) => (m.rubbers.length > 1 ? (t ? E.rubberLabel(t, i) : i ? 'R' : 'P') + ': ' : '') + r.sets.map(s => s.join('-')).join(', ')).join(' · ');
+// Anugerah & statistik regu bertukar (dikira daripada keputusan)
+function mixAwards(t, S) {
+  const ms = t.matches.filter(m => m.status === 'done' && m.px);
+  if (!ms.length) return '';
+  const nm = id => esc(E.pname(t, id)), E2 = m => E.evaluateMatch(t, m);
+  const sideIds = (m, w) => (w === m.a ? m.px.slice(0, 2) : m.px.slice(2));
+  const card = (ic, title, who, note) => `<div class="aw"><div class="aw-ic">${ic}</div><div><div class="aw-t">${title}</div><div class="aw-w">${who}</div>${note ? `<div class="aw-n">${note}</div>` : ''}</div></div>`;
+  const out = [];
+  // Kemenangan paling besar (beza set, kemudian beza mata)
+  const big = ms.map(m => { const r = E2(m), wa = m.winner === m.a; return { m, r, ds: wa ? r.sa - r.sb : r.sb - r.sa, dp: wa ? r.pa - r.pb : r.pb - r.pa }; }).sort((x, y) => y.ds - x.ds || y.dp - x.dp)[0];
+  if (big) out.push(card('💥', 'Kemenangan paling besar', sideIds(big.m, big.m.winner).map(nm).join(' & '), `${big.r.sa > big.r.sb ? big.r.sa + '-' + big.r.sb : big.r.sb + '-' + big.r.sa} (beza ${big.dp} mata) · Sesi ${big.m.session}`));
+  // Perlawanan paling sengit (set terbanyak, kemudian beza mata paling kecil)
+  const close = ms.map(m => { const r = E2(m); return { m, r, n: r.sa + r.sb, dp: Math.abs(r.pa - r.pb) }; }).sort((x, y) => y.n - x.n || x.dp - y.dp)[0];
+  if (close) out.push(card('🔥', 'Perlawanan paling sengit', `${nm(close.m.px[0])} & ${nm(close.m.px[1])} <small>lwn</small> ${nm(close.m.px[2])} & ${nm(close.m.px[3])}`, `${close.r.sa}-${close.r.sb} · ${close.m.rubbers[0].sets.map(x => x.join('-')).join(', ')} · beza ${close.dp} mata`));
+  // Set paling panjang (deuce)
+  let ls = null; ms.forEach(m => m.rubbers[0].sets.forEach(x => { const mx = Math.max(...x); if (!ls || mx > ls.mx) ls = { m, x, mx }; }));
+  if (ls && ls.mx > 11) out.push(card('⏱️', 'Set paling panjang (deuce)', `${ls.x[0]}-${ls.x[1]}`, `${nm(ls.m.px[0])} & ${nm(ls.m.px[1])} lwn ${nm(ls.m.px[2])} & ${nm(ls.m.px[3])} · Sesi ${ls.m.session}`));
+  // Pemain paling konsisten: paling sedikit set kalah
+  const P = S.filter(r => r.p);
+  const cons = P.slice().sort((x, y) => x.sa - y.sa || y.sf - x.sf)[0];
+  if (cons) out.push(card('🎯', 'Pemain paling konsisten', nm(cons.id), `hanya kalah ${cons.sa} set dalam ${cons.p} perlawanan`));
+  // Penjaring mata terbanyak
+  const pts = P.slice().sort((x, y) => y.pf - x.pf)[0];
+  if (pts) out.push(card('🏓', 'Mata permainan terbanyak', nm(pts.id), `${pts.pf} mata dijaringkan`));
+  // Pembawa pasangan: pasangan menang lebih kerap bersamanya berbanding dengan pasangan lain
+  const res = {}; ms.forEach(m => m.px.forEach((id, i) => (res[id] = res[id] || []).push({ m, win: m.winner === (i < 2 ? m.a : m.b), mate: m.px[i < 2 ? 1 - i : 5 - i] })));
+  const uplift = Object.keys(res).map(id => { let u = 0, n = 0;
+    res[id].forEach(g => { const other = (res[g.mate] || []).filter(x => x.m !== g.m); if (!other.length) return; const rate = other.filter(x => x.win).length / other.length; u += (g.win ? 1 : 0) - rate; n++; });
+    return { id, u: n ? u / n : 0 }; }).sort((x, y) => y.u - x.u)[0];
+  if (uplift && uplift.u > 0) out.push(card('🤝', 'Pembawa pasangan', nm(uplift.id), `pasangannya menang ${Math.round(uplift.u * 100)}% lebih kerap bersamanya berbanding dengan pemain lain`));
+  // Pasangan terbaik: kemenangan paling meyakinkan sebagai regu
+  const bp = ms.map(m => { const r = E2(m), wa = m.winner === m.a; return { m, ids: sideIds(m, m.winner), ds: wa ? r.sa - r.sb : r.sb - r.sa, dp: wa ? r.pa - r.pb : r.pb - r.pa, sc: wa ? `${r.sa}-${r.sb}` : `${r.sb}-${r.sa}` }; })
+    .sort((x, y) => y.ds - x.ds || y.dp - x.dp)[1];
+  if (bp) out.push(card('👯', 'Gandingan cemerlang', bp.ids.map(nm).join(' & '), `menang ${bp.sc} (beza ${bp.dp} mata) · Sesi ${bp.m.session}`));
+  return `<section class="rp-sec pb"><h3>🏅 Anugerah &amp; Statistik</h3><div class="aw-grid">${out.join('')}</div>
+    <p class="muted small">Dikira secara automatik daripada keputusan perlawanan.</p></section>`;
+}
 function mixReport(t, played, resTable) {
   const S = E.mixStandings(t), nm = id => esc(E.pname(t, id)), sgn = x => (x > 0 ? '+' : '') + x;
   const top = S.filter(r => r.p);
@@ -2505,6 +2543,7 @@ function mixReport(t, played, resTable) {
     <h3>Kedudukan Individu</h3><p class="muted small">Mata: menang 3, kalah 0. Sama mata → beza set → beza skor.</p>
     <div class="tw"><table class="rp"><thead><tr><th>#</th><th class="l">Pemain</th><th>Main</th><th>M</th><th>K</th><th>±Set</th><th>±Skor</th><th>Mata</th></tr></thead><tbody>
     ${S.map((r, i) => `<tr><td>${i + 1}</td><td class="l">${nm(r.id)}</td><td>${r.p}</td><td>${r.w}</td><td>${r.l}</td><td>${sgn(r.sf - r.sa)}</td><td>${sgn(r.pf - r.pa)}</td><td><b>${r.pts}</b></td></tr>`).join('')}</tbody></table></div>
+    ${mixAwards(t, S)}
     <section class="rp-sec pb"><h3>Matriks Pasangan &amp; Lawan</h3>${mixMatrix(t, S, 'p', true)}${mixMatrix(t, S, 'o', true)}</section>
     <section class="rp-sec pb"><h3>Keputusan Mengikut Sesi</h3>
     <table class="rp rp-mx"><colgroup><col style="width:11%"><col style="width:6%"><col style="width:25%"><col style="width:8%"><col style="width:25%"><col style="width:25%"></colgroup>

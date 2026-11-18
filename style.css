@@ -695,4 +695,14 @@ table.rp-mx tbody.rp-ses { border-bottom:2px solid var(--line2, #cbd5e1); }
 table.rp-mx td.sets span { white-space:nowrap; display:inline-block; margin-right:4px; }
 .rp-sign { display:flex; gap:40px; margin-top:40px; font-size:12.5px; }
 .rp-sign > div { flex:1; } .rp-sign .ln { border-bottom:1px solid #64748b; height:48px; margin-bottom:6px; }
-@media print { @page { size: A4; margin: 12mm 10mm; } }
+@media print { @page { size: A4; margin: 12mm 10mm 16mm;
+  @bottom-center { content: "Muka surat " counter(page) " / " counter(pages); font: 9pt system-ui, sans-serif; color: #64748b; } } }
+
+.aw-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.aw { display:flex; gap:10px; align-items:flex-start; padding:12px; border-radius:14px; border:1.5px solid var(--line, #e5e7eb); background: color-mix(in srgb, var(--or, #ff7a1a) 5%, #fff); break-inside: avoid; }
+.aw-ic { font-size:26px; line-height:1; }
+.aw-t { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color: var(--muted, #64748b); font-weight:700; }
+.aw-w { font-size:15px; font-weight:800; margin-top:2px; }
+.aw-n { font-size:12px; color: var(--muted, #64748b); margin-top:3px; }
+@media (max-width: 480px) { .aw-grid { grid-template-columns:1fr; } }
+@media print { .aw { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .aw-grid { grid-template-columns:1fr 1fr; } }
