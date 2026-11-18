@@ -4,7 +4,7 @@ const W = 720, H = 1280;
 const scaleFor = o => (duration(o) > 40 ? 0.75 : 1); // video panjang: 540×960 (lebih ringan)
 const fpsFor = o => (duration(o) > 40 ? 20 : 30); // video panjang: kurang bingkai supaya telefon tidak berat
 const T_STD = { INTRO: 2.2, SHUF: 1.4, STEP: 0.75, FLY: 0.45, OUTRO: 3 }, T_FAST = { INTRO: 1.4, SHUF: 0.8, STEP: 0.45, FLY: 0.3, OUTRO: 2.2 };
-const T_SHORT = { INTRO: 0.7, SHUF: 0.5, STEP: 0.45, FLY: 0.3, OUTRO: 1.4 };
+const T_SHORT = { INTRO: 1.0, SHUF: 0.5, STEP: 0.45, FLY: 0.3, OUTRO: 1.4 };
 const TM = o => (o.short ? T_SHORT : o.fast ? T_FAST : T_STD);
 
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -29,11 +29,11 @@ function fitText0(c, s, maxW, size, weight = 700, min = 12) {
   return t === s ? s : t + '…';
 }
 
-export function duration(o) { if (o.scenes) return o.scenes.reduce((a, x) => a + duration(x), 0); const { INTRO, SHUF, STEP, OUTRO } = TM(o); return INTRO + SHUF + o.seq.length * STEP + OUTRO; }
+export function duration(o) { if (o.end) return o.dur || 4; if (o.scenes) return o.scenes.reduce((a, x) => a + duration(x), 0); const { INTRO, SHUF, STEP, OUTRO } = TM(o); return INTRO + SHUF + o.seq.length * STEP + OUTRO; }
 
 function layout(o) {
   const n = o.boxes.length, cols = n <= 2 ? n : n <= 6 ? 2 : n <= 12 ? 3 : 4;
-  const rows = Math.ceil(n / cols), top = 470, bottom = H - 70, gap = 14, pad = 34;
+  const rows = Math.ceil(n / cols), top = 470, bottom = H - (o.sceneTotal > 1 ? 122 : 70), gap = 14, pad = 34;
   const bw = (W - pad * 2 - gap * (cols - 1)) / cols;
   const maxSlots = Math.max(...o.boxes.map(b => b.slots + (b.vs ? 0.5 : 0)));
   const bh = Math.min((bottom - top - gap * (rows - 1)) / rows, 54 + maxSlots * 62);
@@ -64,6 +64,10 @@ function makeDrawer(o, logos, cv, sc = 1) {
     c.fillStyle = g; c.fillRect(0, 0, W, H);
     c.strokeStyle = 'rgba(255,255,255,.35)'; c.lineWidth = 3; rr(c, 16, 16, W - 32, H - 32, 28); c.stroke();
     c.fillStyle = 'rgba(255,255,255,.06)'; c.fillRect(16, H / 2, W - 32, 2);
+    // bola pingpong samar melayang
+    const tb = t + (o.sceneIdx || 0) * 7.3;
+    for (let i = 0; i < 6; i++) { const bx = (i * 131 + tb * (22 + i * 6)) % (W + 80) - 40, by = 180 + ((i * 197) % 900) + Math.sin(tb * 1.3 + i) * 40;
+      c.fillStyle = 'rgba(255,255,255,.05)'; c.beginPath(); c.arc(bx, by, 14 + (i % 3) * 6, 0, 7); c.fill(); }
     // kepala
     let lx = 40;
     logos.forEach(im => { if (!im) return; const h = 92, w = h * im.width / im.height; c.drawImage(im, lx, 44, w, h); lx += w + 10; });
@@ -75,7 +79,14 @@ function makeDrawer(o, logos, cv, sc = 1) {
     c.fillStyle = 'rgba(4,8,20,.55)'; rr(c, 34, 176, W - 68, 270, 24); c.fill();
     const k = Math.floor((t - T0) / STEP), cur = t >= T0 && k < dest.length ? dest[k] : null;
     c.textAlign = 'center';
-    if (t < INTRO) {
+    if (t < INTRO && o.big) {
+      // kad tajuk sesi
+      const p = ease(t / Math.min(0.45, INTRO * 0.6));
+      c.save(); c.globalAlpha = p; c.translate(W / 2, 300); c.scale(0.7 + 0.3 * p, 0.7 + 0.3 * p);
+      c.fillStyle = '#ffb02e'; c.fillText(fitText(c, o.big, W - 140, 104, 900), 0, 10);
+      c.restore();
+      c.fillStyle = `rgba(255,255,255,${0.85 * p})`; c.fillText(fitText(c, o.bigSub || '', W - 120, 30, 600), W / 2, 380);
+    } else if (t < INTRO) {
       c.fillStyle = '#ffb02e'; c.fillText(fitText(c, '🎴 ' + (o.title || 'Cabutan'), W - 120, 46, 800), W / 2, 270);
       c.fillStyle = 'rgba(255,255,255,.85)'; c.fillText(fitText(c, `${dest.length} kad dimasukkan ke dalam dek`, W - 120, 28, 600), W / 2, 330);
       c.fillText(fitText(c, 'Dikocok, kemudian dicabut satu persatu', W - 120, 24, 500), W / 2, 372);
@@ -90,7 +101,11 @@ function makeDrawer(o, logos, cv, sc = 1) {
       c.fillStyle = '#fff'; c.fillText(fitText(c, '🔀 ' + (o.prep || 'Mengocok dek…'), W - 120, 30, 700), W / 2, 425);
     } else if (cur) {
       c.fillStyle = 'rgba(255,255,255,.7)'; c.fillText(fitText(c, cur.head || '', W - 120, 22, 700), W / 2, 225);
-      c.fillStyle = '#fff'; c.fillText(fitText(c, cur.name, W - 120, 54, 800), W / 2, 300);
+      const pp = ease((t - T0 - k * STEP) / 0.18), gl = c.createRadialGradient(W / 2, 285, 10, W / 2, 285, 230);
+      gl.addColorStop(0, `rgba(255,176,46,${0.35 * (1 - 0.5 * pp)})`); gl.addColorStop(1, 'rgba(255,176,46,0)');
+      c.fillStyle = gl; c.fillRect(34, 176, W - 68, 270);
+      c.save(); c.translate(W / 2, 300); c.scale(0.6 + 0.4 * pp, 0.6 + 0.4 * pp);
+      c.fillStyle = '#fff'; c.fillText(fitText(c, cur.name, W - 120, 58, 800), 0, 0); c.restore();
       if (!o.hideTo) { c.fillStyle = or; c.fillText(fitText(c, '→ ' + o.boxes[cur.box].label, W - 120, 42, 800), W / 2, 362); }
       c.fillStyle = 'rgba(255,255,255,.65)'; c.fillText(fitText(c, `${dest.length - k - 1} kad lagi`, W - 120, 22, 600), W / 2, 412);
     } else {
@@ -122,6 +137,23 @@ function makeDrawer(o, logos, cv, sc = 1) {
       c.fillText(fitText(c, (sl ? sl + ' · ' : '') + d.name, S.w - 20, Math.min(26, S.h * .55), 700), -S.w / 2 + 10, S.h * .2);
       c.restore();
     }
+    // konfeti bila sesi selesai
+    const tDone = T0 + dest.length * STEP;
+    if (t >= tDone && !cur) {
+      const td = t - tDone, cols = ['#ffb02e', '#ff7a1a', '#7ee2a0', '#60a5fa', '#f472b6', '#fff'];
+      for (let i = 0; i < 46; i++) {
+        const a = (i * 2.399) % 6.283, v = 260 + (i * 37) % 220, x = W / 2 + Math.cos(a) * v * td, y = 300 + Math.sin(a) * v * td * 0.8 + 420 * td * td;
+        if (y > H) continue;
+        c.save(); c.translate(x, y); c.rotate(td * 8 + i); c.globalAlpha = Math.max(0, 1 - td / 1.6); c.fillStyle = cols[i % cols.length]; c.fillRect(-6, -3, 12, 6); c.restore();
+      }
+    }
+    // bar kemajuan sesi
+    if (o.sceneTotal > 1) {
+      const fr = Math.min(1, ((o.sceneIdx - 1) + Math.min(1, t / (tDone || 1))) / o.sceneTotal);
+      c.fillStyle = 'rgba(255,255,255,.15)'; rr(c, 60, H - 92, W - 120, 8, 4); c.fill();
+      c.fillStyle = or; rr(c, 60, H - 92, Math.max(8, (W - 120) * fr), 8, 4); c.fill();
+      c.fillStyle = 'rgba(255,255,255,.8)'; c.textAlign = 'center'; c.fillText(fitText(c, `Sesi ${o.sceneIdx} / ${o.sceneTotal}`, 300, 18, 700), W / 2, H - 100); c.textAlign = 'left';
+    }
     // kaki
     c.fillStyle = 'rgba(255,255,255,.55)'; c.textAlign = 'center';
     c.fillText(fitText(c, `Pingpong Portal · ${new Date().toLocaleDateString('ms-MY', { day: 'numeric', month: 'long', year: 'numeric' })}`, W - 80, 20, 600), W / 2, H - 38);
@@ -130,8 +162,28 @@ function makeDrawer(o, logos, cv, sc = 1) {
   return { cv, draw };
 }
 
+// Senarai peristiwa bunyi ikut garis masa video
+function soundEvents(o) {
+  const ev = [], scenes = o.scenes || [o]; let off = 0;
+  scenes.forEach(x => {
+    if (x.end) { ev.push({ t: off + 0.1, kind: 'end' }); off += duration(x); return; }
+    const { INTRO, SHUF, STEP } = TM(x), T0 = INTRO + SHUF;
+    ev.push({ t: off, kind: 'scene' }, { t: off + INTRO, kind: 'shuffle' });
+    x.seq.forEach((_, k) => ev.push({ t: off + T0 + k * STEP, kind: 'card', i: k }));
+    ev.push({ t: off + T0 + x.seq.length * STEP, kind: 'done' });
+    off += duration(x);
+  });
+  return ev;
+}
+async function pickAudio() {
+  if (typeof AudioEncoder === 'undefined' || typeof OfflineAudioContext === 'undefined') return null;
+  for (const [codec, mux, sampleRate] of [['mp4a.40.2', 'aac', 44100], ['opus', 'opus', 48000]]) {
+    try { const r = await AudioEncoder.isConfigSupported({ codec, sampleRate, numberOfChannels: 1, bitrate: 64000 }); if (r.supported) return { codec, mux, sampleRate }; } catch {}
+  }
+  return null;
+}
 // sasaran saiz ~6 MB (mudah dihantar di WhatsApp); grafik kebanyakannya statik, jadi kadar bit rendah masih jelas
-const bitrateFor = o => Math.max(300_000, Math.min(2_500_000, Math.floor(6 * 8 * 1048576 / Math.max(1, duration(o)))));
+const bitrateFor = o => Math.max(300_000, Math.min(2_500_000, Math.floor((o.music ? 5.2 : 6) * 8 * 1048576 / Math.max(1, duration(o)))));
 async function pickCodec() {
   if (typeof VideoEncoder === 'undefined') return null;
   for (const codec of ['avc1.42001f', 'avc1.4d001f', 'avc1.640028', 'avc1.42002a']) {
@@ -140,12 +192,29 @@ async function pickCodec() {
   return null;
 }
 
-async function encodeWebCodecs(o, D, onP, cfg) {
+async function encodeWebCodecs(o, D, onP, cfg, snd) {
   const { Muxer, ArrayBufferTarget } = await import('./vendor/mp4-muxer.js');
   const FPS = fpsFor(o);
   const target = new ArrayBufferTarget();
   const VW = D.cv.width, VH = D.cv.height;
-  const muxer = new Muxer({ target, video: { codec: cfg.mux, width: VW, height: VH, frameRate: FPS }, fastStart: 'in-memory' });
+  const muxer = new Muxer({ target, video: { codec: cfg.mux, width: VW, height: VH, frameRate: FPS },
+    ...(snd ? { audio: { codec: snd.cfg.mux, numberOfChannels: 1, sampleRate: snd.cfg.sampleRate } } : {}), fastStart: 'in-memory' });
+  if (snd) {
+    // audio dahulu (pantas), kemudian video
+    let aerr = null;
+    const aenc = new AudioEncoder({ output: (ch, meta) => muxer.addAudioChunk(ch, meta), error: e => (aerr = e) });
+    aenc.configure({ codec: snd.cfg.codec, sampleRate: snd.cfg.sampleRate, numberOfChannels: 1, bitrate: 48000 });
+    const data = snd.buf.getChannelData(0), sr = snd.cfg.sampleRate, N = 4096;
+    for (let i = 0; i < data.length; i += N) {
+      if (aerr) throw aerr;
+      const n = Math.min(N, data.length - i);
+      const ad = new AudioData({ format: 'f32-planar', sampleRate: sr, numberOfFrames: n, numberOfChannels: 1, timestamp: Math.round(i * 1e6 / sr), data: data.slice(i, i + n) });
+      aenc.encode(ad); ad.close();
+      if (aenc.encodeQueueSize > 16) await new Promise(r => setTimeout(r, 5));
+    }
+    await aenc.flush(); aenc.close();
+    if (aerr) throw aerr;
+  }
   let err = null;
   const enc = new VideoEncoder({ output: (ch, meta) => muxer.addVideoChunk(ch, meta), error: e => (err = e) });
   const br = bitrateFor(o); // video panjang: kadar bit lebih rendah supaya saiz < ~12 MB untuk WhatsApp
@@ -171,24 +240,56 @@ async function encodeWebCodecs(o, D, onP, cfg) {
   return new Blob([target.buffer], { type: 'video/mp4' });
 }
 
-async function encodeRecorder(o, D, onP) {
-  const types = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
+async function encodeRecorder(o, D, onP, snd) {
+  const types = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'];
   const type = types.find(x => window.MediaRecorder && MediaRecorder.isTypeSupported(x));
   if (!type) throw new Error('Telefon ini tidak menyokong rakaman video.');
   const FPS = fpsFor(o);
-  const stream = D.cv.captureStream(FPS), rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: Math.round(bitrateFor(o) * 0.6) }), parts = [];
+  const stream = D.cv.captureStream(FPS);
+  let actx = null, src = null;
+  if (snd && snd.buf) {
+    try { actx = new AudioContext({ sampleRate: snd.buf.sampleRate }); await actx.resume(); const dst = actx.createMediaStreamDestination();
+      src = actx.createBufferSource(); src.buffer = snd.buf; src.connect(dst); dst.stream.getAudioTracks().forEach(tr => stream.addTrack(tr)); } catch { actx = null; src = null; }
+  }
+  const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: Math.round(bitrateFor(o) * 0.6) }), parts = [];
   rec.ondataavailable = e => e.data.size && parts.push(e.data);
   const done = new Promise(r => (rec.onstop = r));
-  const dur = duration(o); rec.start(500);
+  const dur = duration(o); rec.start(500); if (src) src.start();
   const t0 = performance.now();
   await new Promise(res => {
     const tick = () => { const t = (performance.now() - t0) / 1000; D.draw(Math.min(t, dur)); onP && onP(t / dur); t < dur ? requestAnimationFrame(tick) : res(); };
     tick();
   });
-  rec.stop(); await done;
+  rec.stop(); await done; if (actx) actx.close().catch(() => {});
   return new Blob(parts, { type: type.split(';')[0] });
 }
 
+// Kad penutup video
+function makeEndDrawer(o, logos, cv, sc = 1) {
+  const c = cv.getContext('2d');
+  const hd1 = css('--hd1') || '#0b1a3f', hd2 = css('--hd2') || '#1d3f8c';
+  const draw = t => {
+    c.setTransform(sc, 0, 0, sc, 0, 0);
+    const g = c.createLinearGradient(0, 0, W * .4, H); g.addColorStop(0, hd2); g.addColorStop(1, hd1);
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+    c.strokeStyle = 'rgba(255,255,255,.35)'; c.lineWidth = 3; rr(c, 16, 16, W - 32, H - 32, 28); c.stroke();
+    const p = ease(t / 0.6);
+    const ls = logos.filter(Boolean); let tw = ls.reduce((a, im) => a + 170 * im.width / im.height + 16, -16), lx = (W - tw) / 2;
+    c.globalAlpha = p; ls.forEach(im => { const w = 170 * im.width / im.height; c.drawImage(im, lx, 260, w, 170); lx += w + 16; }); c.globalAlpha = 1;
+    c.textAlign = 'center';
+    c.save(); c.translate(W / 2, 560); c.scale(0.7 + 0.3 * p, 0.7 + 0.3 * p); c.fillStyle = '#ffb02e'; c.fillText(fitText(c, o.big || '', W - 100, 72, 900), 0, 0); c.restore();
+    c.fillStyle = '#fff'; c.fillText(fitText(c, o.title || '', W - 100, 34, 800), W / 2, 640);
+    c.fillStyle = 'rgba(255,255,255,.8)'; c.fillText(fitText(c, o.subtitle || '', W - 100, 26, 500), W / 2, 685);
+    c.fillStyle = 'rgba(255,255,255,.9)'; c.fillText(fitText(c, o.bigSub || '', W - 100, 28, 700), W / 2, 760);
+    c.fillStyle = '#7ee2a0'; c.fillText(fitText(c, o.line3 || '', W - 100, 30, 800), W / 2, 830);
+    const cols = ['#ffb02e', '#ff7a1a', '#7ee2a0', '#60a5fa', '#f472b6', '#fff'];
+    for (let i = 0; i < 70; i++) { const x = (i * 97.3) % W, y = ((i * 61) % 400) - 200 + t * (180 + (i % 5) * 40); if (y > H) continue;
+      c.save(); c.translate(x, y); c.rotate(t * 5 + i); c.fillStyle = cols[i % cols.length]; c.fillRect(-6, -3, 12, 6); c.restore(); }
+    c.fillStyle = 'rgba(255,255,255,.55)'; c.fillText(fitText(c, `Pingpong Portal · ${new Date().toLocaleDateString('ms-MY', { day: 'numeric', month: 'long', year: 'numeric' })}`, W - 80, 20, 600), W / 2, H - 38);
+    c.textAlign = 'left';
+  };
+  return { cv, draw };
+}
 // Video berterusan: beberapa babak (cth. semua sesi) dalam satu video
 function makeSceneDrawer(o, logos, sc = 1) {
   // satu kanvas sahaja dikongsi semua babak (jimat memori telefon)
@@ -198,7 +299,7 @@ function makeSceneDrawer(o, logos, sc = 1) {
   let cur = -1, D = null;
   const draw = t => {
     let i = ends.findIndex(e => t < e); if (i < 0) i = ends.length - 1;
-    if (i !== cur) { cur = i; D = makeDrawer(o.scenes[i], logos, cv, sc); }
+    if (i !== cur) { cur = i; D = o.scenes[i].end ? makeEndDrawer(o.scenes[i], logos, cv, sc) : makeDrawer(o.scenes[i], logos, cv, sc); }
     D.draw(t - (i ? ends[i - 1] : 0));
   };
   return { cv, draw };
@@ -208,19 +309,29 @@ export async function makeDrawVideo(o, onP) {
   const sc = scaleFor(o);
   const D = o.scenes ? makeSceneDrawer(o, logos, sc) : makeDrawer(o, logos, null, sc);
   const cfg = await pickCodec();
+  let snd = null;
+  if (o.music) {
+    try {
+      onP && onP(0, 'audio');
+      const acfg = await pickAudio(), sr = acfg ? acfg.sampleRate : 44100;
+      const { renderSoundtrack } = await import('./sound.js');
+      snd = { cfg: acfg, buf: await renderSoundtrack(duration(o), soundEvents(o), sr, true) };
+    } catch (e) { snd = null; }
+  }
   if (cfg) {
-    try { return await encodeWebCodecs(o, D, onP, cfg); }
+    try { return await encodeWebCodecs(o, D, onP, cfg, snd && snd.cfg ? snd : null); }
     catch (e) {
       // pengekod telefon tersekat → rakam secara masa nyata (lebih lama tetapi stabil)
-      if (e && e.message === 'STALL' && window.MediaRecorder) { onP && onP(0, 'rec'); return encodeRecorder(o, D, p => onP && onP(p, 'rec')); }
+      if (e && e.message === 'STALL' && window.MediaRecorder) { onP && onP(0, 'rec'); return encodeRecorder(o, D, p => onP && onP(p, 'rec'), snd); }
       throw e;
     }
   }
-  return encodeRecorder(o, D, p => onP && onP(p, 'rec'));
+  return encodeRecorder(o, D, p => onP && onP(p, 'rec'), snd);
 }
 
 export async function prepareDrawVideo(o, onP) {
   const blob = await makeDrawVideo(o, onP);
+  try { window.__lastDrawVideo = blob; } catch {}
   const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
   const clean = s => (s || '').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-');
   const fname = `${clean(o.title || 'Cabutan')}-${clean(o.subtitle).slice(0, 40)}.${ext}`;

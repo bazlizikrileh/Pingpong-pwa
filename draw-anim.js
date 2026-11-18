@@ -92,7 +92,7 @@ export function playDeal(o) {
       const m = await import('./draw-video.js');
       const vo = o.video || o, tot = m.duration(vo);
       made = await m.prepareDrawVideo(vo, (p, mode) => {
-        vb.textContent = `⏳ ${mode === 'rec' ? 'Merakam' : 'Menyediakan'} video… ${Math.round(p * 100)}%`;
+        vb.textContent = mode === 'audio' ? '🎵 Menyediakan muzik…' : `⏳ ${mode === 'rec' ? 'Merakam' : 'Menyediakan'} video… ${Math.round(p * 100)}%`;
         if (mode === 'rec') vm.textContent = `Telefon ini perlahan mengekod, jadi video dirakam secara terus (~${Math.ceil(tot / 60)} minit). Jangan tutup skrin…`;
       });
       vb.textContent = '📤 Hantar video ke WhatsApp';

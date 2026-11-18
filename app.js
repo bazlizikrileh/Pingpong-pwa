@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.16.4';
+const VERSION = '3.17.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -336,7 +336,7 @@ function renderHead(t, page) {
 const section = (eyebrow, title) => `<div class="eyebrow">${esc(eyebrow)}</div><h2 class="h-big">${esc(title)}</h2><div class="rule"></div>`;
 
 // ---------- Video undian ----------
-const subtitleOf = t => [t.name, t.date].filter(Boolean).join(' · ');
+const subtitleOf = t => [t.name, t.date ? (() => { const d = new Date(t.date + 'T00:00'); return isNaN(d) ? t.date : `${HARI[d.getDay()]}, ${fmtDate(t.date)}`; })() : ''].filter(Boolean).join(' · ');
 function playGroupDraw(t) {
   const G = t.groups;
   if (!G.length) return toast('Kumpulan belum dijana');
@@ -374,13 +374,14 @@ function mixDrawOpts(t, s, U) {
   const NS = E.lastSession(t), nm = id => E.pname(t, id), cards = [];
   const tl = m => (/meja/i.test(m.table) ? m.table : 'Meja ' + m.table), tn = m => tl(m).replace(/\s*\(.*\)/, '');
   const L = 'ABCDEFGHIJKLMNOP';
-  const boxes = ms.map((m, j) => { const a = L[j * 2], b = L[j * 2 + 1]; m.px.forEach((id, k) => cards.push({ box: j, slot: k, name: nm(id) })); return { label: tl(m), slots: 4, vs: true, slotLabels: [a + '1', a + '2', b + '1', b + '2'] }; });
+  const boxes = ms.map((m, j) => { const a = L[j * 2], b = L[j * 2 + 1]; m.px.forEach((id, k) => cards.push({ box: j, slot: k, name: nm(id) })); return { label: tn(m), slots: 4, vs: true, slotLabels: [a + '1', a + '2', b + '1', b + '2'] }; });
   const umps = ms.map(m => [m, LV.umpireOf(t, m, U)]).filter(([, u]) => u), rest = LV.mixRestOf(t, s, U);
   if (umps.length) { const bi = boxes.length; boxes.push({ label: '🟣 Pengadil', slots: umps.length, slotLabels: umps.map(([m]) => tn(m)) }); umps.forEach(([, u], k) => cards.push({ box: bi, slot: k, name: nm(u) })); }
   if (rest.length) { const bi = boxes.length; boxes.push({ label: '💤 Rehat', slots: rest.length, slotLabels: rest.map((_, k) => 'Rehat ' + (k + 1)) }); rest.forEach((id, k) => cards.push({ box: bi, slot: k, name: nm(id) })); }
   for (let i = cards.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cards[i], cards[j]] = [cards[j], cards[i]]; }
   return { title: `Undian Regu Bertukar · Sesi ${s} / ${NS}`, subtitle: `${subtitleOf(t)} · ${E.sessionTime(t, s)}`, logos: clubOf(t).logos,
-    boxes, seq: cards.map(c => ({ ...c, head: `SESI ${s} · KAD DICABUT` })), hideTo: true, fast: true, doneText: `Sesi ${s} sedia` };
+    boxes, seq: cards.map(c => ({ ...c, head: `SESI ${s} · KAD DICABUT` })), hideTo: true, fast: true, doneText: `Sesi ${s} sedia`,
+    big: `SESI ${s}`, bigSub: `${E.sessionTime(t, s)} · ${ms.length} meja${rest.length ? ` · ${rest.length} rehat` : ''}`, sceneIdx: s, sceneTotal: NS };
 }
 // auto = main berterusan semua sesi (dari sesi s hingga akhir)
 function playMixDraw(t, s = 1, auto = true) {
@@ -394,8 +395,9 @@ function playMixDraw(t, s = 1, auto = true) {
     chips: Array.from({ length: NS }, (_, k) => ({ label: String(k + 1), on: k + 1 === s, fn: () => playMixDraw(t, k + 1, false) })),
     nav: [{ label: '◀ Sesi lepas', fn: s > 1 ? () => playMixDraw(t, s - 1, false) : null }, { label: '🔁 Ulang', fn: () => playMixDraw(t, s, false) }, { label: auto ? '⏸ Henti auto' : '▶▶ Main semua', fn: auto ? () => playMixDraw(t, s, false) : () => playMixDraw(t, 1, true) }],
     videoLabel: `📤 Kongsi video semua ${NS} sesi (WhatsApp)`,
-    video: { title: `Undian Regu Bertukar · ${t.name}`, subtitle: subtitleOf(t), logos: clubOf(t).logos,
-      scenes: Array.from({ length: NS }, (_, k) => { const x = mixDrawOpts(t, k + 1, U); return x && { ...x, short: k > 0 }; }).filter(Boolean) },
+    video: { title: 'Undian Regu Bertukar', subtitle: subtitleOf(t), logos: clubOf(t).logos, music: true,
+      scenes: [...Array.from({ length: NS }, (_, k) => { const x = mixDrawOpts(t, k + 1, U); return x && { ...x, short: k > 0 }; }).filter(Boolean),
+        { end: true, dur: 4, title: 'Undian Regu Bertukar', subtitle: subtitleOf(t), logos: clubOf(t).logos, big: '🎉 Undian selesai!', bigSub: `${NS} sesi · ${t.matches.length} perlawanan · ${t.individuals.length} pemain`, line3: 'Semoga berjaya kepada semua peserta!' }] },
   });
 }
 function playBracketDraw(t, b) {
