@@ -6,7 +6,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
  *  title, subtitle, intro (html), prep (teks semasa mengocok)
  *  boxes: [{ label, slots, vs }]   vs=true → paparan "A lwn B"
  *  seq:   [{ box, name, head }]    head = teks kecil di atas nama
- *  doneText
+ *  doneText, next: { label, fn } → butang selepas selesai (cth. sesi seterusnya)
  */
 export function playDeal(o) {
   document.getElementById('drw')?.remove();
@@ -47,7 +47,11 @@ export function playDeal(o) {
     }
   };
   const step = () => {
-    if (k >= o.seq.length) { stat.innerHTML = `<b style="font-size:18px">✅ ${esc(o.doneText || 'Cabutan selesai')}</b>`; return; }
+    if (k >= o.seq.length) {
+      stat.innerHTML = `<b style="font-size:18px">✅ ${esc(o.doneText || 'Cabutan selesai')}</b>${o.next ? `<div style="margin-top:8px"><button class="btn" data-next style="background:#ff7a1a;color:#fff">${esc(o.next.label)}</button></div>` : ''}`;
+      const nb = stat.querySelector('[data-next]'); if (nb) nb.onclick = () => { close(); o.next.fn(); };
+      return;
+    }
     const s = o.seq[k++];
     stat.innerHTML = `<small>${esc(s.head || '')}</small>
       <div class="drw-now">🎴 ${esc(s.name)} <span class="drw-to">→ ${esc(o.boxes[s.box].label)}</span></div>

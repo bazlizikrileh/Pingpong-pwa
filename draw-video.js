@@ -28,8 +28,9 @@ function layout(o) {
   return o.boxes.map((b, i) => {
     const x = pad + (i % cols) * (bw + gap), y = y0 + Math.floor(i / cols) * (bh + gap);
     const lh = Math.min(40, bh * .28), sh = (bh - lh - 10 - (b.vs ? 18 : 0)) / b.slots;
-    const slots = Array.from({ length: b.slots }, (_, k) => ({ x: x + 8, y: y + lh + 4 + k * sh + (b.vs && k ? 18 : 0), w: bw - 16, h: sh - 6 }));
-    return { x, y, w: bw, h: bh, lh, slots, vsY: b.vs ? y + lh + 4 + sh - 2 : 0 };
+    const va = Math.max(1, Math.floor(b.slots / 2));
+    const slots = Array.from({ length: b.slots }, (_, k) => ({ x: x + 8, y: y + lh + 4 + k * sh + (b.vs && k >= va ? 18 : 0), w: bw - 16, h: sh - 6 }));
+    return { x, y, w: bw, h: bh, lh, slots, vsY: b.vs ? y + lh + 4 + va * sh - 2 : 0 };
   });
 }
 

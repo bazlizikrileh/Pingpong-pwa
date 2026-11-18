@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.13.0';
+const VERSION = '3.13.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -367,17 +367,22 @@ function playUnitDraw(t) {
     boxes: P.map((p, i) => ({ label: team ? p.name : `Regu ${i + 1}`, slots: p.members.length })), seq, doneText: 'Undian selesai',
   });
 }
-// Undian regu bertukar: tunjuk pasangan pusingan pertama (kad diagih bergilir ke setiap meja)
-function playMixDraw(t, r = 1) {
-  const ms = t.matches.filter(m => m.mr === r && m.px).sort((x, y) => (x.session - y.session) || String(x.table).localeCompare(String(y.table), 'ms', { numeric: true }));
+// Undian regu bertukar ikut sesi: pemain di setiap meja, pengadil dan rehat
+function playMixDraw(t, s = 1) {
+  const ms = t.matches.filter(m => m.px && m.session === s).sort((x, y) => String(x.table).localeCompare(String(y.table), 'ms', { numeric: true }));
   if (!ms.length) return toast('Jadual belum dijana');
-  const nm = id => E.pname(t, id), seq = [];
-  [0, 1, 2, 3].forEach(k => ms.forEach((m, j) => seq.push({ box: j, name: nm(m.px[k]), head: `PUSINGAN ${r} · ${k < 2 ? 'REGU KIRI' : 'REGU KANAN'} · ${k % 2 ? 'ORANG KEDUA' : 'ORANG PERTAMA'}` })));
-  const rest = ((t.mixRest || {})[r] || []).map(nm);
+  const NS = E.lastSession(t), U = LV.umpirePlan(t), nm = id => E.pname(t, id), seq = [];
+  const tl = m => (/meja/i.test(m.table) ? m.table : 'Meja ' + m.table);
+  [0, 1, 2, 3].forEach(k => ms.forEach((m, j) => seq.push({ box: j, name: nm(m.px[k]), head: `SESI ${s} · ${tl(m).toUpperCase()} · ${k < 2 ? 'REGU KIRI' : 'REGU KANAN'}` })));
+  const umps = ms.map(m => [m, LV.umpireOf(t, m, U)]).filter(([, u]) => u), rest = LV.mixRestOf(t, s, U);
+  const boxes = ms.map(m => ({ label: tl(m), slots: 4, vs: true }));
+  if (umps.length) { const bi = boxes.length; boxes.push({ label: '🟣 Pengadil', slots: umps.length }); umps.forEach(([m, u]) => seq.push({ box: bi, name: `${nm(u)} · ${tl(m).replace(/\s*\(.*\)/, '')}`, head: `SESI ${s} · PENGADIL` })); }
+  if (rest.length) { const bi = boxes.length; boxes.push({ label: '💤 Rehat', slots: rest.length }); rest.forEach(id => seq.push({ box: bi, name: nm(id), head: `SESI ${s} · REHAT` })); }
   playDeal({
-    title: 'Undian Regu Bertukar', subtitle: subtitleOf(t), logos: clubOf(t).logos,
-    intro: `<small>Pusingan ${r}: semua ${seq.length} nama dikocok dan diagih ke regu. Setiap pusingan, pasangan dan lawan bertukar — tiada pasangan berulang${E.lvScheme(t) ? ', dan regu diimbangkan ikut tahap' : ''}.${rest.length ? ` Rehat: ${esc(rest.join(', '))}.` : ''}</small>`,
-    boxes: ms.map(m => ({ label: `Sesi ${m.session} · ${/meja/i.test(m.table) ? m.table : 'Meja ' + m.table}`, slots: 4, vs: true })), seq, doneText: `Pusingan ${r} sedia`,
+    title: `Undian Regu Bertukar · Sesi ${s}`, subtitle: `${subtitleOf(t)} · ${E.sessionTime(t, s)}`, logos: clubOf(t).logos,
+    intro: `<small>Sesi ${s} daripada ${NS}: nama diagih ke setiap meja, kemudian pengadil dan pemain rehat. Pasangan dan lawan bertukar setiap sesi — tiada pasangan berulang${E.lvScheme(t) ? ', regu diimbangkan ikut tahap' : ''}.</small>`,
+    boxes, seq, doneText: `Sesi ${s} sedia`, introMs: s > 1 ? 600 : undefined,
+    next: s < NS ? { label: `▶ Sesi ${s + 1}`, fn: () => playMixDraw(t, s + 1) } : null,
   });
 }
 function playBracketDraw(t, b) {
@@ -1263,7 +1268,7 @@ function viewMixStandings(t) {
     </tbody></table></div></div>
     ${mixMatrix(t, S)}
     <div class="row" style="margin:0 0 12px"><button class="pill-btn small" data-mxp="1"><span class="dot"></span>▶ Tonton undian</button></div>
-    <details class="card fold"><summary>🔁 Senarai pusingan & pemain rehat</summary>${[...new Set(t.matches.map(m => m.mr))].map(r => `<div class="sess">Pusingan ${r}${(t.mixRest || {})[r] && t.mixRest[r].length ? ` · rehat: ${t.mixRest[r].map(nm).join(', ')}` : ''} <button class="pill-btn light small" data-mxp="${r}" style="margin-left:6px">▶</button></div><div class="mlist">${t.matches.filter(m => m.mr === r).map(m => matchRow(t, m)).join('')}</div>`).join('')}</details>`;
+    <details class="card fold"><summary>🔁 Senarai pusingan & pemain rehat</summary>${[...new Set(t.matches.map(m => m.mr))].map(r => `<div class="sess">Pusingan ${r}${(t.mixRest || {})[r] && t.mixRest[r].length ? ` · rehat: ${t.mixRest[r].map(nm).join(', ')}` : ''}</div><div class="mlist">${t.matches.filter(m => m.mr === r).map(m => matchRow(t, m)).join('')}</div>`).join('')}</details>`;
   $app.querySelectorAll('[data-mxp]').forEach(b => (b.onclick = () => playMixDraw(t, +b.dataset.mxp)));
   $app.querySelectorAll('[data-mxm]').forEach(b => (b.onclick = () => { _mxMode = b.dataset.mxm; viewMixStandings(t); }));
 }
@@ -2419,7 +2424,7 @@ function viewJadual(t) {
       <p class="muted small" style="margin-bottom:0">${E.numTablesOf(t)} meja digunakan · anggaran tamat sekitar <b>${E.sessionTime(t, NS + 1)}</b> (${t.sessionMin} min setiap sesi)</p></div>
     <div class="card tw" style="padding:6px"><table class="jd"><thead><tr><th>Game</th><th>Sesi</th><th>Masa</th><th>Meja</th><th class="l">${UNIT(t)}</th><th class="l">Pengadil</th>${t.handicap && !E.isTeam(t) ? '<th>HC</th>' : ''}<th>Skor</th></tr></thead><tbody>
     ${rows.map((m, ri) => { const r = E.evaluateMatch(t, m), u = LV.umpireOf(t, m, U), h = t.handicap && m.a && m.b ? E.handicapInfo(t, m.a, m.b) : null;
-      const restRow = E.isMixer(t) && m.session && (!rows[ri + 1] || rows[ri + 1].session !== m.session) ? (() => { const rs = LV.mixRestOf(t, m.session, U); return rs.length ? `<tr class="jd-rest"><td colspan="9">💤 Rehat sesi ${m.session}: ${rs.map(id => esc(E.pname(t, id))).join(', ')}</td></tr>` : ''; })() : '';
+      const restRow = E.isMixer(t) && m.session && (!rows[ri + 1] || rows[ri + 1].session !== m.session) ? (() => { const rs = LV.mixRestOf(t, m.session, U); return `<tr class="jd-rest"><td colspan="9">${rs.length ? `💤 Rehat sesi ${m.session}: ${rs.map(id => esc(E.pname(t, id))).join(', ')}` : ''} <button class="pill-btn light small noprint" data-mxs="${m.session}">▶ Undian sesi ${m.session}</button></td></tr>`; })() : '';
       return restRow ? rowHtml() + restRow : rowHtml();
       function rowHtml() { return `<tr class="${m.lt && m.status !== 'done' ? 'onlive' : ''}" data-go="${m.a && m.b ? m.id : ''}"><td>${esc(E.matchCode(m) || '')}</td><td>${m.session || '-'}</td><td>${m.session ? esc(E.sessionTime(t, m.session)) : '-'}</td><td>${tno(m) || '-'}${m.lt && m.status !== 'done' ? ' 🟢' : ''}</td>
         <td class="l">${m.a ? esc(E.pname(t, m.a)) : `<i class="muted">${esc(E.placeholderLabel(m.srcA) || 'Menunggu')}</i>`} <small class="muted">lwn</small> ${m.b ? esc(E.pname(t, m.b)) : `<i class="muted">${esc(E.placeholderLabel(m.srcB) || 'Menunggu')}</i>`}</td>
@@ -2428,6 +2433,7 @@ function viewJadual(t) {
     </tbody></table></div>
     <p class="muted small">Sesi dan meja ialah anggaran. Semasa pertandingan, ikut tab 🟢 Langsung untuk meja sebenar.</p>`;
   document.getElementById('jdSel').onchange = e => { jdSel = e.target.value; viewJadual(t); };
+  $app.querySelectorAll('[data-mxs]').forEach(b => (b.onclick = e => { e.stopPropagation(); playMixDraw(t, +b.dataset.mxs); }));
   document.getElementById('jdSes').onchange = e => { jdSes = e.target.value; viewJadual(t); };
   $app.querySelectorAll('tr[data-go]').forEach(tr => tr.dataset.go && (tr.onclick = () => (location.hash = `#/t/${t.id}/m/${tr.dataset.go}`)));
 }
