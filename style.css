@@ -709,3 +709,19 @@ table.rp-mx td.sets span { white-space:nowrap; display:inline-block; margin-righ
 .drw-chips { display:flex; flex-wrap:wrap; gap:5px; justify-content:center; margin-top:12px; }
 .drw-chips .btn { min-width:34px; padding:5px 8px; font-size:13px; background:#1e293b; color:#cbd5e1; border:1px solid #334155; }
 .drw-chips .btn.on { background:#ff7a1a; color:#fff; border-color:#ff7a1a; }
+.st-alert { position:fixed; left:12px; right:12px; top:calc(env(safe-area-inset-top, 0px) + 10px); z-index:9999; display:flex; flex-direction:column; gap:2px; padding:14px 40px 14px 16px; border-radius:16px; color:#fff; text-decoration:none; box-shadow:0 10px 30px rgba(0,0,0,.35); animation: stIn .35s ease-out; }
+.st-alert b { font-size:17px; } .st-alert span { font-size:13.5px; opacity:.95; }
+.st-alert i { position:absolute; right:14px; top:12px; font-style:normal; font-size:18px; opacity:.8; }
+.st-play { background:#dc2626; } .st-ump { background:#7c3aed; } .st-ready { background:#d97706; }
+@keyframes stIn { from { transform: translateY(-120%); } to { transform:none; } }
+/* Matriks kosong (kad skor sandaran) */
+.ks-msheet { background:#fff; color:#111; border:2px solid #111; border-radius:10px; padding:12px; margin-bottom:14px; }
+.ks-mh { display:flex; justify-content:space-between; align-items:flex-end; gap:10px; margin-bottom:8px; font-size:12px; } .ks-mh span { color:#555; } .ks-mh h3 { margin:0; font-size:16px; text-align:right; }
+.ks-mat { width:100%; border-collapse:collapse; table-layout:fixed; font-size:11px; }
+.ks-mat th, .ks-mat td { border:1.3px solid #111; height:32px; text-align:center; padding:0 2px; }
+.ks-mat th.l, .ks-mat td.l { text-align:left; width:22%; padding:0 5px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.ks-mat td.d { background:#9ca3af; } .ks-mat th.x { background:#f1f5f9; }
+.ks-note { font-size:11px; color:#333; margin:6px 0 0; }
+.ks-ko { width:100%; border-collapse:collapse; font-size:12px; margin-bottom:8px; } .ks-ko td { border-bottom:1px solid #999; padding:8px 4px; } .ks-ko td.c { text-align:center; color:#555; } .ks-msheet h4 { margin:10px 0 4px; }
+@media print { .ks-msheet { break-inside: avoid; border:none; padding:0; margin-bottom:10mm; } .ks-msheet.wide { break-before: page; break-after: page; } .ks-mat td.d, .ks-mat th.x { -webkit-print-color-adjust: exact; print-color-adjust: exact; } @page { size: A4; } }
+@media print { .ks-msheet.wide { page: wide; } @page wide { size: A4 landscape; margin: 10mm; } }

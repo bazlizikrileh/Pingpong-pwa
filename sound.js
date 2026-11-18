@@ -9,6 +9,7 @@ export const STYLES = [
   { name: 'Bertenaga', bpm: 128, prog: [[45, 57, 60, 64], [41, 57, 60, 65], [48, 55, 60, 64], [43, 55, 59, 62]] },   // Am–F–C–G, rentak sukan
   { name: 'Suspens', bpm: 120, prog: [[45, 57, 60, 64], [41, 57, 60, 65], [50, 57, 62, 65], [40, 56, 59, 64]] },     // Am–F–Dm–E, minor tegang
   { name: 'Arena', bpm: 138, prog: [[40, 55, 59, 64], [48, 55, 60, 64], [43, 55, 59, 62], [38, 54, 57, 62]] },      // Em–C–G–D, gaya stadium
+  { name: 'Ceria', bpm: 112, prog: [[48, 60, 64, 67], [43, 59, 62, 67], [45, 60, 64, 69], [41, 60, 65, 69]] },       // C–G–Am–F, pop riang (asal)
 ];
 export const loopLen = style => 8 * 4 * 60 / STYLES[style || 0].bpm;
 export const randomStyle = () => Math.floor(Math.random() * STYLES.length);
@@ -34,7 +35,17 @@ export async function renderSoundtrack(dur, events, sr = 44100, music = true, fa
     const bars = Math.ceil((dur - 0.3) / (bt * 4));
     for (let b = 0; b < bars; b++) {
       const ch = chords[Math.floor(b / 2) % 4], t0 = 0.3 + b * 4 * bt;
-      if (style === 2) {
+      if (style === 3) {
+        // Ceria (asal): pad lembut, kick, hi-hat, bass, arpeggio
+        if (b % 2 === 0) ch.slice(1).forEach(n => tone('triangle', NOTE(n), t0, 0.25, 0.018, 8 * bt - 0.4));
+        for (let q = 0; q < 4; q++) {
+          const t = t0 + q * bt; if (t > dur - 0.6) break;
+          tone('sine', 140, t, 0.003, 0.32, 0.16, 45);
+          hiss(t + bt / 2, 0.05, 0.05, 'highpass', 7000);
+          tone('triangle', NOTE(ch[0] - 12 + (q === 3 ? 7 : 0)), t, 0.01, 0.11, bt * 0.8);
+          const ar = ch.slice(1); tone('square', NOTE(ar[q % 3] + 12), t + bt / 2, 0.005, 0.012, 0.18);
+        }
+      } else if (style === 2) {
         // Arena: kick 4/4 kuat, snare besar pada 2 & 4, bass 8 berdenyut, "brass" sawtooth pada awal bar
         tone('sawtooth', NOTE(ch[1]), t0, 0.01, 0.035, bt * 0.9); tone('sawtooth', NOTE(ch[2]), t0, 0.01, 0.03, bt * 0.9); tone('sawtooth', NOTE(ch[3]), t0, 0.01, 0.03, bt * 0.9);
         for (let q = 0; q < 4; q++) {

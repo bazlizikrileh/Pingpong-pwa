@@ -215,7 +215,7 @@ export function myStatus(t, pid) {
   if (!live.length) return null;
   const L = live.find(m => pl2(m).includes(pid));
   if (L) return { kind: 'play', table: L.lt, m: L };
-  const Um = live.find(m => m.ump === pid);
+  const Um = live.find(m => (m.ump || (t.entryMode === 'mixer' ? umpireOf(t, m) : '')) === pid);
   if (Um) return { kind: 'ump', table: Um.lt, m: Um };
   const nx = nextUp(t), N = Object.keys(nx).find(k => pl2(nx[k]).includes(pid));
   if (N) return { kind: 'ready', table: +N, m: nx[N] };

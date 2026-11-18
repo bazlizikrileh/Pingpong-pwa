@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.18.1';
+const VERSION = '3.19.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -278,7 +278,9 @@ function render(keep = false) {
     if (page === 'm') viewMatch(t, parts[3]); else if (page === 'ls') viewLiveScore(t, parts[3]); else if (page === 'kadskor') viewKadSkor(t); else if (views[page]) views[page](t); else { location.hash = '#/'; return; }
     if (page === 'kumpulan' && t.format === 'rr' && t.stage === 'done') { $app.insertAdjacentHTML('beforeend', '<div class="row" style="margin:12px 0"><button class="pill-btn orange" id="posterBtn"><span class="dot"></span>🏆 Kongsi poster juara</button></div>'); wirePoster(t); }
     guideCard(t, page);
+    autoMe(t);
     if (page !== 'langsung') myStrip(t);
+    statusAlert(t);
     if (keep) window.scrollTo(0, y);
     return;
   }
@@ -1775,6 +1777,7 @@ function wireReg(t) {
       await cloud.register(t.id, data, editId);
       if (firstReg || (editId && editId === cloud.myUid())) ls.set('pingpong:profile', JSON.stringify({ name: data.name, unit: data.unit, level: data.level }));
       ls.set('pingpong:myRegs', JSON.stringify([...new Set([t.id, ...myRegTids()])].slice(0, 30)));
+      try { const L = JSON.parse(ls.get('pingpong:regn:' + t.id) || '[]'); if (!L.includes(data.name)) L.push(data.name); ls.set('pingpong:regn:' + t.id, JSON.stringify(L.slice(-10))); } catch {}
       _rgEdit = null;
       if (isNew) PUSH.send(['adm:' + t.id], '🏓 Pendaftaran baharu', `${name} · ${t.name}`, `#/t/${t.id}/pemain`, 'reg-' + t.id);
       pushSync();
@@ -1970,6 +1973,32 @@ const STAT = {
   ump: ['#6a1b9a', '#fff', '🟣', 'Anda pengadil SEKARANG'],
   ready: ['#f4b400', '#1a1200', '🟡', 'Sila bersedia: anda seterusnya'],
 };
+// Peserta yang mendaftar dari peranti ini: kenal pasti nama mereka dalam senarai secara automatik (untuk status & notifikasi)
+const normN = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+function autoMe(t) {
+  if (ls.get(meKey(t)) || canAdmin(t)) return;
+  let names = []; try { names = JSON.parse(ls.get('pingpong:regn:' + t.id) || '[]'); } catch {}
+  if (!names.length && ls.get('pingpong:regd:' + t.id) && profile().name) names = [profile().name];
+  if (!names.length) return;
+  const want = names.map(normN);
+  const pool = E.isMixer(t) ? t.individuals.map(x => [x.id, [x.name]]) : t.participants.map(p => [p.id, [p.name, ...(p.members || [])]]);
+  const hit = pool.find(([, ns]) => ns.some(n => want.includes(normN(n))));
+  if (hit) { ls.set(meKey(t), hit[0]); pushSync(); }
+}
+// Amaran dalam aplikasi bila status saya berubah (bermain / pengadil / bersedia) — getar, bunyi & sepanduk
+const _myLast = {};
+function statusAlert(t) {
+  const me = ls.get(meKey(t)); if (!me || !t.matches.length) return;
+  const st = LV.myStatus(t, me), k = st && ['play', 'ump', 'ready'].includes(st.kind) ? `${st.kind}:${st.table}:${st.m.id}` : '';
+  const prev = _myLast[t.id]; _myLast[t.id] = k;
+  if (prev === undefined || !k || k === prev) return;
+  const TX = { play: '🔴 Anda bermain SEKARANG', ump: '🟣 Anda pengadil SEKARANG', ready: '🟡 Bersedia — anda seterusnya' };
+  document.getElementById('stAlert')?.remove();
+  document.body.insertAdjacentHTML('beforeend', `<a id="stAlert" class="st-alert st-${st.kind}" href="#/t/${t.id}/langsung"><b>${TX[st.kind]}</b><span>Meja ${st.table} · ${esc(E.pname(t, st.m.a))} lwn ${esc(E.pname(t, st.m.b))}</span><i>✕</i></a>`);
+  const el = document.getElementById('stAlert'); el.querySelector('i').onclick = e => { e.preventDefault(); el.remove(); };
+  setTimeout(() => el.remove(), 12000);
+  buzz(2); import('./sound.js').then(S => S.sfx('done')).catch(() => {});
+}
 function myStrip(t) {
   const st = LV.myStatus(t, ls.get(meKey(t)));
   if (!st || !STAT[st.kind]) return;
@@ -2036,8 +2065,43 @@ function rubberNames(t, m, i) {
   return [L['a' + k] || '', L['b' + k] || ''];
 }
 let _kdSel = 'pending';
+// Matriks kosong untuk dicetak (sandaran): kumpulan / liga / regu bertukar; senarai kalah mati
+function blankMatrices(t) {
+  const c = clubOf(t), head = (title, sub) => `<div class="ks-mh"><div><b>${esc(t.name)}</b> · ${esc(c.short || '')}<br><span>${esc(sub || '')}</span></div><h3>${title}</h3></div>`;
+  const mat = (names, note) => { const n = names.length;
+    return `<table class="ks-mat"><thead><tr><th class="l">${esc(UNIT(t))}</th>${names.map((_, i) => `<th>${i + 1}</th>`).join('')}<th class="x">M</th><th class="x">K</th><th class="x">±Set</th><th class="x">Mata</th><th class="x">Kdd</th></tr></thead>
+      <tbody>${names.map((nm, i) => `<tr><td class="l"><b>${i + 1}.</b> ${esc(nm)}</td>${names.map((_, j) => `<td class="${i === j ? 'd' : ''}"></td>`).join('')}<td></td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table>
+      <p class="ks-note">${note}</p>`; };
+  const out = [];
+  if (E.isMixer(t)) {
+    out.push(`<div class="ks-msheet${t.individuals.length > 10 ? ' wide' : ''}">${head('Matriks keputusan — sebagai pasangan', `${t.individuals.length} pemain · ${E.fmtFor(t, 'group').label}`)}
+      ${mat(t.individuals.map(x => x.name), 'Tulis skor set (cth. <b>2-1</b>) di petak pemain baris apabila <b>berpasangan dengan</b> pemain lajur. Setiap pasangan bertemu sekali sahaja, jadi isi kedua-dua petak (baris & lajur) dengan skor yang sama. Menang 3 mata, kalah 0.')}</div>`);
+  } else if (t.groups.length) {
+    t.groups.forEach(g => out.push(`<div class="ks-msheet${g.members.length > 10 ? ' wide' : ''}">${head(t.format === 'rr' ? 'Matriks Liga' : `Matriks Kumpulan ${esc(g.name)}`, E.fmtFor(t, 'group').label)}
+      ${mat(g.members.map(id => E.pname(t, id)), 'Tulis skor set (cth. <b>2-1</b>) dari sudut pemain baris menentang pemain lajur. Isi juga petak bertentangan (cth. <b>1-2</b>). Menang 3 mata, kalah 0; jika mata sama, rujuk peraturan.')}</div>`));
+  }
+  const ko = t.matches.filter(m => m.stage !== 'group');
+  if (ko.length) {
+    const rounds = [...new Set(ko.map(m => m.stage + ':' + m.round))];
+    out.push(`<div class="ks-msheet">${head('Carta kalah mati', E.fmtFor(t, 'ko').label)}
+      ${rounds.map(k => { const ms = ko.filter(m => m.stage + ':' + m.round === k); return `<h4>${esc(E.roundName(t, ms[0].stage, ms[0].round))}</h4><table class="ks-ko">${ms.map(m => `<tr><td class="c">${esc(E.matchCode(m) || '')}</td><td>${m.a ? esc(E.pname(t, m.a)) : '____________________'}</td><td class="c">lwn</td><td>${m.b ? esc(E.pname(t, m.b)) : '____________________'}</td><td class="sc">Skor: ______</td><td>Pemenang: ______________</td></tr>`).join('')}</table>`; }).join('')}</div>`);
+  }
+  return out.join('');
+}
 async function viewKadSkor(t) {
   const K = await import('./poster-kit.js');
+  if (_kdSel === 'mat') {
+    const html = blankMatrices(t);
+    $app.innerHTML = `<div class="noprint"><a href="#/t/${t.id}/jadual" class="muted">← Kembali ke Jadual</a>
+      <h2 class="h-big" style="font-size:22px">🖨️ Kad skor (sandaran)</h2>
+      <p class="muted small">Matriks kosong untuk merekod keputusan secara manual jika internet atau telefon bermasalah.</p>
+      <div class="row" style="gap:6px;margin-bottom:10px">${[['pending', 'Belum tamat'], ['all', 'Semua'], ['mat', '🔢 Matriks']].map(([k, v]) => `<button class="pill-btn small ${_kdSel === k ? 'brand' : 'light'}" data-kd="${k}">${v}</button>`).join('')}
+        <button class="pill-btn orange small" id="kdPrint"><span class="dot"></span>Cetak matriks</button></div></div>
+      ${html || '<p class="muted">Jana jadual dahulu.</p>'}`;
+    $app.querySelectorAll('[data-kd]').forEach(b => (b.onclick = () => { _kdSel = b.dataset.kd; viewKadSkor(t); }));
+    document.getElementById('kdPrint').onclick = () => window.print();
+    return;
+  }
   const ms = t.matches.filter(m => m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE' && m.status !== 'bye' && (_kdSel === 'all' || m.status !== 'done'))
     .sort((x, y) => ((x.session || 999) - (y.session || 999)) || String(x.table || '').localeCompare(String(y.table || ''), 'ms', { numeric: true }));
   const U = LV.umpirePlan(t);
@@ -2058,7 +2122,7 @@ async function viewKadSkor(t) {
   $app.innerHTML = `<div class="noprint"><a href="#/t/${t.id}/jadual" class="muted">← Kembali ke Jadual</a>
     <h2 class="h-big" style="font-size:22px">🖨️ Kad skor (sandaran)</h2>
     <p class="muted small">Untuk digunakan jika internet atau telefon bermasalah. Imbas kod QR pada kad untuk memasukkan skor kemudian.</p>
-    <div class="row" style="gap:6px;margin-bottom:10px">${[['pending', 'Belum tamat'], ['all', 'Semua']].map(([k, v]) => `<button class="pill-btn small ${_kdSel === k ? 'brand' : 'light'}" data-kd="${k}">${v}</button>`).join('')}
+    <div class="row" style="gap:6px;margin-bottom:10px">${[['pending', 'Belum tamat'], ['all', 'Semua'], ['mat', '🔢 Matriks']].map(([k, v]) => `<button class="pill-btn small ${_kdSel === k ? 'brand' : 'light'}" data-kd="${k}">${v}</button>`).join('')}
       <button class="pill-btn orange small" id="kdPrint"><span class="dot"></span>Cetak (${ms.length} kad)</button></div></div>
     <div class="ks-sheet">${ms.map(card).join('') || '<p class="muted">Tiada perlawanan.</p>'}</div>`;
   $app.querySelectorAll('[data-kd]').forEach(b => (b.onclick = () => { _kdSel = b.dataset.kd; viewKadSkor(t); }));
@@ -2606,6 +2670,7 @@ function testBar(t) {
   const ready = t.matches.filter(m => m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE' && m.status !== 'done' && m.status !== 'bye').length;
   return `<div class="card test-card test-bar noprint"><b>🧪 Ujian</b>
     <button class="pill-btn orange small" id="tOne" ${ready ? '' : 'disabled'}><span class="dot"></span>🎲 Isi 1</button>
+    ${ready ? (() => { const m = nextReady(t), k = m && stageKey(m), c = k ? t.matches.filter(x => stageKey(x) === k && x.status !== 'done' && x.status !== 'bye').length : 0; return m ? `<button class="pill-btn light small" id="tStage">🎲 Isi ${esc(stageName(t, m))} (${c})</button>` : ''; })() : ''}
     <button class="pill-btn light small" id="tAll" ${ready ? '' : 'disabled'}>🎲 Isi semua (${ready})</button></div>`;
 }
 function testTools(t) {
@@ -2632,11 +2697,17 @@ function randomScore(t, m) {
     return sets;
   });
 }
-function fillRandom(t, max) {
+// Peringkat sesuatu perlawanan (untuk "Isi peringkat semasa")
+const stageKey = m => (m.px ? 'S' + m.session : m.stage === 'group' ? 'G' : m.stage + ':' + m.round);
+const stageName = (t, m) => (m.px ? `Sesi ${m.session}` : m.stage === 'group' ? (t.format === 'rr' ? 'Liga' : 'Peringkat kumpulan') : E.roundName(t, m.stage, m.round));
+const nextReady = t => { const L = LV.liveState(t); return L.live[0] || L.cand[0] || t.matches.find(m => m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE' && m.status !== 'done' && m.status !== 'bye'); };
+function fillRandom(t, max, onlyStage) {
   let n = 0;
+  const key0 = onlyStage && nextReady(t) ? stageKey(nextReady(t)) : null;
   for (let guard = 0; guard < 500 && n < max; guard++) {
     const live = LV.liveState(t);
-    const m = live.live[0] || live.cand[0];
+    let m = live.live[0] || live.cand[0];
+    if (key0) m = [...live.live, ...live.cand].find(x => stageKey(x) === key0) || t.matches.find(x => stageKey(x) === key0 && x.a && x.b && x.a !== 'BYE' && x.b !== 'BYE' && x.status !== 'done' && x.status !== 'bye');
     if (!m) break;
     for (let k = 0; k < 6; k++) { E.recordScore(t, m.id, randomScore(t, m)); if (m.status === 'done') break; }
     if (m.status !== 'done') { E.recordScore(t, m.id, m.rubbers.map(x => x.sets), { override: m.a }); }
@@ -2654,6 +2725,7 @@ function wireTestTools(t) {
   const go = max => { const n = fillRandom(t, max); save(t); toast(n ? `${n} perlawanan diisi skor rawak` : 'Tiada perlawanan sedia'); render(true); };
   on('tOne', () => go(1));
   on('tAll', () => go(999));
+  on('tStage', () => { const n = fillRandom(t, 999, true); save(t); toast(n ? `${n} perlawanan peringkat ini diisi skor rawak` : 'Tiada perlawanan sedia'); render(true); });
   on('tClr', () => {
     if (!confirm('Kosongkan semua skor dan buang carta kalah mati? Kumpulan dan peserta dikekalkan.')) return;
     t.matches = t.matches.filter(m => m.stage === 'group');
