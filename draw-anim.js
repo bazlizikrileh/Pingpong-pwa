@@ -39,8 +39,10 @@ export function playDeal(o) {
   // bunyi semasa undian (pilihan)
   let S = null;
   if (o.sound) import('./sound.js').then(m => { S = m; const sb = ov.querySelector('[data-snd]'); const upd = () => (sb.textContent = S.soundOn() ? '🔊' : '🔇'); upd();
-    sb.onclick = () => { S.setSound(!S.soundOn()); upd(); if (S.soundOn() && o.music) S.musicOn(); };
-    if (o.music) S.musicOn(); if (o.scene) S.sfx('scene'); }).catch(() => {});
+    sb.onclick = () => { S.setSound(!S.soundOn()); upd(); if (S.soundOn() && o.music) S.musicOn(o.musicStyle || 0); };
+    // gaya muzik: teruskan yang sedang berbunyi (undian berterusan), jika tidak pilih secara rawak; video guna gaya yang sama
+    const st = S.playingStyle() ?? S.randomStyle(); o.musicStyle = st; if (o.video) o.video.musicStyle = st;
+    if (o.music) S.musicOn(st); if (o.scene) S.sfx('scene'); }).catch(() => {});
   const snd = (k, i) => { try { S && S.sfx(k, i); } catch {} };
   document.body.style.overflow = 'hidden';
 

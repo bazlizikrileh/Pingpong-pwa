@@ -3,7 +3,15 @@
 const NOTE = n => 440 * Math.pow(2, (n - 69) / 12);
 
 // events: [{ t, kind: 'scene'|'shuffle'|'card'|'done'|'end', i }]
-export async function renderSoundtrack(dur, events, sr = 44100, music = true, fade = true) {
+// Tiga gaya muzik latar (dipilih secara rawak setiap undian)
+export const STYLES = [
+  { name: 'Ceria', bpm: 112, prog: [[48, 60, 64, 67], [43, 59, 62, 67], [45, 60, 64, 69], [41, 60, 65, 69]] },        // C–G–Am–F, pop riang
+  { name: 'Bertenaga', bpm: 126, prog: [[45, 57, 60, 64], [41, 57, 60, 65], [48, 55, 60, 64], [43, 55, 59, 62]] },    // Am–F–C–G, rentak sukan
+  { name: 'Santai', bpm: 92, prog: [[50, 60, 65, 69], [43, 59, 62, 65], [48, 59, 64, 67], [45, 60, 64, 67]] },       // Dm7–G7–Cmaj7–Am7, lo-fi
+];
+export const loopLen = style => 8 * 4 * 60 / STYLES[style || 0].bpm;
+export const randomStyle = () => Math.floor(Math.random() * STYLES.length);
+export async function renderSoundtrack(dur, events, sr = 44100, music = true, fade = true, style = 0) {
   const ctx = new OfflineAudioContext(1, Math.ceil(dur * sr), sr);
   const master = ctx.createDynamicsCompressor(); master.threshold.value = -14; master.ratio.value = 4;
   const out = ctx.createGain(); out.gain.value = 1.6; master.connect(out); out.connect(ctx.destination);
@@ -21,18 +29,41 @@ export async function renderSoundtrack(dur, events, sr = 44100, music = true, fa
     env(g, t, 0.005, peak, d); s.connect(fl); fl.connect(g); g.connect(master); s.start(t); s.stop(t + d + 0.05);
   };
   if (music) {
-    // 112 bpm, I–V–vi–IV (C–G–Am–F), 2 bar setiap kord
-    const bt = 60 / 112, chords = [[48, 60, 64, 67], [43, 59, 62, 67], [45, 60, 64, 69], [41, 60, 65, 69]];
-    const bars = Math.ceil((dur - 1) / (bt * 4));
+    const S = STYLES[style] || STYLES[0], bt = 60 / S.bpm, chords = S.prog;
+    const bars = Math.ceil((dur - 0.3) / (bt * 4));
     for (let b = 0; b < bars; b++) {
       const ch = chords[Math.floor(b / 2) % 4], t0 = 0.3 + b * 4 * bt;
-      if (b % 2 === 0) ch.slice(1).forEach(n => tone('triangle', NOTE(n), t0, 0.25, 0.018, 8 * bt - 0.4)); // pad
-      for (let q = 0; q < 4; q++) {
-        const t = t0 + q * bt; if (t > dur - 0.6) break;
-        tone('sine', 140, t, 0.003, 0.32, 0.16, 45); // kick
-        hiss(t + bt / 2, 0.05, 0.05, 'highpass', 7000); // hi-hat
-        tone('triangle', NOTE(ch[0] - 12 + (q === 3 ? 7 : 0)), t, 0.01, 0.11, bt * 0.8); // bass
-        const ar = ch.slice(1); tone('square', NOTE(ar[q % 3] + 12), t + bt / 2, 0.005, 0.012, 0.18); // arpeggio pluck
+      if (style === 2) {
+        // Santai: kord "piano elektrik" lembut, bass panjang, shaker
+        if (b % 2 === 0) ch.slice(1).forEach((n, k) => { tone('sine', NOTE(n), t0 + k * 0.02, 0.02, 0.03, 8 * bt - 0.5); tone('triangle', NOTE(n + 12), t0 + k * 0.02, 0.01, 0.008, 1.2); });
+        for (let q = 0; q < 4; q++) {
+          const t = t0 + q * bt; if (t > dur - 0.6) break;
+          if (q % 2 === 0) tone('sine', 110, t, 0.004, 0.22, 0.22, 45);
+          else hiss(t, 0.09, 0.07, 'bandpass', 1800, 0, 1.2); // snare lembut
+          hiss(t + bt / 2, 0.06, 0.03, 'highpass', 6000); hiss(t + bt * 0.75, 0.04, 0.02, 'highpass', 6000);
+          if (q === 0 || q === 2) tone('sine', NOTE(ch[0] - 12), t, 0.02, 0.13, bt * 1.8);
+        }
+      } else if (style === 1) {
+        // Bertenaga: kick 4/4, tepukan pada 2 & 4, bass oktaf berdenyut, lead pendek
+        if (b % 2 === 0) ch.slice(1).forEach(n => tone('sawtooth', NOTE(n), t0, 0.05, 0.007, 8 * bt - 0.4));
+        for (let q = 0; q < 4; q++) {
+          const t = t0 + q * bt; if (t > dur - 0.6) break;
+          tone('sine', 160, t, 0.003, 0.36, 0.14, 45);
+          if (q % 2 === 1) { hiss(t, 0.12, 0.11, 'bandpass', 1500, 0, 0.8); hiss(t + 0.012, 0.1, 0.06, 'bandpass', 2200, 0, 0.8); } // tepuk
+          hiss(t + bt / 2, 0.04, 0.05, 'highpass', 8000);
+          tone('square', NOTE(ch[0] - 12), t, 0.005, 0.05, bt * 0.4); tone('square', NOTE(ch[0]), t + bt / 2, 0.005, 0.045, bt * 0.35);
+          if (q === 3 && b % 2 === 1) [0, 1, 2].forEach(k => tone('triangle', NOTE(ch[1 + k] + 12), t + k * bt / 3, 0.005, 0.03, 0.15));
+        }
+      } else {
+        // Ceria (asal)
+        if (b % 2 === 0) ch.slice(1).forEach(n => tone('triangle', NOTE(n), t0, 0.25, 0.018, 8 * bt - 0.4)); // pad
+        for (let q = 0; q < 4; q++) {
+          const t = t0 + q * bt; if (t > dur - 0.6) break;
+          tone('sine', 140, t, 0.003, 0.32, 0.16, 45); // kick
+          hiss(t + bt / 2, 0.05, 0.05, 'highpass', 7000); // hi-hat
+          tone('triangle', NOTE(ch[0] - 12 + (q === 3 ? 7 : 0)), t, 0.01, 0.11, bt * 0.8); // bass
+          const ar = ch.slice(1); tone('square', NOTE(ar[q % 3] + 12), t + bt / 2, 0.005, 0.012, 0.18); // arpeggio pluck
+        }
       }
     }
   }
@@ -50,7 +81,7 @@ export async function renderSoundtrack(dur, events, sr = 44100, music = true, fa
 }
 
 // ---------- Bunyi masa nyata untuk paparan undian dalam PWA ----------
-let AC = null, loopBuf = null, loopSrc = null, loopGain = null, offT = null, loopP = null;
+let AC = null, loopBufs = {}, loopSrc = null, loopGain = null, offT = null, loopPs = {};
 const muted = () => { try { return localStorage.getItem('pingpong:drwSound') === '0'; } catch { return false; } };
 export const soundOn = () => !muted();
 export function setSound(on) { try { localStorage.setItem('pingpong:drwSound', on ? '1' : '0'); } catch {} if (!on) musicOff(0); }
@@ -74,16 +105,19 @@ export function sfx(kind, i = 0) {
   else if (kind === 'done') [72, 76, 79, 84].forEach((n, k) => tone('sine', NOTE(n), t + k * 0.08, 0.005, 0.25, 0.5));
 }
 // Muzik latar berulang (gelung ~17 saat), bersambung antara sesi
-export async function musicOn() {
+export async function musicOn(style = 0) {
   if (muted()) return; const c = ac(); if (!c) return;
   clearTimeout(offT); offT = null;
-  if (loopSrc) return;
-  if (!loopBuf) { loopP = loopP || renderSoundtrack(8 * 4 * 60 / 112 + 0.6, [], c.sampleRate, true, false).then(b => (loopBuf = b)); await loopP; }
+  if (loopSrc) return; // muzik sedang berbunyi (cth. sesi seterusnya) — teruskan gaya yang sama
+  if (!loopBufs[style]) { loopPs[style] = loopPs[style] || renderSoundtrack(loopLen(style) + 0.6, [], c.sampleRate, true, false, style).then(b => (loopBufs[style] = b)); await loopPs[style]; }
   if (loopSrc || muted()) return;
+  const loopBuf = loopBufs[style];
   loopGain = c.createGain(); loopGain.gain.value = 0.55; loopGain.connect(c.destination);
-  loopSrc = c.createBufferSource(); loopSrc.buffer = loopBuf; loopSrc.loop = true; loopSrc.loopStart = 0.3; loopSrc.loopEnd = 0.3 + 8 * 4 * 60 / 112;
+  loopSrc = c.createBufferSource(); loopSrc.buffer = loopBuf; loopSrc.loop = true; loopSrc.loopStart = 0.3; loopSrc.loopEnd = 0.3 + loopLen(style); playing = style;
   loopSrc.connect(loopGain); loopSrc.start();
 }
+let playing = null;
+export const playingStyle = () => (loopSrc ? playing : null);
 export function musicOff(delay = 500) {
   clearTimeout(offT);
   offT = setTimeout(() => { if (loopSrc) { try { loopGain.gain.setTargetAtTime(0.0001, AC.currentTime, 0.15); const s = loopSrc; setTimeout(() => { try { s.stop(); } catch {} }, 600); } catch {} loopSrc = null; } }, delay);
@@ -91,9 +125,9 @@ export function musicOff(delay = 500) {
 
 // Versi pantas untuk video panjang: muzik dirender sekali (gelung ~17 s) dan disalin berulang,
 // setiap kesan bunyi dirender sekali dan dicampur terus — jauh lebih ringan untuk telefon.
-export async function buildSoundtrack(dur, events, sr = 44100) {
-  const LOOP = 8 * 4 * 60 / 112, LEAD = 0.3;
-  const loopB = await renderSoundtrack(LOOP + LEAD + 0.3, [], sr, true, false);
+export async function buildSoundtrack(dur, events, sr = 44100, style = 0) {
+  const LOOP = loopLen(style), LEAD = 0.3;
+  const loopB = await renderSoundtrack(LOOP + LEAD + 0.3, [], sr, true, false, style);
   const kinds = {}; const need = new Set(events.map(e => e.kind === 'card' ? 'card' + (e.i % 12) : e.kind));
   await Promise.all([...need].map(async k => {
     const ev = k.startsWith('card') ? { t: 0.01, kind: 'card', i: +k.slice(4) } : { t: 0.01, kind: k };
