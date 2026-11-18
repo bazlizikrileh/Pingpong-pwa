@@ -692,3 +692,7 @@ table.rp-mx tbody.rp-ses { border-bottom:2px solid var(--line2, #cbd5e1); }
   .report .mx-mat td, table.rp-mx td.ses { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 @media print { html, body, #app, main { background:#fff !important; } }
+table.rp-mx td.sets span { white-space:nowrap; display:inline-block; margin-right:4px; }
+.rp-sign { display:flex; gap:40px; margin-top:40px; font-size:12.5px; }
+.rp-sign > div { flex:1; } .rp-sign .ln { border-bottom:1px solid #64748b; height:48px; margin-bottom:6px; }
+@media print { @page { size: A4; margin: 12mm 10mm; } }

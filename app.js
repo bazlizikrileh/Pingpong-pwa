@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.15.3';
+const VERSION = '3.15.4';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2507,12 +2507,12 @@ function mixReport(t, played, resTable) {
     ${S.map((r, i) => `<tr><td>${i + 1}</td><td class="l">${nm(r.id)}</td><td>${r.p}</td><td>${r.w}</td><td>${r.l}</td><td>${sgn(r.sf - r.sa)}</td><td>${sgn(r.pf - r.pa)}</td><td><b>${r.pts}</b></td></tr>`).join('')}</tbody></table></div>
     <section class="rp-sec pb"><h3>Matriks Pasangan &amp; Lawan</h3>${mixMatrix(t, S, 'p', true)}${mixMatrix(t, S, 'o', true)}</section>
     <section class="rp-sec pb"><h3>Keputusan Mengikut Sesi</h3>
-    <table class="rp rp-mx"><colgroup><col style="width:13%"><col style="width:7%"><col style="width:27%"><col style="width:9%"><col style="width:27%"><col style="width:17%"></colgroup>
+    <table class="rp rp-mx"><colgroup><col style="width:11%"><col style="width:6%"><col style="width:25%"><col style="width:8%"><col style="width:25%"><col style="width:25%"></colgroup>
       <thead><tr><th>Sesi</th><th>Meja</th><th class="l">Regu</th><th>Skor</th><th class="l">Regu</th><th class="l">Set</th></tr></thead>
       ${[...new Set(played.map(m => m.session))].sort((a, b) => a - b).map(s => { const ms = played.filter(m => m.session === s).sort((x, y) => String(x.table).localeCompare(String(y.table), 'ms', { numeric: true }));
         return `<tbody class="rp-ses">${ms.map((m, i) => { const r = E.evaluateMatch(t, m), wa = m.winner === m.a;
           return `<tr>${i ? '' : `<td rowspan="${ms.length}" class="ses"><b>${s}</b><br><small>${esc(E.sessionTime(t, s))}</small></td>`}<td>${esc(String(m.table || '').replace(/^Meja\s*/i, '').replace(/\s*\(.*\)/, ''))}</td>
-            <td class="l ${wa ? 'win' : ''}">${esc(E.pname(t, m.a))}</td><td><b>${r.sa}-${r.sb}</b></td><td class="l ${!wa ? 'win' : ''}">${esc(E.pname(t, m.b))}</td><td class="l small">${esc(gamesTxt(m))}</td></tr>`; }).join('')}</tbody>`; }).join('')}
+            <td class="l ${wa ? 'win' : ''}">${esc(E.pname(t, m.a))}</td><td><b>${r.sa}-${r.sb}</b></td><td class="l ${!wa ? 'win' : ''}">${esc(E.pname(t, m.b))}</td><td class="l small sets">${m.rubbers[0].sets.map(x => `<span>${x[0]}-${x[1]}</span>`).join(' ')}</td></tr>`; }).join('')}</tbody>`; }).join('')}
     </table></section>`;
 }
 function viewReport(t) {
@@ -2526,7 +2526,7 @@ function viewReport(t) {
     return h ? `<h3>${b === 'ko' ? 'Kalah Mati' : 'Pool Kalah'}</h3>${h}` : ''; };
   const final = t.matches.find(m => m.bracket === 'ko' && m.round === t.rounds.ko);
   const body = `<div class="rp-head">${c.logos.map(s => `<img src="${esc(s)}" alt="">`).join('')}<div><h2>${esc(t.name)}</h2><div class="muted">${esc(c.name)}</div></div></div>
-    <table class="rp-info"><tr><td>Tarikh</td><td>${esc(t.date || '-')}</td><td>Tempat</td><td>${esc(t.venue === 'X' ? (t.venueName || '-') : E.VENUES[t.venue] || '-')}</td></tr>
+    <table class="rp-info"><tr><td>Tarikh</td><td>${(() => { const d = t.date ? new Date(t.date + 'T00:00') : null; return d && !isNaN(d) ? `${HARI[d.getDay()]}, ${esc(fmtDate(t.date))}` : esc(t.date || '-'); })()}${t.startTime ? `<br><small>${esc(E.sessionTime(t, 1))} – ${esc(E.sessionTime(t, (E.lastSession(t) || 1) + 1))}</small>` : ''}</td><td>Tempat</td><td>${esc(t.venue === 'X' ? (t.venueName || '-') : E.VENUES[t.venue] || '-')}</td></tr>
       <tr><td>Kategori</td><td>${esc(ENTRY[t.entryMode])}</td><td>Format</td><td>${esc(E.isMixer(t) ? `Penuh (pasangan sekali dengan semua) · ${E.lastSession(t)} sesi` : FORMAT[t.format])}</td></tr>
       <tr><td>Peserta</td><td>${E.isMixer(t) ? t.individuals.length : t.participants.length} ${esc(UNIT(t).toLowerCase())}</td><td>Set</td><td>${esc(f[t.groupFormat].label)}${t.format === 'group_ko' ? ' · KO: ' + esc(f[t.koFormat].label) : ''}</td></tr>
       <tr><td>Perlawanan</td><td>${played.length} selesai</td><td>Meja</td><td>${E.numTablesOf(t)}</td></tr></table>
@@ -2536,13 +2536,14 @@ function viewReport(t) {
     ${t.groups.length ? `<h3>Keputusan Peringkat ${t.format === 'rr' ? 'Liga' : 'Kumpulan'}</h3>${t.groups.map(g => { const ms = played.filter(m => m.stage === 'group' && m.group === g.name).sort((x, y) => x.gn - y.gn); return ms.length ? `<h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${resTable(ms)}` : ''; }).join('') || '<p class="muted small">Belum ada keputusan.</p>'}` : ''}
     ${ko('ko')}${ko('pool')}
     ${t.stage === 'done' && t.format !== 'rr' ? rankingHtml(t).replace(/<button[^>]*>Cetak<\/button>/, '') : ''}
-    <section class="rp-sec pb"><h3>Peraturan &amp; Penentuan Kedudukan</h3><ol class="rules small">${rulesOf(t).map(r => `<li>${esc(r)}</li>`).join('')}</ol></section>
+    <section class="rp-sec pb"><h3>Peraturan &amp; Penentuan Kedudukan</h3><ol class="rules small">${rulesOf(t).map(r => `<li>${esc(r)}</li>`).join('')}</ol>
+      <div class="rp-sign"><div><div class="ln"></div>Disediakan oleh<br><small>Nama: ${esc((t.createdBy && t.createdBy.name) || '')}</small></div><div><div class="ln"></div>Disahkan oleh<br><small>Penganjur / Pengurus pertandingan</small></div></div></section>
     <p class="muted small rp-foot">Dijana oleh Pingpong Portal · ${new Date().toLocaleString('ms-MY')}</p>`;
   $app.innerHTML = `${section('Laporan', 'Laporan Pertandingan')}
     <div class="card noprint"><p class="muted small" style="margin-top:0">Laporan lengkap: maklumat, kedudukan, keputusan semua perlawanan${t.rounds.ko ? ', kalah mati' : ''}${t.stage === 'done' ? ' dan ranking' : ''}. Tekan butang di bawah dan pilih <b>Simpan sebagai PDF</b>.</p>
       <button class="pill-btn brand" id="prt"><span class="dot"></span>🖨️ Cetak / Simpan PDF</button></div>
     <div class="card report">${body}</div>`;
-  document.getElementById('prt').onclick = () => window.print();
+  document.getElementById('prt').onclick = () => { const old = document.title; document.title = `Laporan - ${t.name}`.replace(/[\\/:*?"<>|]/g, ''); window.print(); setTimeout(() => (document.title = old), 1500); };
 }
 
 // ---------- Mod ujian ----------
