@@ -21,6 +21,7 @@ export function playDeal(o) {
     <div class="drw-top">
       ${(o.logos && o.logos.length ? o.logos : [null]).map(src => `<div class="drw-logo">${src ? `<img src="${esc(src)}" alt="">` : '🏓'}</div>`).join('')}
       <div style="flex:1"><b style="font-size:18px">${esc(o.title)}</b><br><small>${esc(o.subtitle || '')}</small></div>
+      ${o.sound ? `<button class="btn" data-snd style="background:rgba(255,255,255,.15);color:#fff">🔊</button>` : ''}
       <button class="btn" data-x style="background:#fff;color:#000">✕</button>
     </div>
     <div class="drw-stat" id="drs">${o.intro || ''}</div>
@@ -35,6 +36,12 @@ export function playDeal(o) {
       <button class="btn" data-vid style="background:#25d366;color:#fff">${esc(o.videoLabel || '📤 Kongsi video (WhatsApp)')}</button></div>
     <p class="drw-vmsg" id="drv"></p>`;
   document.body.appendChild(ov);
+  // bunyi semasa undian (pilihan)
+  let S = null;
+  if (o.sound) import('./sound.js').then(m => { S = m; const sb = ov.querySelector('[data-snd]'); const upd = () => (sb.textContent = S.soundOn() ? '🔊' : '🔇'); upd();
+    sb.onclick = () => { S.setSound(!S.soundOn()); upd(); if (S.soundOn() && o.music) S.musicOn(); };
+    if (o.music) S.musicOn(); if (o.scene) S.sfx('scene'); }).catch(() => {});
+  const snd = (k, i) => { try { S && S.sfx(k, i); } catch {} };
   document.body.style.overflow = 'hidden';
 
   let k = 0, tm = null, busy = false;
@@ -56,6 +63,7 @@ export function playDeal(o) {
   };
   const step = () => {
     if (k >= o.seq.length) {
+      snd('done');
       stat.innerHTML = `<b style="font-size:18px">✅ ${esc(o.doneText || 'Cabutan selesai')}</b>${o.next ? `<div style="margin-top:8px"><button class="btn" data-next style="background:#ff7a1a;color:#fff">${esc(o.next.label)}</button></div>` : ''}`;
       const nb = stat.querySelector('[data-next]'); if (nb) nb.onclick = () => { close(); o.next.fn(); };
       if (o.auto && o.next && !busy) tm = setTimeout(() => { if (!busy) { close(); o.next.fn(); } }, o.autoMs ?? 1600);
@@ -65,10 +73,10 @@ export function playDeal(o) {
     stat.innerHTML = `<small>${esc(s.head || '')}</small>
       <div class="drw-now">🎴 ${esc(s.name)}${o.hideTo ? '' : ` <span class="drw-to">→ ${esc(o.boxes[s.box].label)}</span>`}</div>
       <small>${o.seq.length - k} kad lagi</small>`;
-    fill(s, true);
+    fill(s, true); snd('card', k);
     tm = setTimeout(step, o.speed || 1300);
   };
-  const close = () => { clearTimeout(tm); ov.remove(); document.body.style.overflow = ''; };
+  const close = () => { clearTimeout(tm); ov.remove(); document.body.style.overflow = ''; if (S && o.music) S.musicOff(700); };
   ov.querySelector('[data-x]').onclick = close;
   ov.querySelectorAll('[data-chip]').forEach(b => (b.onclick = () => { const x = o.chips[+b.dataset.chip]; if (x && x.fn) { close(); x.fn(); } }));
   ov.querySelectorAll('[data-nav]').forEach(b => (b.onclick = () => { const n = o.nav[+b.dataset.nav]; if (!n || !n.fn) return; close(); n.fn(); }));
@@ -108,7 +116,7 @@ export function playDeal(o) {
     step();
   };
   tm = setTimeout(() => {
-    stat.innerHTML = `<b style="font-size:18px">🔀 ${esc(o.prep || 'Mengocok dek…')}</b>`;
+    stat.innerHTML = `<b style="font-size:18px">🔀 ${esc(o.prep || 'Mengocok dek…')}</b>`; snd('shuffle');
     tm = setTimeout(step, o.shufMs ?? 1500);
   }, o.introMs ?? 1800);
 }

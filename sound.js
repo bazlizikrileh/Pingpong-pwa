@@ -3,7 +3,7 @@
 const NOTE = n => 440 * Math.pow(2, (n - 69) / 12);
 
 // events: [{ t, kind: 'scene'|'shuffle'|'card'|'done'|'end', i }]
-export async function renderSoundtrack(dur, events, sr = 44100, music = true) {
+export async function renderSoundtrack(dur, events, sr = 44100, music = true, fade = true) {
   const ctx = new OfflineAudioContext(1, Math.ceil(dur * sr), sr);
   const master = ctx.createDynamicsCompressor(); master.threshold.value = -14; master.ratio.value = 4;
   const out = ctx.createGain(); out.gain.value = 1.6; master.connect(out); out.connect(ctx.destination);
@@ -45,6 +45,46 @@ export async function renderSoundtrack(dur, events, sr = 44100, music = true) {
     else if (e.kind === 'end') { [60, 64, 67, 72].forEach(n => tone('triangle', NOTE(n), t, 0.02, 0.07, 2.2)); [72, 76, 79, 84, 88].forEach((n, k) => tone('sine', NOTE(n), t + k * 0.1, 0.005, 0.14, 0.7)); }
   }
   // pudar di hujung
-  out.gain.setValueAtTime(1.6, Math.max(0, dur - 1.2)); out.gain.linearRampToValueAtTime(0.0001, dur);
+  if (fade) { out.gain.setValueAtTime(1.6, Math.max(0, dur - 1.2)); out.gain.linearRampToValueAtTime(0.0001, dur); }
   return ctx.startRendering();
+}
+
+// ---------- Bunyi masa nyata untuk paparan undian dalam PWA ----------
+let AC = null, loopBuf = null, loopSrc = null, loopGain = null, offT = null, loopP = null;
+const muted = () => { try { return localStorage.getItem('pingpong:drwSound') === '0'; } catch { return false; } };
+export const soundOn = () => !muted();
+export function setSound(on) { try { localStorage.setItem('pingpong:drwSound', on ? '1' : '0'); } catch {} if (!on) musicOff(0); }
+function ac() {
+  if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch { AC = null; } }
+  if (AC && AC.state === 'suspended') AC.resume().catch(() => {});
+  return AC;
+}
+// Kesan bunyi ringkas: dijana segera (tanpa fail)
+export function sfx(kind, i = 0) {
+  if (muted()) return; const c = ac(); if (!c) return;
+  const t = c.currentTime + 0.01, out = c.createGain(); out.gain.value = 0.9; out.connect(c.destination);
+  const tone = (type, f, at, a, peak, d, f2) => { const o = c.createOscillator(), g = c.createGain(); o.type = type; o.frequency.setValueAtTime(f, at); if (f2) o.frequency.exponentialRampToValueAtTime(f2, at + a + d);
+    g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(peak, at + a); g.gain.exponentialRampToValueAtTime(0.0001, at + a + d); o.connect(g); g.connect(out); o.start(at); o.stop(at + a + d + 0.05); };
+  const hiss = (at, d, peak, ftype, f, f2, q = 1) => { const n = c.createBuffer(1, Math.ceil(c.sampleRate * (d + 0.05)), c.sampleRate), x = n.getChannelData(0); for (let k = 0; k < x.length; k++) x[k] = Math.random() * 2 - 1;
+    const s = c.createBufferSource(), fl = c.createBiquadFilter(), g = c.createGain(); s.buffer = n; fl.type = ftype; fl.frequency.setValueAtTime(f, at); if (f2) fl.frequency.exponentialRampToValueAtTime(f2, at + d); fl.Q.value = q;
+    g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(peak, at + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, at + d); s.connect(fl); fl.connect(g); g.connect(out); s.start(at); s.stop(at + d + 0.05); };
+  if (kind === 'scene') hiss(t, 0.45, 0.2, 'bandpass', 400, 3000, 0.8);
+  else if (kind === 'shuffle') for (let k = 0; k < 9; k++) hiss(t + k * 0.055, 0.04, 0.2, 'bandpass', 2500 + (k % 3) * 600, 0, 2);
+  else if (kind === 'card') { const f = 700 + (i % 12) * 45; tone('sine', f, t, 0.004, 0.35, 0.09, f * 1.5); hiss(t, 0.02, 0.12, 'highpass', 3000); }
+  else if (kind === 'done') [72, 76, 79, 84].forEach((n, k) => tone('sine', NOTE(n), t + k * 0.08, 0.005, 0.25, 0.5));
+}
+// Muzik latar berulang (gelung ~17 saat), bersambung antara sesi
+export async function musicOn() {
+  if (muted()) return; const c = ac(); if (!c) return;
+  clearTimeout(offT); offT = null;
+  if (loopSrc) return;
+  if (!loopBuf) { loopP = loopP || renderSoundtrack(8 * 4 * 60 / 112 + 0.6, [], c.sampleRate, true, false).then(b => (loopBuf = b)); await loopP; }
+  if (loopSrc || muted()) return;
+  loopGain = c.createGain(); loopGain.gain.value = 0.55; loopGain.connect(c.destination);
+  loopSrc = c.createBufferSource(); loopSrc.buffer = loopBuf; loopSrc.loop = true; loopSrc.loopStart = 0.3; loopSrc.loopEnd = 0.3 + 8 * 4 * 60 / 112;
+  loopSrc.connect(loopGain); loopSrc.start();
+}
+export function musicOff(delay = 500) {
+  clearTimeout(offT);
+  offT = setTimeout(() => { if (loopSrc) { try { loopGain.gain.setTargetAtTime(0.0001, AC.currentTime, 0.15); const s = loopSrc; setTimeout(() => { try { s.stop(); } catch {} }, 600); } catch {} loopSrc = null; } }, delay);
 }

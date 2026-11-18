@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.17.0';
+const VERSION = '3.17.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -389,7 +389,7 @@ function playMixDraw(t, s = 1, auto = true) {
   if (!o) return toast('Jadual belum dijana');
   playDeal({ ...o,
     intro: `<small>${LV.mixFast(t) && s > 1 ? '⚡ Meja pantas aktif: undian sesi ini ialah anggaran. ' : ''}Sesi ${s} daripada ${NS}${auto && s < NS ? ' · main berterusan hingga sesi akhir' : ''}. Kad dicabut secara rawak ke meja, pengadil dan rehat.</small>`,
-    prep: 'Mengocok kad…', speed: 650, introMs: s > 1 && auto ? 300 : 700, shufMs: s > 1 && auto ? 500 : 800,
+    prep: 'Mengocok kad…', speed: 650, sound: true, music: true, scene: true, introMs: s > 1 && auto ? 300 : 700, shufMs: s > 1 && auto ? 500 : 800,
     auto: auto && s < NS, autoMs: 1800,
     next: s < NS ? { label: `▶ Sesi ${s + 1}`, fn: () => playMixDraw(t, s + 1, auto) } : null,
     chips: Array.from({ length: NS }, (_, k) => ({ label: String(k + 1), on: k + 1 === s, fn: () => playMixDraw(t, k + 1, false) })),
