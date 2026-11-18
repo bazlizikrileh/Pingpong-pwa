@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.16.0';
+const VERSION = '3.16.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -368,24 +368,34 @@ function playUnitDraw(t) {
   });
 }
 // Undian regu bertukar ikut sesi: setiap nama dicabut secara rawak ke slot (Meja 1 A1/A2 lwn B1/B2, Meja 2 C1/C2 lwn D1/D2, pengadil, rehat)
-function playMixDraw(t, s = 1) {
+function mixDrawOpts(t, s, U) {
   const ms = t.matches.filter(m => m.px && m.session === s).sort((x, y) => String(x.table).localeCompare(String(y.table), 'ms', { numeric: true }));
-  if (!ms.length) return toast('Jadual belum dijana');
-  const NS = E.lastSession(t), U = LV.umpirePlan(t), nm = id => E.pname(t, id), cards = [];
+  if (!ms.length) return null;
+  const NS = E.lastSession(t), nm = id => E.pname(t, id), cards = [];
   const tl = m => (/meja/i.test(m.table) ? m.table : 'Meja ' + m.table), tn = m => tl(m).replace(/\s*\(.*\)/, '');
   const L = 'ABCDEFGHIJKLMNOP';
   const boxes = ms.map((m, j) => { const a = L[j * 2], b = L[j * 2 + 1]; m.px.forEach((id, k) => cards.push({ box: j, slot: k, name: nm(id) })); return { label: tl(m), slots: 4, vs: true, slotLabels: [a + '1', a + '2', b + '1', b + '2'] }; });
   const umps = ms.map(m => [m, LV.umpireOf(t, m, U)]).filter(([, u]) => u), rest = LV.mixRestOf(t, s, U);
   if (umps.length) { const bi = boxes.length; boxes.push({ label: '🟣 Pengadil', slots: umps.length, slotLabels: umps.map(([m]) => tn(m)) }); umps.forEach(([, u], k) => cards.push({ box: bi, slot: k, name: nm(u) })); }
   if (rest.length) { const bi = boxes.length; boxes.push({ label: '💤 Rehat', slots: rest.length, slotLabels: rest.map((_, k) => 'Rehat ' + (k + 1)) }); rest.forEach((id, k) => cards.push({ box: bi, slot: k, name: nm(id) })); }
-  // susunan cabutan rawak (suspens) — tetapi keputusan akhir tetap sama dengan jadual
   for (let i = cards.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cards[i], cards[j]] = [cards[j], cards[i]]; }
-  const seq = cards.map(c => ({ ...c, head: `SESI ${s} · KAD DICABUT` }));
-  playDeal({
-    title: `Undian Regu Bertukar · Sesi ${s} / ${NS}`, subtitle: `${subtitleOf(t)} · ${E.sessionTime(t, s)}`, logos: clubOf(t).logos,
-    intro: `<small>${LV.mixFast(t) && s > 1 ? '⚡ Meja pantas aktif: undian sesi ini ialah anggaran. ' : ''}Sesi ${s} daripada ${NS}. Kad dicabut secara rawak ke meja, pengadil dan rehat.</small>`,
-    prep: 'Mengocok kad…', boxes, seq, hideTo: true, fast: true, speed: 650, introMs: 700, shufMs: 800, doneText: `Sesi ${s} sedia`,
-    nav: [{ label: '◀ Sesi lepas', fn: s > 1 ? () => playMixDraw(t, s - 1) : null }, { label: '🔁 Ulang', fn: () => playMixDraw(t, s) }, { label: 'Sesi seterusnya ▶', fn: s < NS ? () => playMixDraw(t, s + 1) : null }],
+  return { title: `Undian Regu Bertukar · Sesi ${s} / ${NS}`, subtitle: `${subtitleOf(t)} · ${E.sessionTime(t, s)}`, logos: clubOf(t).logos,
+    boxes, seq: cards.map(c => ({ ...c, head: `SESI ${s} · KAD DICABUT` })), hideTo: true, fast: true, doneText: `Sesi ${s} sedia` };
+}
+// auto = main berterusan semua sesi (dari sesi s hingga akhir)
+function playMixDraw(t, s = 1, auto = true) {
+  const U = LV.umpirePlan(t), NS = E.lastSession(t), o = mixDrawOpts(t, s, U);
+  if (!o) return toast('Jadual belum dijana');
+  playDeal({ ...o,
+    intro: `<small>${LV.mixFast(t) && s > 1 ? '⚡ Meja pantas aktif: undian sesi ini ialah anggaran. ' : ''}Sesi ${s} daripada ${NS}${auto && s < NS ? ' · main berterusan hingga sesi akhir' : ''}. Kad dicabut secara rawak ke meja, pengadil dan rehat.</small>`,
+    prep: 'Mengocok kad…', speed: 650, introMs: s > 1 && auto ? 300 : 700, shufMs: s > 1 && auto ? 500 : 800,
+    auto: auto && s < NS, autoMs: 1800,
+    next: s < NS ? { label: `▶ Sesi ${s + 1}`, fn: () => playMixDraw(t, s + 1, auto) } : null,
+    chips: Array.from({ length: NS }, (_, k) => ({ label: String(k + 1), on: k + 1 === s, fn: () => playMixDraw(t, k + 1, false) })),
+    nav: [{ label: '◀ Sesi lepas', fn: s > 1 ? () => playMixDraw(t, s - 1, false) : null }, { label: '🔁 Ulang', fn: () => playMixDraw(t, s, false) }, { label: auto ? '⏸ Henti auto' : '▶▶ Main semua', fn: auto ? () => playMixDraw(t, s, false) : () => playMixDraw(t, 1, true) }],
+    videoLabel: `📤 Kongsi video semua ${NS} sesi (WhatsApp)`,
+    video: { title: `Undian Regu Bertukar · ${t.name}`, subtitle: subtitleOf(t), logos: clubOf(t).logos,
+      scenes: Array.from({ length: NS }, (_, k) => { const x = mixDrawOpts(t, k + 1, U); return x && { ...x, short: k > 0 }; }).filter(Boolean) },
   });
 }
 function playBracketDraw(t, b) {
@@ -2461,7 +2471,7 @@ function viewJadual(t) {
     </tbody></table></div>
     <p class="muted small">Sesi dan meja ialah anggaran. Semasa pertandingan, ikut tab 🟢 Langsung untuk meja sebenar.${LV.mixFast(t) ? ' <b>⚡ Meja pantas aktif:</b> pasangan bagi perlawanan yang belum bermula diundi semula bila meja kosong.' : ''}</p>`;
   document.getElementById('jdSel').onchange = e => { jdSel = e.target.value; viewJadual(t); };
-  $app.querySelectorAll('[data-mxs]').forEach(b => (b.onclick = e => { e.stopPropagation(); playMixDraw(t, +b.dataset.mxs); }));
+  $app.querySelectorAll('[data-mxs]').forEach(b => (b.onclick = e => { e.stopPropagation(); playMixDraw(t, +b.dataset.mxs, false); }));
   document.getElementById('jdSes').onchange = e => { jdSes = e.target.value; viewJadual(t); };
   $app.querySelectorAll('tr[data-go]').forEach(tr => tr.dataset.go && (tr.onclick = () => (location.hash = `#/t/${t.id}/m/${tr.dataset.go}`)));
 }

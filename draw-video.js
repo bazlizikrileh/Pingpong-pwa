@@ -2,7 +2,8 @@
 // Utama: WebCodecs (H.264) + mp4-muxer (lebih laju dari masa nyata). Sandaran: MediaRecorder.
 const W = 720, H = 1280, FPS = 30;
 const T_STD = { INTRO: 2.2, SHUF: 1.4, STEP: 0.75, FLY: 0.45, OUTRO: 3 }, T_FAST = { INTRO: 1.4, SHUF: 0.8, STEP: 0.45, FLY: 0.3, OUTRO: 2.2 };
-const TM = o => (o.fast ? T_FAST : T_STD);
+const T_SHORT = { INTRO: 0.7, SHUF: 0.5, STEP: 0.45, FLY: 0.3, OUTRO: 1.4 };
+const TM = o => (o.short ? T_SHORT : o.fast ? T_FAST : T_STD);
 
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const loadImg = src => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
@@ -17,7 +18,7 @@ function fitText(c, s, maxW, size, weight = 700, min = 12) {
   return t === s ? s : t + '…';
 }
 
-export function duration(o) { const { INTRO, SHUF, STEP, OUTRO } = TM(o); return INTRO + SHUF + o.seq.length * STEP + OUTRO; }
+export function duration(o) { if (o.scenes) return o.scenes.reduce((a, x) => a + duration(x), 0); const { INTRO, SHUF, STEP, OUTRO } = TM(o); return INTRO + SHUF + o.seq.length * STEP + OUTRO; }
 
 function layout(o) {
   const n = o.boxes.length, cols = n <= 2 ? n : n <= 6 ? 2 : n <= 12 ? 3 : 4;
@@ -117,6 +118,7 @@ function makeDrawer(o, logos) {
   return { cv, draw };
 }
 
+const bitrateFor = o => Math.max(400_000, Math.min(2_500_000, Math.floor(11 * 8 * 1048576 / Math.max(1, duration(o)))));
 async function pickCodec() {
   if (typeof VideoEncoder === 'undefined') return null;
   for (const codec of ['avc1.42001f', 'avc1.4d001f', 'avc1.640028', 'avc1.42002a']) {
@@ -131,7 +133,8 @@ async function encodeWebCodecs(o, D, onP, cfg) {
   const muxer = new Muxer({ target, video: { codec: cfg.mux, width: W, height: H, frameRate: FPS }, fastStart: 'in-memory' });
   let err = null;
   const enc = new VideoEncoder({ output: (ch, meta) => muxer.addVideoChunk(ch, meta), error: e => (err = e) });
-  enc.configure({ codec: cfg.codec, width: W, height: H, bitrate: 2_500_000, framerate: FPS, avc: { format: 'avc' } });
+  const br = bitrateFor(o); // video panjang: kadar bit lebih rendah supaya saiz < ~12 MB untuk WhatsApp
+  enc.configure({ codec: cfg.codec, width: W, height: H, bitrate: br, framerate: FPS, avc: { format: 'avc' } });
   const total = Math.ceil(duration(o) * FPS);
   for (let i = 0; i < total; i++) {
     if (err) throw err;
@@ -150,7 +153,7 @@ async function encodeRecorder(o, D, onP) {
   const types = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
   const type = types.find(x => window.MediaRecorder && MediaRecorder.isTypeSupported(x));
   if (!type) throw new Error('Telefon ini tidak menyokong rakaman video.');
-  const stream = D.cv.captureStream(FPS), rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 2_500_000 }), parts = [];
+  const stream = D.cv.captureStream(FPS), rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: bitrateFor(o) }), parts = [];
   rec.ondataavailable = e => e.data.size && parts.push(e.data);
   const done = new Promise(r => (rec.onstop = r));
   const dur = duration(o); rec.start(500);
@@ -163,9 +166,22 @@ async function encodeRecorder(o, D, onP) {
   return new Blob(parts, { type: type.split(';')[0] });
 }
 
+// Video berterusan: beberapa babak (cth. semua sesi) dalam satu video
+function makeSceneDrawer(o, logos) {
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const c = cv.getContext('2d'), ends = []; let acc = 0;
+  o.scenes.forEach(x => { acc += duration(x); ends.push(acc); });
+  let cur = -1, D = null;
+  const draw = t => {
+    let i = ends.findIndex(e => t < e); if (i < 0) i = ends.length - 1;
+    if (i !== cur) { cur = i; D = makeDrawer(o.scenes[i], logos); }
+    D.draw(t - (i ? ends[i - 1] : 0)); c.drawImage(D.cv, 0, 0);
+  };
+  return { cv, draw };
+}
 export async function makeDrawVideo(o, onP) {
   const logos = await Promise.all((o.logos || []).map(loadImg));
-  const D = makeDrawer(o, logos);
+  const D = o.scenes ? makeSceneDrawer(o, logos) : makeDrawer(o, logos);
   const cfg = await pickCodec();
   return cfg ? encodeWebCodecs(o, D, onP, cfg) : encodeRecorder(o, D, onP);
 }
