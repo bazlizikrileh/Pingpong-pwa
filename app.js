@@ -141,7 +141,7 @@ function pn(t, id, cls = '', ph = '') {
 
 // ---------- Penghala ----------
 document.addEventListener('click', e => { const b = e.target.closest('[data-rcard]'); if (!b) return; const [tid, mid] = b.dataset.rcard.split('|'), t = load(tid), m = t && t.matches.find(x => x.id === mid); if (m) shareResultCard(t, m).catch(err => toast('Gagal: ' + (err.message || err))); });
-window.addEventListener('hashchange', () => { if (window._lsWake && !/\/ls\//.test(location.hash)) window._lsWake.release().catch(() => {}); const md = document.getElementById('modal'); if (md) md.hidden = true; render(); });
+window.addEventListener('hashchange', () => { { const dw = document.getElementById('drw'); if (dw && !_drwKeep) dw.remove(); } if (window._lsWake && !/\/ls\//.test(location.hash)) window._lsWake.release().catch(() => {}); const md = document.getElementById('modal'); if (md) md.hidden = true; render(); });
 window.addEventListener('load', () => { render(); cloud.init(); });
 let _dirty = false;
 const busy = () => {
@@ -393,7 +393,7 @@ function playBracketDraw(t, b) {
 }
 
 // ---------- Laman utama ----------
-let _homeClub = '';
+let _homeClub = '', _drwKeep = false;
 function viewHome() {
   const all = store.list().map(E.migrate).filter(t => store.isLocal(t.id) || store.canAdmin(t.id) || !isHidden(t));
   const clubs = [...new Map(all.filter(t => t.clubId && CLUBS[t.clubId]).map(t => [t.clubId, CLUBS[t.clubId].short])).entries()];
@@ -806,7 +806,7 @@ function viewSetupCore(t, part = 'tetapan') {
       if (n < 4) return toast('Perlu sekurang-kurangnya 4 pemain dalam senarai individu (tab 👥 Pemain).', 4000);
       const P = E.mixPlan(t), R = P.R;
       if (!confirm(`Jana jadual regu bertukar untuk ${n} pemain?\n• Jumlah ${P.matches} perlawanan\n• Setiap pemain main ${P.min === P.max ? P.min : P.min + '–' + P.max} kali, setiap kali dengan pasangan berbeza\n• ${P.nt} meja → ${P.sessions} sesi (${P.nt * 4} orang main, ${Math.max(0, n - P.nt * 4)} rehat setiap sesi)`)) return;
-      try { E.buildMixer(t); save(t); location.hash = `#/t/${t.id}/jadual`; setTimeout(() => playMixDraw(t), 350); } catch (err) { toast(err.message, 4000); }
+      try { E.buildMixer(t); save(t); location.hash = `#/t/${t.id}/jadual`; setTimeout(() => playMixDraw(t), 400); } catch (err) { toast(err.message, 4000); }
       return;
     }
     if (draw) readRenames(); else readEntries();
