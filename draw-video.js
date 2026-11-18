@@ -1,6 +1,8 @@
 // Video cabutan (MP4) untuk dikongsi ke WhatsApp — dilukis pada kanvas & dikod dalam telefon.
 // Utama: WebCodecs (H.264) + mp4-muxer (lebih laju dari masa nyata). Sandaran: MediaRecorder.
-const W = 720, H = 1280, FPS = 30;
+const W = 720, H = 1280;
+const scaleFor = o => (duration(o) > 40 ? 0.75 : 1); // video panjang: 540×960 (lebih ringan)
+const fpsFor = o => (duration(o) > 40 ? 20 : 30); // video panjang: kurang bingkai supaya telefon tidak berat
 const T_STD = { INTRO: 2.2, SHUF: 1.4, STEP: 0.75, FLY: 0.45, OUTRO: 3 }, T_FAST = { INTRO: 1.4, SHUF: 0.8, STEP: 0.45, FLY: 0.3, OUTRO: 2.2 };
 const T_SHORT = { INTRO: 0.7, SHUF: 0.5, STEP: 0.45, FLY: 0.3, OUTRO: 1.4 };
 const TM = o => (o.short ? T_SHORT : o.fast ? T_FAST : T_STD);
@@ -10,7 +12,16 @@ const loadImg = src => new Promise(res => { const i = new Image(); i.onload = ()
 const ease = x => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
 
 function rr(c, x, y, w, h, r) { c.beginPath(); c.roundRect ? c.roundRect(x, y, w, h, r) : c.rect(x, y, w, h); }
+const _fit = new Map();
+// Cache ukuran teks: elak ukur berulang kali setiap bingkai (berat di telefon)
 function fitText(c, s, maxW, size, weight = 700, min = 12) {
+  const key = s + '|' + maxW + '|' + size + '|' + weight + '|' + min, hit = _fit.get(key);
+  if (hit) { c.font = hit[1]; return hit[0]; }
+  const r = fitText0(c, s, maxW, size, weight, min);
+  if (_fit.size > 4000) _fit.clear();
+  _fit.set(key, [r, c.font]); return r;
+}
+function fitText0(c, s, maxW, size, weight = 700, min = 12) {
   let f = size;
   for (; f > min; f--) { c.font = `${weight} ${f}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`; if (c.measureText(s).width <= maxW) return s; }
   c.font = `${weight} ${min}px system-ui, sans-serif`;
@@ -36,8 +47,8 @@ function layout(o) {
   });
 }
 
-function makeDrawer(o, logos) {
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+function makeDrawer(o, logos, cv, sc = 1) {
+  if (!cv) { cv = document.createElement('canvas'); cv.width = Math.round(W * sc); cv.height = Math.round(H * sc); }
   const c = cv.getContext('2d');
   const hd1 = css('--hd1') || '#0b1a3f', hd2 = css('--hd2') || '#1d3f8c', or = css('--or') || '#ff7a1a';
   const L = layout(o);
@@ -47,6 +58,7 @@ function makeDrawer(o, logos) {
   const { INTRO, SHUF, STEP, FLY } = TM(o), T0 = INTRO + SHUF;
 
   const draw = t => {
+    c.setTransform(sc, 0, 0, sc, 0, 0);
     // latar
     const g = c.createLinearGradient(0, 0, W * .4, H); g.addColorStop(0, hd2); g.addColorStop(1, hd1);
     c.fillStyle = g; c.fillRect(0, 0, W, H);
@@ -122,27 +134,30 @@ const bitrateFor = o => Math.max(400_000, Math.min(2_500_000, Math.floor(11 * 8 
 async function pickCodec() {
   if (typeof VideoEncoder === 'undefined') return null;
   for (const codec of ['avc1.42001f', 'avc1.4d001f', 'avc1.640028', 'avc1.42002a']) {
-    try { const r = await VideoEncoder.isConfigSupported({ codec, width: W, height: H, bitrate: 2_500_000, framerate: FPS }); if (r.supported) return { codec, mux: 'avc' }; } catch {}
+    try { const r = await VideoEncoder.isConfigSupported({ codec, width: W, height: H, bitrate: 2_500_000, framerate: 30 }); if (r.supported) return { codec, mux: 'avc' }; } catch {}
   }
   return null;
 }
 
 async function encodeWebCodecs(o, D, onP, cfg) {
   const { Muxer, ArrayBufferTarget } = await import('./vendor/mp4-muxer.js');
+  const FPS = fpsFor(o);
   const target = new ArrayBufferTarget();
-  const muxer = new Muxer({ target, video: { codec: cfg.mux, width: W, height: H, frameRate: FPS }, fastStart: 'in-memory' });
+  const VW = D.cv.width, VH = D.cv.height;
+  const muxer = new Muxer({ target, video: { codec: cfg.mux, width: VW, height: VH, frameRate: FPS }, fastStart: 'in-memory' });
   let err = null;
   const enc = new VideoEncoder({ output: (ch, meta) => muxer.addVideoChunk(ch, meta), error: e => (err = e) });
   const br = bitrateFor(o); // video panjang: kadar bit lebih rendah supaya saiz < ~12 MB untuk WhatsApp
-  enc.configure({ codec: cfg.codec, width: W, height: H, bitrate: br, framerate: FPS, avc: { format: 'avc' } });
+  enc.configure({ codec: cfg.codec, width: VW, height: VH, bitrate: br, framerate: FPS, avc: { format: 'avc' } });
   const total = Math.ceil(duration(o) * FPS);
   for (let i = 0; i < total; i++) {
     if (err) throw err;
     D.draw(i / FPS);
     const vf = new VideoFrame(D.cv, { timestamp: Math.round(i * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
     enc.encode(vf, { keyFrame: i % (FPS * 2) === 0 }); vf.close();
-    if (enc.encodeQueueSize > 8) await new Promise(r => setTimeout(r, 0));
-    if (i % 15 === 0) { onP && onP(i / total); await new Promise(r => setTimeout(r, 0)); }
+    // tunggu pengekod (telefon lebih perlahan) — elak barisan bingkai bertimbun dalam memori sehingga telefon hang
+    while (enc.encodeQueueSize > 3) { if (err) throw err; await new Promise(r => setTimeout(r, 8)); }
+    if (i % 6 === 0) { onP && onP(i / total); await new Promise(r => setTimeout(r, 0)); }
   }
   await enc.flush(); enc.close(); muxer.finalize();
   if (err) throw err;
@@ -153,6 +168,7 @@ async function encodeRecorder(o, D, onP) {
   const types = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
   const type = types.find(x => window.MediaRecorder && MediaRecorder.isTypeSupported(x));
   if (!type) throw new Error('Telefon ini tidak menyokong rakaman video.');
+  const FPS = fpsFor(o);
   const stream = D.cv.captureStream(FPS), rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: bitrateFor(o) }), parts = [];
   rec.ondataavailable = e => e.data.size && parts.push(e.data);
   const done = new Promise(r => (rec.onstop = r));
@@ -167,21 +183,23 @@ async function encodeRecorder(o, D, onP) {
 }
 
 // Video berterusan: beberapa babak (cth. semua sesi) dalam satu video
-function makeSceneDrawer(o, logos) {
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-  const c = cv.getContext('2d'), ends = []; let acc = 0;
+function makeSceneDrawer(o, logos, sc = 1) {
+  // satu kanvas sahaja dikongsi semua babak (jimat memori telefon)
+  const cv = document.createElement('canvas'); cv.width = Math.round(W * sc); cv.height = Math.round(H * sc);
+  const ends = []; let acc = 0;
   o.scenes.forEach(x => { acc += duration(x); ends.push(acc); });
   let cur = -1, D = null;
   const draw = t => {
     let i = ends.findIndex(e => t < e); if (i < 0) i = ends.length - 1;
-    if (i !== cur) { cur = i; D = makeDrawer(o.scenes[i], logos); }
-    D.draw(t - (i ? ends[i - 1] : 0)); c.drawImage(D.cv, 0, 0);
+    if (i !== cur) { cur = i; D = makeDrawer(o.scenes[i], logos, cv, sc); }
+    D.draw(t - (i ? ends[i - 1] : 0));
   };
   return { cv, draw };
 }
 export async function makeDrawVideo(o, onP) {
   const logos = await Promise.all((o.logos || []).map(loadImg));
-  const D = o.scenes ? makeSceneDrawer(o, logos) : makeDrawer(o, logos);
+  const sc = scaleFor(o);
+  const D = o.scenes ? makeSceneDrawer(o, logos, sc) : makeDrawer(o, logos, null, sc);
   const cfg = await pickCodec();
   return cfg ? encodeWebCodecs(o, D, onP, cfg) : encodeRecorder(o, D, onP);
 }

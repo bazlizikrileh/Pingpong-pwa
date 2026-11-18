@@ -37,7 +37,7 @@ export function playDeal(o) {
   document.body.appendChild(ov);
   document.body.style.overflow = 'hidden';
 
-  let k = 0, tm = null;
+  let k = 0, tm = null, busy = false;
   const stat = ov.querySelector('#drs');
   const fill = (s, hl) => {
     const box = ov.querySelector('#drb' + s.box);
@@ -58,7 +58,7 @@ export function playDeal(o) {
     if (k >= o.seq.length) {
       stat.innerHTML = `<b style="font-size:18px">✅ ${esc(o.doneText || 'Cabutan selesai')}</b>${o.next ? `<div style="margin-top:8px"><button class="btn" data-next style="background:#ff7a1a;color:#fff">${esc(o.next.label)}</button></div>` : ''}`;
       const nb = stat.querySelector('[data-next]'); if (nb) nb.onclick = () => { close(); o.next.fn(); };
-      if (o.auto && o.next) tm = setTimeout(() => { close(); o.next.fn(); }, o.autoMs ?? 1600);
+      if (o.auto && o.next && !busy) tm = setTimeout(() => { if (!busy) { close(); o.next.fn(); } }, o.autoMs ?? 1600);
       return;
     }
     const s = o.seq[k++];
@@ -78,6 +78,8 @@ export function playDeal(o) {
   let made = null;
   vb.onclick = async () => {
     if (vb.disabled) return;
+    // semasa video disediakan / dikongsi: jangan auto ke sesi seterusnya (ia akan menutup paparan ini)
+    busy = true; if (k >= o.seq.length) clearTimeout(tm);
     if (made) {
       const r = await made.share();
       vm.textContent = r.shared ? '✅ Video dikongsi.' : r.cancelled ? 'Perkongsian dibatalkan. Tekan sekali lagi untuk berkongsi.' : '⬇️ Telefon ini tidak membenarkan kongsi terus, jadi video dimuat turun. Hantar dari galeri / Fail ke WhatsApp.';
