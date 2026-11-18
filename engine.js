@@ -934,7 +934,7 @@ export const levelOf = (t, name) => (t.levels || {})[lvKey(name)] || '';
 export function levelInfo(t, code) { const S = HC_SCHEMES[lvScheme(t)]; return S && S.levels.find(l => l[0] === code) || null; }
 export function setLevel(t, name, code) { t.levels ||= {}; if (code) t.levels[lvKey(name)] = code; else delete t.levels[lvKey(name)]; }
 // Nilai: S = single, D = double
-const lvVal = (t, name, kind) => { const L = levelInfo(t, levelOf(t, name)); return L ? (kind === 'S' ? L[2] : L[3]) : null; };
+export const lvVal = (t, name, kind) => { const L = levelInfo(t, levelOf(t, name)); return L ? (kind === 'S' ? L[2] : L[3]) : null; };
 // Pemain yang terlibat bagi satu pihak dalam perlawanan/rubber
 function sideNames(t, id, rubber, lineup, side) {
   const p = pobj(t, id) || { name: '', members: [] };
@@ -1057,6 +1057,7 @@ export function buildMixer(t, tries = 80) {
     if (plan.length === Math.ceil(t.matches.length / NT)) break;
   }
   bestPlan.forEach((take, si) => take.forEach((m, i) => { m.session = si + 1; m.table = T[i]; m.gi = i; }));
+  t.mixG = {}; t.matches.forEach(m => m.px.forEach(id => (t.mixG[id] = (t.mixG[id] || 0) + 1))); // sasaran bilangan main setiap pemain (tetap)
   t.stage = 'group';
 }
 export const mixRoundOf = m => m.mr || 0;

@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.13.2';
+const VERSION = '3.14.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -380,7 +380,7 @@ function playMixDraw(t, s = 1) {
   if (rest.length) { const bi = boxes.length; boxes.push({ label: '💤 Rehat', slots: rest.length }); rest.forEach(id => seq.push({ box: bi, name: nm(id), head: `SESI ${s} · REHAT` })); }
   playDeal({
     title: `Undian Regu Bertukar · Sesi ${s}`, subtitle: `${subtitleOf(t)} · ${E.sessionTime(t, s)}`, logos: clubOf(t).logos,
-    intro: `<small>Sesi ${s} daripada ${NS}: nama diagih ke setiap meja, kemudian pengadil dan pemain rehat. Pasangan dan lawan bertukar setiap sesi — tiada pasangan berulang${E.lvScheme(t) ? ', regu diimbangkan ikut tahap' : ''}.</small>`,
+    intro: `<small>${LV.mixFast(t) && s > 1 ? '⚡ Meja pantas aktif: undian sesi ini ialah anggaran — pasangan sebenar diundi bila meja kosong. ' : ''}Sesi ${s} daripada ${NS}: nama diagih ke setiap meja, kemudian pengadil dan pemain rehat. Pasangan dan lawan bertukar setiap sesi — tiada pasangan berulang${E.lvScheme(t) ? ', regu diimbangkan ikut tahap' : ''}.</small>`,
     boxes, seq, doneText: `Sesi ${s} sedia`, introMs: s > 1 ? 600 : undefined,
     next: s < NS ? { label: `▶ Sesi ${s + 1}`, fn: () => playMixDraw(t, s + 1) } : null,
   });
@@ -511,6 +511,7 @@ function settingsFormAll(t, locked) {
       <div><label>Bilangan pusingan</label><input name="mixRounds" type="number" min="1" max="40" value="${t.mixRounds || ''}" placeholder="Kosong = penuh (semua berpasangan sekali)" ${dis}></div>
       <div><label>Imbang regu ikut tahap</label><select name="mixLv" ${dis}>${opt({ '': 'Tidak (undian bebas)', ksas: 'Tahap KSAS', kroni: 'Tahap Kroni Shell' }, t.mixLv || '')}</select></div>
     </div>
+    <label data-show="mixer" class="check" style="margin-top:10px"><input type="checkbox" name="mixFast" ${t.mixFast !== false ? 'checked' : ''} ${dis}> <span>⚡ <b>Meja pantas</b>: meja yang tamat terus diisi dengan 4 pemain yang bebas (pasangan diundi ketika itu)<br><small class="muted">Lebih cepat (anggaran jimat ~40 minit untuk 12 pemain / 2 meja) kerana tiada meja menunggu meja lain. Semua pemain tetap main sama banyak; pasangan berulang sangat jarang. Jadual sesi 2 dan seterusnya menjadi anggaran sahaja. Jika tidak ditanda, ikut jadual sesi yang tetap.</small></span></label>
     <p data-show="mixer" class="muted small" style="margin:4px 0 0">Kosong = penuh: setiap pemain berpasangan dengan semua pemain lain sekali (cth. 12 pemain → 11 kali main). Isi nombor untuk pusingan lebih pendek. Tahap ditulis dalam senarai individu, cth. <i>Ali (Naga)</i>. Jika Handicap ikut tahap dipilih, tahap itu juga digunakan untuk imbang.</p>
     <div data-show="notmixer"><label>Struktur</label><select name="format" ${dis}>${opt(FORMAT, t.format)}</select></div>
     <div class="grid2">
@@ -609,7 +610,7 @@ function readSettings(form, t) {
   t.waMode = v('waMode'); t.waGroup = v('waGroup').trim(); t.waNumber = v('waNumber').replace(/\D/g, '');
   if (!form.entryMode.disabled) {
     t.entryMode = v('entryMode'); t.teamSize = Number(v('teamSize')) || 3; t.format = v('format');
-    if (t.entryMode === 'mixer') { t.format = 'rr'; t.mixRounds = Math.max(0, Math.min(40, Number(v('mixRounds')) || 0)); t.mixLv = v('mixLv') || ''; if (!['3', '5'].includes(t.groupFormat)) t.groupFormat = '3'; E.relevel(t); }
+    if (t.entryMode === 'mixer') { t.format = 'rr'; t.mixRounds = Math.max(0, Math.min(40, Number(v('mixRounds')) || 0)); t.mixLv = v('mixLv') || ''; if (form.mixFast) t.mixFast = form.mixFast.checked; if (!['3', '5'].includes(t.groupFormat)) t.groupFormat = '3'; E.relevel(t); }
     t.tieFormat = t.teamSize >= 4 ? v('tieFormat') || 'SD' : 'SD';
     t.numGroups = Number(v('numGroups')) || 0; t.groupSize = Number(v('groupSize')) || 4; t.bestThirds = Number(v('bestThirds')) || 0;
   }
@@ -999,7 +1000,7 @@ function viewResults(t) {
   let lastS = null;
   $app.innerHTML = `
     ${section('Keputusan', 'Skor Perlawanan')}
-    <div class="fmt-box">🏓 Format set: ${t.groups.length || E.isMixer(t) ? `${t.rounds.ko || t.format === 'group_ko' ? 'Kumpulan — ' : ''}${fmtText(E.fmtFor(t, 'group'))}` : ''}${t.format === 'group_ko' || t.rounds.ko ? `<br>Kalah mati — ${fmtText(E.fmtFor(t, 'ko'))}` : ''}<br><span class="muted small">Setiap set hingga 11 mata (beza 2).${E.isTeam(t) ? ' Format ini untuk setiap perlawanan dalam pertemuan pasukan.' : ''}</span></div>
+    <div class="fmt-box">🏓 Format set: ${t.groups.length || E.isMixer(t) ? `${t.rounds.ko || t.format === 'group_ko' ? 'Kumpulan — ' : ''}${fmtText(E.fmtFor(t, 'group'))}` : ''}${t.format === 'group_ko' || t.rounds.ko ? `<br>Kalah mati — ${fmtText(E.fmtFor(t, 'ko'))}` : ''}${LV.mixFast(t) ? '<br><span class="small">⚡ Meja pantas: pasangan perlawanan yang belum bermula diundi bila meja kosong.</span>' : ''}<br><span class="muted small">Setiap set hingga 11 mata (beza 2).${E.isTeam(t) ? ' Format ini untuk setiap perlawanan dalam pertemuan pasukan.' : ''}</span></div>
     ${store.isLocal(t.id) && t.matches.length ? testBar(t) : ''}
     <div class="card soft noprint">
       <div class="grid2">
@@ -2434,7 +2435,7 @@ function viewJadual(t) {
         <td class="l">${u ? esc(E.pname(t, u)) : '-'}</td>${t.handicap && !E.isTeam(t) ? `<td>${h && h.n ? esc(E.pname(t, h.to)).split(' ')[0] + ' +' + h.n : '-'}</td>` : ''}
         <td>${m.status === 'done' ? E.tieScore(t, r).join('-') + ' ✅' : '-'}</td></tr>`; } }).join('')}
     </tbody></table></div>
-    <p class="muted small">Sesi dan meja ialah anggaran. Semasa pertandingan, ikut tab 🟢 Langsung untuk meja sebenar.</p>`;
+    <p class="muted small">Sesi dan meja ialah anggaran. Semasa pertandingan, ikut tab 🟢 Langsung untuk meja sebenar.${LV.mixFast(t) ? ' <b>⚡ Meja pantas aktif:</b> pasangan bagi perlawanan yang belum bermula diundi semula bila meja kosong.' : ''}</p>`;
   document.getElementById('jdSel').onchange = e => { jdSel = e.target.value; viewJadual(t); };
   $app.querySelectorAll('[data-mxs]').forEach(b => (b.onclick = e => { e.stopPropagation(); playMixDraw(t, +b.dataset.mxs); }));
   document.getElementById('jdSes').onchange = e => { jdSes = e.target.value; viewJadual(t); };

@@ -31,10 +31,67 @@ export function liveState(t) {
 }
 function pick(t, k, cand, busy, used) {
   const fr = m => !used.has(m) && pl2(m).every(p => !busy.has(p));
+  if (t.entryMode === 'mixer') {
+    // Meja kosong diisi segera: utamakan pemain yang paling sedikit bermain (supaya ada rehat), kemudian susunan sesi
+    const pc = {}; t.matches.forEach(m => { if (m.px && (m.status === 'done' || m.lt)) m.px.forEach(id => (pc[id] = (pc[id] || 0) + 1)); });
+    const sc = m => m.px.reduce((a, id) => a + (pc[id] || 0), 0) * 10 + (m.session || 0);
+    return cand.filter(fr).sort((x, y) => sc(x) - sc(y))[0];
+  }
   return cand.find(m => fr(m) && m.stage === 'group' && homeTable(t, m) === k) || cand.find(fr);
 }
+// Regu bertukar, mod meja pantas: bila meja kosong, 4 pemain yang bebas & paling sedikit bermain diundi terus menjadi
+// dua regu (elak pasangan berulang, kurangkan lawan berulang, imbang tahap) dan ditulis ke perlawanan seterusnya.
+export const mixFast = t => t.entryMode === 'mixer' && t.mixFast !== false;
+function planMixFast(t) {
+  const { occ, live } = liveState(t), busy = new Set(), as = [];
+  live.forEach(m => { (m.px || []).forEach(id => busy.add(id)); if (m.ump) busy.add(m.ump); });
+  const ids = (t.individuals || []).map(x => x.id), G = {}, played = {}, pc = {}, oc = {};
+  const k2 = (a, b) => (a < b ? a + '|' + b : b + '|' + a), inc = (o, k) => (o[k] = (o[k] || 0) + 1);
+  t.matches.forEach(m => { if (!m.px) return; if (!t.mixG) m.px.forEach(id => inc(G, id));
+    if (isDone(m) || live.includes(m)) { m.px.forEach(id => inc(played, id)); inc(pc, k2(m.px[0], m.px[1])); inc(pc, k2(m.px[2], m.px[3])); [[0, 2], [0, 3], [1, 2], [1, 3]].forEach(([i, j]) => inc(oc, k2(m.px[i], m.px[j]))); } });
+  if (t.mixG) Object.assign(G, t.mixG);
+  const nm = id => (t.individuals.find(x => x.id === id) || {}).name || '';
+  const bal = !!E.lvScheme(t), LV = Object.fromEntries(ids.map(id => [id, bal ? E.lvVal(t, nm(id), 'D') ?? 2.5 : 0]));
+  const pending = t.matches.filter(m => m.px && !isDone(m) && !live.includes(m)).sort(ocmp);
+  for (const { k } of tableList(t)) {
+    if (occ[k] || !pending.length) continue;
+    const F = ids.filter(id => !busy.has(id) && (played[id] || 0) < (G[id] || 0)).sort((x, y) => (played[x] || 0) - (played[y] || 0));
+    if (F.length < 4) {
+      // hujung pertandingan: jika tiada meja lain berjalan, lengkapkan dengan pemain bebas yang paling sedikit bermain
+      if (busy.size || !F.length) break;
+      ids.filter(id => !F.includes(id)).sort((x, y) => (played[x] || 0) - (played[y] || 0)).slice(0, 4 - F.length).forEach(id => F.push(id));
+    }
+    // jika perlawanan yang dirancang (ikut jadual) boleh dimainkan sekarang, guna terus — jadual & video undian kekal
+    // (hanya untuk sesi pertama, supaya undian sesi 1 yang ditayang kekal; selepas itu diundi semasa)
+    const ready = !t.matches.some(isDone) && pending.find(m => m.session === 1 && m.px.every(id => F.includes(id) && !(played[id] || 0)));
+    if (ready) {
+      pending.splice(pending.indexOf(ready), 1);
+      ready.px.forEach(id => { busy.add(id); inc(played, id); }); inc(pc, k2(ready.px[0], ready.px[1])); inc(pc, k2(ready.px[2], ready.px[3]));
+      [[0, 2], [0, 3], [1, 2], [1, 3]].forEach(([i, j]) => inc(oc, k2(ready.px[i], ready.px[j])));
+      as.push([ready, k]); continue;
+    }
+    const C = F.slice(0, Math.min(8, F.length)); let best = null, bc = Infinity;
+    for (let a = 0; a < C.length; a++) for (let b = a + 1; b < C.length; b++) for (let c = b + 1; c < C.length; c++) for (let d = c + 1; d < C.length; d++) {
+      const q = [C[a], C[b], C[c], C[d]], base = q.reduce((x, id) => x + (played[id] || 0) * 100, 0);
+      for (const [p1, p2, p3, p4] of [[q[0], q[1], q[2], q[3]], [q[0], q[2], q[1], q[3]], [q[0], q[3], q[1], q[2]]]) {
+        const cost = base + 1000 * ((pc[k2(p1, p2)] || 0) + (pc[k2(p3, p4)] || 0)) + 10 * ((oc[k2(p1, p3)] || 0) + (oc[k2(p1, p4)] || 0) + (oc[k2(p2, p3)] || 0) + (oc[k2(p2, p4)] || 0)) + (bal ? 8 * Math.abs(LV[p1] + LV[p2] - LV[p3] - LV[p4]) : 0);
+        if (cost < bc) { bc = cost; best = [p1, p2, p3, p4]; }
+      }
+    }
+    const m = pending.shift();
+    m.px = best;
+    [[m.a, best[0], best[1]], [m.b, best[2], best[3]]].forEach(([pid, x, y]) => { const p = E.pobj(t, pid); if (p) { p.ids = [x, y]; p.members = [nm(x), nm(y)]; p.name = `${nm(x)} & ${nm(y)}`; } });
+    best.forEach(id => { busy.add(id); inc(played, id); }); inc(pc, k2(best[0], best[1])); inc(pc, k2(best[2], best[3]));
+    [[0, 2], [0, 3], [1, 2], [1, 3]].forEach(([i, j]) => inc(oc, k2(best[i], best[j])));
+    as.push([m, k]);
+  }
+  return as;
+}
 export function plan(t) {
+  if (mixFast(t)) return planMixFast(t);
   const { occ, busy, cand } = liveState(t), used = new Set(), b = new Set(busy), as = [];
+  // Regu bertukar: pengadil yang sedang bertugas juga tidak diambil sebagai pemain
+  if (t.entryMode === 'mixer') Object.values(occ).forEach(m => { if (m && m.ump) b.add(m.ump); });
   tableList(t).forEach(({ k }) => {
     if (occ[k]) return;
     const m = pick(t, k, cand, b, used);
@@ -109,7 +166,11 @@ function chooseUmp(t, m, busy, U) {
   t.matches.forEach(x => { if (x.ump) du[x.ump] = (du[x.ump] || 0) + 1; });
   if (t.entryMode === 'mixer') {
     const c = (t.individuals || []).map(x => x.id).filter(p => !pl2(m).includes(p) && !busy.has(p));
-    return c.includes(pr) ? pr : c.sort((x, y) => (du[x] || 0) - (du[y] || 0))[0] || '';
+    if (!mixFast(t)) return c.includes(pr) ? pr : c.sort((x, y) => (du[x] || 0) - (du[y] || 0))[0] || '';
+    // mod meja pantas: pengadil diutamakan daripada pemain yang paling kurang baki perlawanan, kemudian tugas paling sedikit
+    const pl = {}; t.matches.forEach(x => { if (x.px && (isDone(x) || x.lt)) x.px.forEach(id => (pl[id] = (pl[id] || 0) + 1)); });
+    const need = id => ((t.mixG || {})[id] || 0) - (pl[id] || 0);
+    return c.sort((x, y) => (need(x) - need(y)) || (du[x] || 0) - (du[y] || 0))[0] || '';
   }
   const g = t.groups.find(x => x.name === m.group);
   const c = (g ? g.members : []).filter(p => !pl2(m).includes(p) && !busy.has(p));
