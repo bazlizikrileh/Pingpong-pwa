@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.12.0';
+const VERSION = '3.12.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -490,7 +490,7 @@ function settingsFormAll(t, locked) {
     <div data-show="tieRule"><label>Keputusan sama (kumpulan)</label><select name="tieRule">${opt({ draw: 'Seri', next: 'Tiada seri (beza set, kemudian mata)' }, t.tieRule || 'draw')}</select></div>
     <div data-show="mixer" class="notice small" style="margin:8px 0">🔀 <b>Regu bertukar:</b> setiap pusingan pemain diundi menjadi regu baharu. Mata dikira untuk setiap individu (menang, kemudian beza set dan beza mata). Pasangan yang sama dielakkan.</div>
     <div data-show="mixer" class="grid2">
-      <div><label>Bilangan pusingan</label><input name="mixRounds" type="number" min="1" max="40" value="${t.mixRounds || ''}" placeholder="Auto: ${E.mixRoundsAuto(Math.max(4, t.individuals.length))}" ${dis}></div>
+      <div><label>Bilangan pusingan</label><input name="mixRounds" type="number" min="1" max="40" value="${t.mixRounds || ''}" placeholder="Auto: ${E.mixPlan(t, Math.max(4, t.individuals.length)).R}" ${dis}></div>
       <div><label>Imbang regu ikut tahap</label><select name="mixLv" ${dis}>${opt({ '': 'Tidak (undian bebas)', ksas: 'Tahap KSAS', kroni: 'Tahap Kroni Shell' }, t.mixLv || '')}</select></div>
     </div>
     <p data-show="mixer" class="muted small" style="margin:4px 0 0">Auto = setiap pemain berpasangan dengan semua pemain lain sekali. Tahap ditulis dalam senarai individu, cth. <i>Ali (Naga)</i>. Jika Handicap ikut tahap dipilih, tahap itu juga digunakan untuk imbang.</p>
@@ -658,7 +658,7 @@ function viewSetupCore(t, part = 'tetapan') {
   const mixer = E.isMixer(t);
   const listCard = mixer
     ? `<h3>Pemain (${t.individuals.length})</h3>${t.individuals.length ? `<div class="mlist">${t.individuals.map((x, i) => `<div class="list-item"><span class="row" style="flex-wrap:nowrap"><span class="muted small" style="width:22px">${i + 1}.</span>${pn(t, x.id)}</span><span class="muted small">${esc([x.unit, E.levelOf(t, x.name) && E.levelInfo(t, E.levelOf(t, x.name)) ? E.levelInfo(t, E.levelOf(t, x.name))[1] : ''].filter(Boolean).join(' · '))}</span></div>`).join('')}</div>
-       <p class="muted small">${t.individuals.length >= 4 ? `${E.mixRoundsAuto(t.individuals.length)} pusingan (auto) · ${Math.floor(t.individuals.length / 4)} perlawanan setiap pusingan${t.individuals.length % 4 ? ` · ${t.individuals.length % 4} pemain rehat bergilir setiap pusingan` : ''}. Regu diundi bila jadual dijana di ⚙️ Tetapan.` : 'Perlu sekurang-kurangnya 4 pemain.'}</p>` : '<p class="muted">Tambah senarai pemain di bawah.</p>'}`
+       <p class="muted small">${t.individuals.length >= 4 ? mixPlanText(t) + ' Regu diundi bila jadual dijana di ⚙️ Tetapan.' : 'Perlu sekurang-kurangnya 4 pemain.'}</p>` : '<p class="muted">Tambah senarai pemain di bawah.</p>'}`
     : draw
     ? `<h3>${unit} (${t.participants.length})</h3>${plist || `<p class="muted">Belum diundi. ${t.individuals.length ? `${t.individuals.length} individu sedia. Tekan <b>Undi ${unit.toLowerCase()}</b> di bawah.` : 'Tambah senarai individu di bawah.'}</p>`}
        ${t.participants.length && !E.isMixer(t) ? `<button type="button" class="pill-btn small" id="playU"><span class="dot"></span>▶ Tonton undian</button>` : ''}`
@@ -785,8 +785,8 @@ function viewSetupCore(t, part = 'tetapan') {
     if (E.isMixer(t)) {
       const n = t.individuals.length;
       if (n < 4) return toast('Perlu sekurang-kurangnya 4 pemain dalam senarai individu (tab 👥 Pemain).', 4000);
-      const R = t.mixRounds || E.mixRoundsAuto(n);
-      if (!confirm(`Jana ${R} pusingan regu bertukar untuk ${n} pemain?${n % 4 ? `\n${n % 4} pemain akan rehat secara bergilir setiap pusingan.` : ''}`)) return;
+      const P = E.mixPlan(t), R = P.R;
+      if (!confirm(`Jana ${R} pusingan regu bertukar untuk ${n} pemain?\n${P.per} perlawanan setiap pusingan, jumlah ${P.matches} perlawanan.${P.rest ? `\n${P.rest} pemain rehat bergilir setiap pusingan.` : ''}\nSetiap pemain main ${P.min === P.max ? P.min : P.min + '–' + P.max} kali.`)) return;
       try { E.buildMixer(t); save(t); toast(`${t.matches.length} perlawanan dalam ${R} pusingan dijana`); location.hash = `#/t/${t.id}/jadual`; } catch (err) { toast(err.message, 4000); }
       return;
     }
@@ -1200,6 +1200,10 @@ function matrixHtml(t, g) {
   return `<div class="tw"><table class="mx"><thead><tr><th class="l">${UNIT(t)}</th>${M.ids.map((_, i) => `<th>${i + 1}</th>`).join('')}<th>Set ±</th></tr></thead><tbody>
     ${M.ids.map((id, i) => { const r = st.find(x => x.id === id); const d = r.sf - r.sa; return `<tr><td class="l">${i + 1}. ${esc(E.pname(t, id))}</td>${M.rows[i].map(c => c === 'self' ? '<td class="self"></td>' : c ? `<td class="${c.win ? 'win' : ''}">${c.v[0]}-${c.v[1]}</td>` : '<td>·</td>').join('')}<td>${d > 0 ? '+' : ''}${d}</td></tr>`; }).join('')}
   </tbody></table></div><p class="muted small">Baca mengikut baris: skor set pemain di baris itu menentang pemain di lajur. Hijau = menang.</p>`;
+}
+function mixPlanText(t) {
+  const P = E.mixPlan(t);
+  return `${P.R} pusingan${P.auto ? ' (auto)' : ''} · ${P.per} perlawanan setiap pusingan (${P.nt} meja)${P.rest ? ` · ${P.rest} pemain rehat bergilir` : ''} · jumlah <b>${P.matches} perlawanan</b> · setiap pemain main ${P.min === P.max ? P.min : `${P.min}–${P.max}`} kali${P.min !== P.max ? ' <span style="color:#b45309">(tidak sama rata — cuba ubah bilangan pusingan)</span>' : ''}.`;
 }
 function viewMixStandings(t) {
   const S = E.mixStandings(t), done = t.matches.filter(m => m.status === 'done').length;

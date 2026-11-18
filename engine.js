@@ -965,12 +965,21 @@ export function rubberLabel(t, i) {
 // Setiap pusingan: pemain diundi menjadi regu baharu. Elak pasangan berulang, kurangkan lawan berulang,
 // dan (jika tahap ditetapkan) imbangkan jumlah tahap dua pihak. Pemain lebihan rehat secara bergilir.
 export const mixRoundsAuto = n => (n % 2 ? n : n - 1);
+// Bilangan pemain yang bermain setiap pusingan (dihadkan oleh bilangan meja) dan pusingan auto supaya semua main sama banyak
+export const mixActive = (n, nt) => Math.min(n - (n % 4), 4 * Math.max(1, nt));
+export function mixPlan(t, n = (t.individuals || []).length) {
+  const nt = numTablesOf(t), act = mixActive(n, nt);
+  let R = Number(t.mixRounds) || 0, auto = !R;
+  if (auto) { R = mixRoundsAuto(n); if (act && act < n) while ((R * act) % n) R++; }
+  const per = act / 4, slots = R * act;
+  return { n, nt, act, rest: n - act, per, R, auto, matches: R * per, min: Math.floor(slots / n), max: Math.ceil(slots / n) };
+}
 export function relevel(t) { (t.individuals || []).forEach(x => { if (x.lv && !levelOf(t, x.name)) takeLevel(t, { name: x.name, lv: x.lv }); }); }
 export function buildMixer(t, tries = 80) {
   relevel(t);
   const P = (t.individuals || []).map(x => x.id), n = P.length;
   if (n < 4) throw new Error('Perlu sekurang-kurangnya 4 pemain');
-  const R = Math.max(1, Number(t.mixRounds) || mixRoundsAuto(n));
+  const PL = mixPlan(t, n), R = Math.max(1, PL.R);
   const nm = id => t.individuals.find(x => x.id === id).name;
   const bal = !!lvScheme(t);
   const known = P.map(id => lvVal(t, nm(id), 'D')).filter(v => v != null);
@@ -992,7 +1001,7 @@ export function buildMixer(t, tries = 80) {
   t.participants = []; t.matches = []; t.groups = []; t.rounds = {}; t.mixRest = {}; t.format = 'rr';
   let gn = 0, sess = 0;
   for (let r = 1; r <= R; r++) {
-    const restN = n % 4;
+    const restN = PL.rest;
     const order = shuffle(P).sort((a, b) => (rest[a] - rest[b]) || (lastRest.has(a) - lastRest.has(b)));
     const rs = order.slice(0, restN), act = P.filter(id => !rs.includes(id));
     let best = null, bc = Infinity;
@@ -1017,9 +1026,20 @@ export function buildMixer(t, tries = 80) {
       pc[k2(a1, a2)] = (pc[k2(a1, a2)] || 0) + 1; pc[k2(b1, b2)] = (pc[k2(b1, b2)] || 0) + 1;
       [[a1, b1], [a1, b2], [a2, b1], [a2, b2]].forEach(([x, y]) => (oc[k2(x, y)] = (oc[k2(x, y)] || 0) + 1));
       const mk = (x, y) => { const p = { id: uid(), name: `${nm(x)} & ${nm(y)}`, members: [nm(x), nm(y)], ids: [x, y], unit: '', hc: 0, rd: r }; t.participants.push(p); return p.id; };
-      if (j % NT === 0) sess++;
-      t.matches.push(blankMatch(t, { stage: 'group', group: 'M', gn: ++gn, gi: j % NT, a: mk(a1, a2), b: mk(b1, b2), mr: r, px: [a1, a2, b1, b2], session: sess, table: T[j % NT] }));
+      t.matches.push(blankMatch(t, { stage: 'group', group: 'M', gn: ++gn, gi: j % NT, a: mk(a1, a2), b: mk(b1, b2), mr: r, px: [a1, a2, b1, b2] }));
     }
+  }
+  // Susun ke sesi: isi semua meja; perlawanan pusingan seterusnya boleh bermula awal jika pemainnya tidak sedang bermain
+  const left = t.matches.slice();
+  while (left.length) {
+    sess++; const busy = new Set(), take = [];
+    for (const m of left) {
+      if (take.length >= NT) break;
+      const free = m.px.every(id => !busy.has(id));
+      m.px.forEach(id => busy.add(id)); // pemain perlawanan yang ditangguh juga disekat supaya turutan pusingan kekal
+      if (free) take.push(m);
+    }
+    take.forEach((m, i) => { m.session = sess; m.table = T[i]; m.gi = i; left.splice(left.indexOf(m), 1); });
   }
   t.stage = 'group';
 }
