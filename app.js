@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.12.4';
+const VERSION = '3.12.5';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -367,6 +367,19 @@ function playUnitDraw(t) {
     boxes: P.map((p, i) => ({ label: team ? p.name : `Regu ${i + 1}`, slots: p.members.length })), seq, doneText: 'Undian selesai',
   });
 }
+// Undian regu bertukar: tunjuk pasangan pusingan pertama (kad diagih bergilir ke setiap meja)
+function playMixDraw(t, r = 1) {
+  const ms = t.matches.filter(m => m.mr === r && m.px).sort((x, y) => (x.session - y.session) || String(x.table).localeCompare(String(y.table), 'ms', { numeric: true }));
+  if (!ms.length) return toast('Jadual belum dijana');
+  const nm = id => E.pname(t, id), seq = [];
+  [0, 1, 2, 3].forEach(k => ms.forEach((m, j) => seq.push({ box: j, name: nm(m.px[k]), head: `PUSINGAN ${r} · ${k < 2 ? 'REGU KIRI' : 'REGU KANAN'} · ${k % 2 ? 'ORANG KEDUA' : 'ORANG PERTAMA'}` })));
+  const rest = ((t.mixRest || {})[r] || []).map(nm);
+  playDeal({
+    title: 'Undian Regu Bertukar', subtitle: subtitleOf(t), logos: clubOf(t).logos,
+    intro: `<small>Pusingan ${r}: semua ${seq.length} nama dikocok dan diagih ke regu. Setiap pusingan, pasangan dan lawan bertukar — tiada pasangan berulang${E.lvScheme(t) ? ', dan regu diimbangkan ikut tahap' : ''}.${rest.length ? ` Rehat: ${esc(rest.join(', '))}.` : ''}</small>`,
+    boxes: ms.map(m => ({ label: `Sesi ${m.session} · ${/meja/i.test(m.table) ? m.table : 'Meja ' + m.table}`, slots: 4, vs: true })), seq, doneText: `Pusingan ${r} sedia`,
+  });
+}
 function playBracketDraw(t, b) {
   const ms = t.matches.filter(m => m.bracket === b && m.round === 1).sort((x, y) => x.slot - y.slot);
   if (!ms.length) return toast('Carta belum dijana');
@@ -658,6 +671,7 @@ function viewSetupCore(t, part = 'tetapan') {
   const mixer = E.isMixer(t);
   const listCard = mixer
     ? `<h3>Pemain (${t.individuals.length})</h3>${t.individuals.length ? `<div class="mlist">${t.individuals.map((x, i) => `<div class="list-item"><span class="row" style="flex-wrap:nowrap"><span class="muted small" style="width:22px">${i + 1}.</span>${pn(t, x.id)}</span><span class="muted small">${esc([x.unit, E.levelOf(t, x.name) && E.levelInfo(t, E.levelOf(t, x.name)) ? E.levelInfo(t, E.levelOf(t, x.name))[1] : ''].filter(Boolean).join(' · '))}</span></div>`).join('')}</div>
+       ${t.matches.length ? `<button type="button" class="pill-btn small" id="playMx"><span class="dot"></span>▶ Tonton undian</button>` : ''}
        <p class="muted small">${t.individuals.length >= 4 ? mixPlanText(t) + ' Regu diundi bila jadual dijana di ⚙️ Tetapan.' : 'Perlu sekurang-kurangnya 4 pemain.'}</p>` : '<p class="muted">Tambah senarai pemain di bawah.</p>'}`
     : draw
     ? `<h3>${unit} (${t.participants.length})</h3>${plist || `<p class="muted">Belum diundi. ${t.individuals.length ? `${t.individuals.length} individu sedia. Tekan <b>Undi ${unit.toLowerCase()}</b> di bawah.` : 'Tambah senarai individu di bawah.'}</p>`}
@@ -772,6 +786,8 @@ function viewSetupCore(t, part = 'tetapan') {
   };
   const playU = document.getElementById('playU');
   if (playU) playU.onclick = () => playUnitDraw(t);
+  const playMx = document.getElementById('playMx');
+  if (playMx) playMx.onclick = () => playMixDraw(t);
   const impg = document.getElementById('impg');
   if (impg) impg.onclick = () => {
     const lines = document.getElementById('mgt').value.split('\n');
@@ -790,7 +806,7 @@ function viewSetupCore(t, part = 'tetapan') {
       if (n < 4) return toast('Perlu sekurang-kurangnya 4 pemain dalam senarai individu (tab 👥 Pemain).', 4000);
       const P = E.mixPlan(t), R = P.R;
       if (!confirm(`Jana jadual regu bertukar untuk ${n} pemain?\n• Jumlah ${P.matches} perlawanan\n• Setiap pemain main ${P.min === P.max ? P.min : P.min + '–' + P.max} kali, setiap kali dengan pasangan berbeza\n• ${P.nt} meja → ${P.sessions} sesi (${P.nt * 4} orang main, ${Math.max(0, n - P.nt * 4)} rehat setiap sesi)`)) return;
-      try { E.buildMixer(t); save(t); toast(`${t.matches.length} perlawanan dalam ${R} pusingan dijana`); location.hash = `#/t/${t.id}/jadual`; } catch (err) { toast(err.message, 4000); }
+      try { E.buildMixer(t); save(t); location.hash = `#/t/${t.id}/jadual`; setTimeout(() => playMixDraw(t), 350); } catch (err) { toast(err.message, 4000); }
       return;
     }
     if (draw) readRenames(); else readEntries();
@@ -1219,7 +1235,9 @@ function viewMixStandings(t) {
       ${r.with.length ? `<div class="mx-w">${r.with.map(w => `<span class="${w.draw ? '' : w.win ? 'ok' : 'no'}">P${w.mr} · ${nm(w.mate)} · ${w.draw ? 'Seri' : w.win ? 'Menang' : 'Kalah'} ${w.s}</span>`).join('')}</div>` : '<span class="muted small">Belum bermain</span>'}</details></td>
       <td>${r.p}</td><td>${r.w}</td><td>${r.l}</td><td>${sgn(r.sf - r.sa)}</td><td>${sgn(r.pf - r.pa)}</td><td><b>${r.pts}</b></td></tr>`).join('')}
     </tbody></table></div></div>
-    <details class="card fold"><summary>🔁 Senarai pusingan & pemain rehat</summary>${[...new Set(t.matches.map(m => m.mr))].map(r => `<div class="sess">Pusingan ${r}${(t.mixRest || {})[r] && t.mixRest[r].length ? ` · rehat: ${t.mixRest[r].map(nm).join(', ')}` : ''}</div><div class="mlist">${t.matches.filter(m => m.mr === r).map(m => matchRow(t, m)).join('')}</div>`).join('')}</details>`;
+    <div class="row" style="margin:0 0 12px"><button class="pill-btn small" data-mxp="1"><span class="dot"></span>▶ Tonton undian</button></div>
+    <details class="card fold"><summary>🔁 Senarai pusingan & pemain rehat</summary>${[...new Set(t.matches.map(m => m.mr))].map(r => `<div class="sess">Pusingan ${r}${(t.mixRest || {})[r] && t.mixRest[r].length ? ` · rehat: ${t.mixRest[r].map(nm).join(', ')}` : ''} <button class="pill-btn light small" data-mxp="${r}" style="margin-left:6px">▶</button></div><div class="mlist">${t.matches.filter(m => m.mr === r).map(m => matchRow(t, m)).join('')}</div>`).join('')}</details>`;
+  $app.querySelectorAll('[data-mxp]').forEach(b => (b.onclick = () => playMixDraw(t, +b.dataset.mxp)));
 }
 function viewGroups(t) {
   if (E.isMixer(t)) return viewMixStandings(t);

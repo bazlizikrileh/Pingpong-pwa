@@ -22,7 +22,7 @@ export function playDeal(o) {
     <div class="drw-stat" id="drs">${o.intro || ''}</div>
     <div class="drw-grid">${o.boxes.map((b, i) => `
       <div class="drw-box" id="drb${i}"><b>${esc(b.label)}</b>
-        ${Array.from({ length: b.slots }, (_, k) => `${b.vs && k === 1 ? '<div class="drw-vs">lwn</div>' : ''}<div class="drw-slot"></div>`).join('')}
+        ${Array.from({ length: b.slots }, (_, k) => `${b.vs && k === Math.floor(b.slots / 2) ? '<div class="drw-vs">lwn</div>' : ''}<div class="drw-slot"></div>`).join('')}
       </div>`).join('')}</div>
     <div style="text-align:center;margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
       <button class="btn" data-skip style="background:#fff;color:#000">⏭️ Langkau ke keputusan</button>
