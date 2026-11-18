@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.15.2';
+const VERSION = '3.15.3';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2505,8 +2505,15 @@ function mixReport(t, played, resTable) {
     <h3>Kedudukan Individu</h3><p class="muted small">Mata: menang 3, kalah 0. Sama mata → beza set → beza skor.</p>
     <div class="tw"><table class="rp"><thead><tr><th>#</th><th class="l">Pemain</th><th>Main</th><th>M</th><th>K</th><th>±Set</th><th>±Skor</th><th>Mata</th></tr></thead><tbody>
     ${S.map((r, i) => `<tr><td>${i + 1}</td><td class="l">${nm(r.id)}</td><td>${r.p}</td><td>${r.w}</td><td>${r.l}</td><td>${sgn(r.sf - r.sa)}</td><td>${sgn(r.pf - r.pa)}</td><td><b>${r.pts}</b></td></tr>`).join('')}</tbody></table></div>
-    ${mixMatrix(t, S, 'p', true)}${mixMatrix(t, S, 'o', true)}
-    <h3>Keputusan Mengikut Sesi</h3>${[...new Set(played.map(m => m.session))].sort((a, b) => a - b).map(s => `<h4>Sesi ${s} · ${esc(E.sessionTime(t, s))}</h4>${resTable(played.filter(m => m.session === s).sort((x, y) => String(x.table).localeCompare(String(y.table), 'ms', { numeric: true })))}`).join('')}`;
+    <section class="rp-sec pb"><h3>Matriks Pasangan &amp; Lawan</h3>${mixMatrix(t, S, 'p', true)}${mixMatrix(t, S, 'o', true)}</section>
+    <section class="rp-sec pb"><h3>Keputusan Mengikut Sesi</h3>
+    <table class="rp rp-mx"><colgroup><col style="width:13%"><col style="width:7%"><col style="width:27%"><col style="width:9%"><col style="width:27%"><col style="width:17%"></colgroup>
+      <thead><tr><th>Sesi</th><th>Meja</th><th class="l">Regu</th><th>Skor</th><th class="l">Regu</th><th class="l">Set</th></tr></thead>
+      ${[...new Set(played.map(m => m.session))].sort((a, b) => a - b).map(s => { const ms = played.filter(m => m.session === s).sort((x, y) => String(x.table).localeCompare(String(y.table), 'ms', { numeric: true }));
+        return `<tbody class="rp-ses">${ms.map((m, i) => { const r = E.evaluateMatch(t, m), wa = m.winner === m.a;
+          return `<tr>${i ? '' : `<td rowspan="${ms.length}" class="ses"><b>${s}</b><br><small>${esc(E.sessionTime(t, s))}</small></td>`}<td>${esc(String(m.table || '').replace(/^Meja\s*/i, '').replace(/\s*\(.*\)/, ''))}</td>
+            <td class="l ${wa ? 'win' : ''}">${esc(E.pname(t, m.a))}</td><td><b>${r.sa}-${r.sb}</b></td><td class="l ${!wa ? 'win' : ''}">${esc(E.pname(t, m.b))}</td><td class="l small">${esc(gamesTxt(m))}</td></tr>`; }).join('')}</tbody>`; }).join('')}
+    </table></section>`;
 }
 function viewReport(t) {
   const c = clubOf(t), f = E.SET_FORMATS;
@@ -2529,7 +2536,7 @@ function viewReport(t) {
     ${t.groups.length ? `<h3>Keputusan Peringkat ${t.format === 'rr' ? 'Liga' : 'Kumpulan'}</h3>${t.groups.map(g => { const ms = played.filter(m => m.stage === 'group' && m.group === g.name).sort((x, y) => x.gn - y.gn); return ms.length ? `<h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${resTable(ms)}` : ''; }).join('') || '<p class="muted small">Belum ada keputusan.</p>'}` : ''}
     ${ko('ko')}${ko('pool')}
     ${t.stage === 'done' && t.format !== 'rr' ? rankingHtml(t).replace(/<button[^>]*>Cetak<\/button>/, '') : ''}
-    <h3>Peraturan &amp; Penentuan Kedudukan</h3><ol class="rules small">${rulesOf(t).map(r => `<li>${esc(r)}</li>`).join('')}</ol>
+    <section class="rp-sec pb"><h3>Peraturan &amp; Penentuan Kedudukan</h3><ol class="rules small">${rulesOf(t).map(r => `<li>${esc(r)}</li>`).join('')}</ol></section>
     <p class="muted small rp-foot">Dijana oleh Pingpong Portal · ${new Date().toLocaleString('ms-MY')}</p>`;
   $app.innerHTML = `${section('Laporan', 'Laporan Pertandingan')}
     <div class="card noprint"><p class="muted small" style="margin-top:0">Laporan lengkap: maklumat, kedudukan, keputusan semua perlawanan${t.rounds.ko ? ', kalah mati' : ''}${t.stage === 'done' ? ' dan ranking' : ''}. Tekan butang di bawah dan pilih <b>Simpan sebagai PDF</b>.</p>

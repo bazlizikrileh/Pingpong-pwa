@@ -673,3 +673,22 @@ body.tv main#app { max-width:none; padding:0; margin:0; }
 .drw-nav .btn { background:#1e293b; color:#fff; border:1px solid #334155; }
 .drw-nav .btn[disabled] { opacity:.35; }
 .mx-mat td.m { background:#e2e8f0; color:#334155; font-weight:700; }
+/* Laporan: jadual keputusan regu bertukar */
+table.rp-mx { width:100%; table-layout:fixed; border-collapse:collapse; font-size:12px; }
+table.rp-mx th { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color: var(--muted); padding:5px 4px; border-bottom:2px solid var(--or, #ff7a1a); }
+table.rp-mx td { padding:5px 4px; border-bottom:1px solid var(--line, #e5e7eb); vertical-align:middle; text-align:center; overflow-wrap:anywhere; }
+table.rp-mx td.l, table.rp-mx th.l { text-align:left; }
+table.rp-mx td.win { font-weight:800; }
+table.rp-mx td.ses { background: color-mix(in srgb, var(--tb, #1f4aa8) 6%, transparent); border-right:1px solid var(--line, #e5e7eb); line-height:1.2; }
+table.rp-mx tbody.rp-ses { border-bottom:2px solid var(--line2, #cbd5e1); }
+.report .mx-mat { margin-bottom:6px; }
+@media print {
+  .report .rp-sec.pb { break-before: page; }
+  .report .rp-sec h3 { margin-top:0; }
+  .report tbody.rp-ses, .report .mx-mat, .report .rp-sec h4 + p + .tw { break-inside: avoid; }
+  table.rp-mx thead { display: table-header-group; }
+  .report .mx-mat td { height:22px; min-width:26px; font-size:10.5px; }
+  .report .champ { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .report .mx-mat td, table.rp-mx td.ses { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+@media print { html, body, #app, main { background:#fff !important; } }
