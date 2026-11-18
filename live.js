@@ -56,7 +56,29 @@ export function nextUp(t) {
 }
 
 // ---------- Pengadil (peringkat kumpulan sahaja) ----------
+// Regu bertukar: pemain yang tidak bermain dalam sesi itu menjadi pengadil (bergilir), selebihnya rehat
+function mixUmpPlan(t) {
+  const o = {}, du = {}, ids = (t.individuals || []).map(x => x.id);
+  const byS = {}; t.matches.forEach(m => { if (m.px && m.session) (byS[m.session] = byS[m.session] || []).push(m); });
+  Object.keys(byS).map(Number).sort((a, b) => a - b).forEach(s => {
+    const ms = byS[s].sort((a, b) => (a.gi || 0) - (b.gi || 0)), pl = new Set(ms.flatMap(m => m.px)), nx = new Set((byS[s + 1] || []).flatMap(m => m.px));
+    const free = ids.filter(id => !pl.has(id)), used = new Set();
+    ms.forEach(m => {
+      const c = free.filter(id => !used.has(id)).sort((x, y) => (du[x] || 0) - (du[y] || 0) || (nx.has(x) - nx.has(y)) || ids.indexOf(x) - ids.indexOf(y));
+      if (c[0]) { o[m.id] = c[0]; used.add(c[0]); du[c[0]] = (du[c[0]] || 0) + 1; }
+    });
+  });
+  return o;
+}
+// Pemain rehat (bukan bermain & bukan pengadil) bagi satu sesi regu bertukar
+export function mixRestOf(t, s, U) {
+  U = U || umpirePlan(t);
+  const ms = t.matches.filter(m => m.px && m.session === s), busy = new Set(ms.flatMap(m => m.px));
+  ms.forEach(m => { const u = umpireOf(t, m, U); if (u) busy.add(u); });
+  return (t.individuals || []).map(x => x.id).filter(id => !busy.has(id));
+}
 export function umpirePlan(t) {
+  if (t.entryMode === 'mixer') return mixUmpPlan(t);
   const o = {};
   t.groups.forEach(g => {
     const mem = g.members, du = {};
@@ -78,6 +100,10 @@ function chooseUmp(t, m, busy, U) {
   if (m.stage !== 'group') return '';
   const pr = U[m.id], du = {};
   t.matches.forEach(x => { if (x.ump) du[x.ump] = (du[x.ump] || 0) + 1; });
+  if (t.entryMode === 'mixer') {
+    const c = (t.individuals || []).map(x => x.id).filter(p => !pl2(m).includes(p) && !busy.has(p));
+    return c.includes(pr) ? pr : c.sort((x, y) => (du[x] || 0) - (du[y] || 0))[0] || '';
+  }
   const g = t.groups.find(x => x.name === m.group);
   const c = (g ? g.members : []).filter(p => !pl2(m).includes(p) && !busy.has(p));
   if (c.includes(pr)) return pr;

@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.12.5';
+const VERSION = '3.13.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1225,6 +1225,32 @@ function mixPlanText(t) {
   const [h, mi] = String(t.startTime || '').split(':').map(Number), end = isNaN(h) ? '' : (() => { const x = h * 60 + (mi || 0) + P.sessions * (Number(t.sessionMin) || 30); return ` · anggaran tamat <b>${String(Math.floor(x / 60) % 24).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}</b>`; })();
   return `${P.auto ? `<b>Penuh</b>: setiap pemain berpasangan dengan semua pemain lain sekali · ` : `${P.R} pusingan · `}jumlah <b>${P.matches} perlawanan</b> · ${P.nt} meja → <b>${P.sessions} sesi</b>${end}${!P.auto && P.rest ? ` · ${P.rest} pemain rehat bergilir setiap pusingan` : ''} · setiap pemain main ${P.min === P.max ? P.min : `${P.min}–${P.max}`} kali${P.min !== P.max ? ' <span style="color:#b45309">(tidak sama rata — cuba ubah bilangan pusingan)</span>' : ''}.`;
 }
+let _mxMode = 'p';
+function mixMatrix(t, S) {
+  const idx = Object.fromEntries(S.map((r, i) => [r.id, i])), n = S.length, cell = {};
+  for (const m of t.matches) {
+    if (m.status !== 'done' || !m.px) continue;
+    const r = E.evaluateMatch(t, m), aw = m.winner === m.a;
+    const put = (x, y, win, sc) => { const k = x + '|' + y; (cell[k] = cell[k] || []).push({ win, sc }); };
+    const [a1, a2, b1, b2] = m.px, sa = `${r.sa}-${r.sb}`, sb = `${r.sb}-${r.sa}`;
+    if (_mxMode === 'p') { put(a1, a2, aw, sa); put(a2, a1, aw, sa); put(b1, b2, !aw, sb); put(b2, b1, !aw, sb); }
+    else [[a1, b1], [a1, b2], [a2, b1], [a2, b2]].forEach(([x, y]) => { put(x, y, aw, sa); put(y, x, !aw, sb); });
+  }
+  const first = id => esc(E.pname(t, id).split(' ')[0].slice(0, 7));
+  return `<div class="card"><div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">🔢 Matriks</h3>
+      <div class="seg"><button class="chip ${_mxMode === 'p' ? 'on' : ''}" data-mxm="p">🤝 Sebagai pasangan</button><button class="chip ${_mxMode === 'o' ? 'on' : ''}" data-mxm="o">⚔️ Sebagai lawan</button></div></div>
+    <p class="muted small" style="margin-top:0">Baca mengikut baris: keputusan pemain di baris itu ${_mxMode === 'p' ? 'apabila <b>berpasangan dengan</b>' : 'apabila <b>menentang</b>'} pemain di lajur. Hijau = menang, merah = kalah.</p>
+    <div class="tw"><table class="mx-mat"><thead><tr><th></th>${S.map((r, i) => `<th title="${esc(E.pname(t, r.id))}">${i + 1}</th>`).join('')}</tr></thead><tbody>
+    ${S.map((r, i) => `<tr><th class="l">${i + 1}. ${first(r.id)}</th>${S.map((c, j) => {
+      if (i === j) return '<td class="x"></td>';
+      const v = cell[r.id + '|' + c.id] || [];
+      if (!v.length) return '<td class="e">·</td>';
+      const w = v.filter(z => z.win).length, l = v.length - w;
+      return `<td class="${w > l ? 'w' : l > w ? 'l' : 'd'}" title="${v.map(z => (z.win ? 'Menang ' : 'Kalah ') + z.sc).join(', ')}">${v.length === 1 ? v[0].sc : `${w}-${l}`}</td>`;
+    }).join('')}</tr>`).join('')}
+    </tbody></table></div>
+    <p class="muted small" style="margin-bottom:0">${_mxMode === 'p' ? 'Sel menunjukkan skor set. Jika lajur seorang pemain banyak hijau, pemain itu "membawa" pasangannya.' : 'Sel menunjukkan skor set (atau menang-kalah jika bertemu lebih sekali).'}</p></div>`;
+}
 function viewMixStandings(t) {
   const S = E.mixStandings(t), done = t.matches.filter(m => m.status === 'done').length;
   const nm = id => esc(E.pname(t, id)), sgn = x => (x > 0 ? '+' : '') + x;
@@ -1235,9 +1261,11 @@ function viewMixStandings(t) {
       ${r.with.length ? `<div class="mx-w">${r.with.map(w => `<span class="${w.draw ? '' : w.win ? 'ok' : 'no'}">P${w.mr} · ${nm(w.mate)} · ${w.draw ? 'Seri' : w.win ? 'Menang' : 'Kalah'} ${w.s}</span>`).join('')}</div>` : '<span class="muted small">Belum bermain</span>'}</details></td>
       <td>${r.p}</td><td>${r.w}</td><td>${r.l}</td><td>${sgn(r.sf - r.sa)}</td><td>${sgn(r.pf - r.pa)}</td><td><b>${r.pts}</b></td></tr>`).join('')}
     </tbody></table></div></div>
+    ${mixMatrix(t, S)}
     <div class="row" style="margin:0 0 12px"><button class="pill-btn small" data-mxp="1"><span class="dot"></span>▶ Tonton undian</button></div>
     <details class="card fold"><summary>🔁 Senarai pusingan & pemain rehat</summary>${[...new Set(t.matches.map(m => m.mr))].map(r => `<div class="sess">Pusingan ${r}${(t.mixRest || {})[r] && t.mixRest[r].length ? ` · rehat: ${t.mixRest[r].map(nm).join(', ')}` : ''} <button class="pill-btn light small" data-mxp="${r}" style="margin-left:6px">▶</button></div><div class="mlist">${t.matches.filter(m => m.mr === r).map(m => matchRow(t, m)).join('')}</div>`).join('')}</details>`;
   $app.querySelectorAll('[data-mxp]').forEach(b => (b.onclick = () => playMixDraw(t, +b.dataset.mxp)));
+  $app.querySelectorAll('[data-mxm]').forEach(b => (b.onclick = () => { _mxMode = b.dataset.mxm; viewMixStandings(t); }));
 }
 function viewGroups(t) {
   if (E.isMixer(t)) return viewMixStandings(t);
@@ -2390,11 +2418,13 @@ function viewJadual(t) {
       <div><label style="margin-top:0">Tapis sesi</label><select id="jdSes">${opt({ '': 'Semua sesi', ...Object.fromEntries(Array.from({ length: NS }, (_, i) => [i + 1, `Sesi ${i + 1} - ${E.sessionTime(t, i + 1)}`])) }, jdSes)}</select></div></div>
       <p class="muted small" style="margin-bottom:0">${E.numTablesOf(t)} meja digunakan · anggaran tamat sekitar <b>${E.sessionTime(t, NS + 1)}</b> (${t.sessionMin} min setiap sesi)</p></div>
     <div class="card tw" style="padding:6px"><table class="jd"><thead><tr><th>Game</th><th>Sesi</th><th>Masa</th><th>Meja</th><th class="l">${UNIT(t)}</th><th class="l">Pengadil</th>${t.handicap && !E.isTeam(t) ? '<th>HC</th>' : ''}<th>Skor</th></tr></thead><tbody>
-    ${rows.map(m => { const r = E.evaluateMatch(t, m), u = LV.umpireOf(t, m, U), h = t.handicap && m.a && m.b ? E.handicapInfo(t, m.a, m.b) : null;
-      return `<tr class="${m.lt && m.status !== 'done' ? 'onlive' : ''}" data-go="${m.a && m.b ? m.id : ''}"><td>${esc(E.matchCode(m) || '')}</td><td>${m.session || '-'}</td><td>${m.session ? esc(E.sessionTime(t, m.session)) : '-'}</td><td>${tno(m) || '-'}${m.lt && m.status !== 'done' ? ' 🟢' : ''}</td>
+    ${rows.map((m, ri) => { const r = E.evaluateMatch(t, m), u = LV.umpireOf(t, m, U), h = t.handicap && m.a && m.b ? E.handicapInfo(t, m.a, m.b) : null;
+      const restRow = E.isMixer(t) && m.session && (!rows[ri + 1] || rows[ri + 1].session !== m.session) ? (() => { const rs = LV.mixRestOf(t, m.session, U); return rs.length ? `<tr class="jd-rest"><td colspan="9">💤 Rehat sesi ${m.session}: ${rs.map(id => esc(E.pname(t, id))).join(', ')}</td></tr>` : ''; })() : '';
+      return restRow ? rowHtml() + restRow : rowHtml();
+      function rowHtml() { return `<tr class="${m.lt && m.status !== 'done' ? 'onlive' : ''}" data-go="${m.a && m.b ? m.id : ''}"><td>${esc(E.matchCode(m) || '')}</td><td>${m.session || '-'}</td><td>${m.session ? esc(E.sessionTime(t, m.session)) : '-'}</td><td>${tno(m) || '-'}${m.lt && m.status !== 'done' ? ' 🟢' : ''}</td>
         <td class="l">${m.a ? esc(E.pname(t, m.a)) : `<i class="muted">${esc(E.placeholderLabel(m.srcA) || 'Menunggu')}</i>`} <small class="muted">lwn</small> ${m.b ? esc(E.pname(t, m.b)) : `<i class="muted">${esc(E.placeholderLabel(m.srcB) || 'Menunggu')}</i>`}</td>
         <td class="l">${u ? esc(E.pname(t, u)) : '-'}</td>${t.handicap && !E.isTeam(t) ? `<td>${h && h.n ? esc(E.pname(t, h.to)).split(' ')[0] + ' +' + h.n : '-'}</td>` : ''}
-        <td>${m.status === 'done' ? E.tieScore(t, r).join('-') + ' ✅' : '-'}</td></tr>`; }).join('')}
+        <td>${m.status === 'done' ? E.tieScore(t, r).join('-') + ' ✅' : '-'}</td></tr>`; } }).join('')}
     </tbody></table></div>
     <p class="muted small">Sesi dan meja ialah anggaran. Semasa pertandingan, ikut tab 🟢 Langsung untuk meja sebenar.</p>`;
   document.getElementById('jdSel').onchange = e => { jdSel = e.target.value; viewJadual(t); };
