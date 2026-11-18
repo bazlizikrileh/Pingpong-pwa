@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.12.2';
+const VERSION = '3.12.3';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -667,6 +667,7 @@ function viewSetupCore(t, part = 'tetapan') {
   $app.innerHTML = P ? `
     ${section('Peserta', `Senarai ${unit}`)}
     <div class="card" id="entries">${listCard}
+      ${!locked && (t.individuals.length || t.participants.length) ? `<div class="row" style="margin-top:10px"><button type="button" class="pill-btn light small" id="editL">✏️ Edit senarai</button><span class="muted small">Boleh diubah selagi ${E.isMixer(t) ? 'jadual belum dijana' : draw ? 'undian belum dibuat' : 'jadual belum dijana'}.</span></div>` : ''}
       ${locked && t.participants.length ? '<div class="row" style="margin-top:10px"><button type="button" class="pill-btn light small" id="saveP">Simpan nama/handicap</button></div><p class="muted small">Senarai dikunci (jadual sudah dijana). Ejaan nama masih boleh dibetulkan.</p>' : ''}</div>
 
     <details class="card fold" data-fold="add" ${fo('add', !locked)}><summary>➕ Tambah / undi peserta</summary>
@@ -759,6 +760,8 @@ function viewSetupCore(t, part = 'tetapan') {
     $app.querySelectorAll('[data-pn]').forEach(i => { const p = E.pobj(t, i.dataset.pn); if (p && i.value.trim()) p.name = i.value.trim(); });
     $app.querySelectorAll('[data-hc]').forEach(i => { const p = E.pobj(t, i.dataset.hc); if (p) p.hc = Math.max(0, Math.min(5, Number(i.value) || 0)); });
   };
+  const el = document.getElementById('editL');
+  if (el) el.onclick = () => { const d = document.querySelector('details[data-fold=add]'); if (d) d.open = true; const ta = document.getElementById('ind') || document.getElementById('people'); if (ta) { ta.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => ta.focus(), 300); } };
   const saveP = document.getElementById('saveP');
   if (saveP) saveP.onclick = () => { readRenames(); readEntries(); save(t); toast('Disimpan'); render(); };
   const undi = document.getElementById('undi');

@@ -91,8 +91,14 @@ export const pobj = (t, id) => t.participants.find(p => p.id === id);
 export const pname = (t, id) => (pobj(t, id) || {}).name || (id === 'BYE' ? 'BYE' : ((t.individuals || []).find(x => x.id === id) || {}).name || '—');
 
 // "Nama, Unit (2)" → { name, unit, hc }
+// Buang nombor penyertaan / bullet di depan (cth. "1. Ali", "02) Abu", "#3 - Ah Chong", "• Siti") dan tanda ✅ di belakang
+export const cleanLine = line => String(line || '').trim()
+  .replace(/^(?:[-•*·▪●◦]\s*)+/, '')
+  .replace(/^(?:no\.?\s*)?#?\d{1,3}\s*(?:[.)\]:\-–—]+\s*|\s+(?=\D))/i, '')
+  .replace(/^(?:[-•*·▪●◦]\s*)+/, '')
+  .replace(/\s*(?:✅|☑️?|✔️?|✓)+\s*$/u, '').trim();
 export function parseEntry(line) {
-  let s = line.trim(), hc = 0, lv = '';
+  let s = cleanLine(line), hc = 0, lv = '';
   const m = s.match(/\((\d+)\)\s*$/);
   if (m) { hc = Math.min(5, Number(m[1])); s = s.replace(/\s*\(\d+\)\s*$/, ''); }
   const L = s.match(/\(([^()]*[A-Za-z][^()]*)\)\s*$/);
