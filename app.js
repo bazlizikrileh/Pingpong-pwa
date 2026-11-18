@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.17.5';
+const VERSION = '3.17.6';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -338,6 +338,8 @@ const section = (eyebrow, title) => `<div class="eyebrow">${esc(eyebrow)}</div><
 // ---------- Video undian ----------
 const subtitleOf = t => [t.name, t.date ? (() => { const d = new Date(t.date + 'T00:00'); return isNaN(d) ? t.date : `${HARI[d.getDay()]}, ${fmtDate(t.date)}`; })() : ''].filter(Boolean).join(' · ');
 // Susunan cabutan rawak (suspens): setiap kad terus ke slotnya, tetapi turutan cabutan dikocok
+// Rawak tetapi adil: isi slot pertama setiap kotak dahulu (kotak dipilih secara rawak), kemudian slot kedua, dan seterusnya
+const roundSeq = seq => { const by = {}; seq.forEach(x => (by[x.slot] = by[x.slot] || []).push(x)); return Object.keys(by).map(Number).sort((a, b) => a - b).flatMap(r => shuffleSeq(by[r])); };
 const shuffleSeq = seq => { const a = seq.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 function playGroupDraw(t) {
   const G = t.groups;
@@ -346,8 +348,8 @@ function playGroupDraw(t) {
   G.forEach((g, gi) => g.members.forEach((id, r) => seq.push({ box: gi, slot: r, name: E.pname(t, id), head: 'KAD DICABUT' })));
   playDeal({
     title: 'Cabutan Kumpulan', subtitle: subtitleOf(t), logos: clubOf(t).logos,
-    intro: '<small>Semua nama dimasukkan ke dalam satu dek kad dan dikocok. Kad dicabut satu persatu secara rawak — tempat setiap nama hanya diketahui bila kad masuk ke kumpulan.</small>',
-    boxes: G.map(g => ({ label: `Kumpulan ${g.name}`, slots: g.members.length, slotLabels: g.members.map((_, r) => g.name + (r + 1)) })), seq: shuffleSeq(seq), hideTo: true, speed: 900, sound: true, music: true, scene: true,
+    intro: '<small>Semua nama dimasukkan ke dalam satu dek kad dan dikocok. Kad dicabut satu persatu secara rawak — setiap kumpulan diisi seorang dahulu sebelum pusingan seterusnya; tempat setiap nama hanya diketahui bila kad masuk.</small>',
+    boxes: G.map(g => ({ label: `Kumpulan ${g.name}`, slots: g.members.length, slotLabels: g.members.map((_, r) => g.name + (r + 1)) })), seq: roundSeq(seq), hideTo: true, speed: 900, sound: true, music: true, scene: true,
   });
 }
 function playUnitDraw(t) {
@@ -358,9 +360,9 @@ function playUnitDraw(t) {
   P.forEach((p, i) => p.members.forEach((n, r) => seq.push({ box: i, slot: r, name: n, head: 'KAD DICABUT' })));
   playDeal({
     title: `Undian ${lab}`, subtitle: subtitleOf(t), logos: clubOf(t).logos,
-    intro: `<small>Semua ${seq.length} nama peserta dimasukkan ke dalam satu dek kad dan dikocok. Kad dicabut satu persatu secara rawak — tempat setiap nama hanya diketahui bila kad masuk ke ${lab.toLowerCase()}.</small>`,
+    intro: `<small>Semua ${seq.length} nama peserta dimasukkan ke dalam satu dek kad dan dikocok. Kad dicabut satu persatu secara rawak — setiap ${lab.toLowerCase()} diisi seorang dahulu sebelum orang kedua; tempat setiap nama hanya diketahui bila kad masuk.</small>`,
     boxes: P.map((p, i) => ({ label: team ? p.name : `Regu ${i + 1}`, slots: p.members.length, slotLabels: p.members.map((_, r) => (team ? 'Ahli ' : 'Pemain ') + (r + 1)) })),
-    seq: shuffleSeq(seq), hideTo: true, speed: 900, doneText: 'Undian selesai', sound: true, music: true, scene: true,
+    seq: roundSeq(seq), hideTo: true, speed: 900, doneText: 'Undian selesai', sound: true, music: true, scene: true,
   });
 }
 // Undian regu bertukar ikut sesi: setiap nama dicabut secara rawak ke slot (Meja 1 A1/A2 lwn B1/B2, Meja 2 C1/C2 lwn D1/D2, pengadil, rehat)
@@ -404,7 +406,7 @@ function playBracketDraw(t, b) {
   playDeal({
     title: b === 'pool' ? 'Undian Pool Kalah' : 'Undian Kalah Mati', subtitle: subtitleOf(t), logos: clubOf(t).logos,
     intro: '<b>🔀 Menyusun bracket…</b>', prep: 'Menyusun bracket…', introMs: 600, speed: 1200,
-    boxes: ms.map((m, i) => ({ label: `Perlawanan ${i + 1}`, slots: 2, vs: true })), seq: shuffleSeq(seq), hideTo: true, doneText: 'Bracket lengkap', sound: true, music: true, scene: true,
+    boxes: ms.map((m, i) => ({ label: `Perlawanan ${i + 1}`, slots: 2, vs: true })), seq: roundSeq(seq), hideTo: true, doneText: 'Bracket lengkap', sound: true, music: true, scene: true,
   });
 }
 
@@ -701,6 +703,10 @@ function viewSetupCore(t, part = 'tetapan') {
       ${!locked && (t.individuals.length || t.participants.length) ? `<div class="row" style="margin-top:10px"><button type="button" class="pill-btn light small" id="editL">✏️ Edit senarai</button><span class="muted small">Boleh diubah selagi ${E.isMixer(t) ? 'jadual belum dijana' : draw ? 'undian belum dibuat' : 'jadual belum dijana'}.</span></div>` : ''}
       ${locked && t.participants.length ? '<div class="row" style="margin-top:10px"><button type="button" class="pill-btn light small" id="saveP">Simpan nama/handicap</button></div><p class="muted small">Senarai dikunci (jadual sudah dijana). Ejaan nama masih boleh dibetulkan.</p>' : ''}</div>
 
+    ${!locked && (mixer ? t.individuals.length >= 4 : t.participants.length >= 2) ? `<div class="card gen-card">
+      <div class="small muted" style="margin-bottom:6px">Format: <b>${esc(mixer ? 'Regu bertukar' : FORMAT[t.format])}</b> · ${esc(E.fmtFor(t, 'group').label.replace(/ \(.*\)/, ''))} · ${E.numTablesOf(t)} meja · mula ${esc(E.sessionTime(t, 1) || '-')} — <a href="#/t/${t.id}/tetapan">ubah di ⚙️ Tetapan</a></div>
+      <button type="button" class="pill-btn brand" id="draw"><span class="dot"></span>Jana ${mixer ? 'pusingan & jadual' : t.format === 'ko' ? 'carta kalah mati' : t.format === 'rr' ? 'jadual liga' : 'kumpulan & jadual'}</button>
+      <p class="muted small" style="margin:6px 0 0">Pastikan tetapan format, bilangan meja dan masa mula sudah betul sebelum menjana.</p></div>` : ''}
     <details class="card fold" data-fold="add" ${fo('add', !locked)}><summary>➕ Tambah / undi peserta</summary>
       ${locked ? '<p class="muted small">Dikunci. Gunakan <b>↺ Reset jadual</b> di Tetapan untuk mengubah peserta.</p>' : draw ? `
         <p class="muted small">${entryHint(t)}</p>
@@ -817,7 +823,7 @@ function viewSetupCore(t, part = 'tetapan') {
   };
   const drawBtn = document.getElementById('draw');
   if (drawBtn) drawBtn.onclick = () => {
-    readSettings(f, t);
+    if (f) readSettings(f, t);
     if (E.isMixer(t)) {
       const n = t.individuals.length;
       if (n < 4) return toast('Perlu sekurang-kurangnya 4 pemain dalam senarai individu (tab 👥 Pemain).', 4000);
