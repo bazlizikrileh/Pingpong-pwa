@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.11.2';
+const VERSION = '3.12.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -87,11 +87,13 @@ const CLUBS = {
   ksas: { short: 'KSAS Kumpulan Rimau', name: 'Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru · Kumpulan Rimau', logos: ['logos/ksas.webp', 'logos/ksas-pingpong.webp'], thumb: 'logos/ksas-pingpong.webp', theme: { tb: '#1f4aa8', tb2: '#173a86', or: '#ff7a1a', w: '#eaf1ff', hd1: '#0b1a3f', hd2: '#1d3f8c' }, waGroup: 'KSAS Rimau - Laporan Skor' },
   ksasall: { short: 'KSAS', name: 'Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru', logos: ['logos/ksas.webp', 'logos/ksas-pingpong.webp'], theme: { tb: '#1f4aa8', tb2: '#173a86', or: '#ff7a1a', w: '#eaf1ff', hd1: '#0b1a3f', hd2: '#1d3f8c' }, waGroup: '' },
   kroni: { short: 'Kroni Shell KSAS', name: 'Kroni Shell · Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru', logos: [], ownLogo: true, theme: { tb: '#c8102e', tb2: '#9b0d23', or: '#ffc600', w: '#fff4d1', hd1: '#4a0a0f', hd2: '#a3111f' }, waGroup: '' },
+  sendiri: { short: 'Persendirian', name: 'Penganjur persendirian · main santai', logos: [], ownLogo: true, theme: { tb: '#0f766e', tb2: '#0b5a54', or: '#f59e0b', w: '#e6f6f4', hd1: '#062e2b', hd2: '#0f5f58' }, waGroup: '' },
   kskpkpjb: { short: 'KSKPKPJB', name: 'Kelab Sukan Kebajikan Perubatan Kesihatan dan Pergigian Johor Bahru', logos: ['logos/kskpkpjb.webp'], theme: { tb: '#16803c', tb2: '#0d5a2a', or: '#e3262e', w: '#e8f6ec', hd1: '#07301b', hd2: '#0f5a2c' }, waGroup: '' },
 };
 function clubOf(t) {
   if (t.clubId === undefined || t.clubId === null) t.clubId = /ksas|rimau/i.test(t.club || '') ? 'ksas' : /kskp/i.test(t.club || '') ? 'kskpkpjb' : (t.club ? 'lain' : '');
   const c = CLUBS[t.clubId];
+  if (c && t.clubId === 'sendiri') return { ...c, id: t.clubId, short: t.club ? `Anjuran ${t.club}` : c.short, name: t.club ? `Anjuran ${t.club} · main santai` : c.name, logos: t.logo ? [t.logo] : [] };
   if (c) return { ...c, id: t.clubId, logos: c.ownLogo ? (t.logo ? [t.logo] : []) : c.logos };
   return { id: t.clubId, short: t.club || '', name: t.club || '', logos: t.logo ? [t.logo] : [] };
 }
@@ -419,7 +421,7 @@ function viewHome() {
     <p class="muted small" style="margin-top:-6px">${cloud.state.failed ? '📴 Tidak dapat menyambung ke awan. Hanya data dalam peranti ini dipaparkan.' : cloud.state.tournaments ? (cloud.state.offline ? '📴 Luar talian — memaparkan salinan terakhir' : '☁️ Disambung ke awan') : '⏳ Menyambung ke awan…'}</p>
     ${cloud.isAdmin() || cloud.state.failed || !cloud.state.ready ? `<div class="row" style="margin-bottom:14px"><a class="pill-btn orange" href="#/baru"><span class="dot"></span>Pertandingan baharu</a></div>` : ''}
     ${clubs.length > 1 ? `<div class="hc-chips"><button class="chip ${!_homeClub ? 'on' : ''}" data-hclub="">Semua kelab</button>${clubs.map(([k, n]) => `<button class="chip ${_homeClub === k ? 'on' : ''}" data-hclub="${k}">${esc(n)}</button>`).join('')}</div>` : ''}
-    ${(_homeClub || clubs.length === 1) && store.isCloud ? (() => { const k = _homeClub || clubs[0][0], on = subs.includes(k) && notifOn(); return `<div class="hc-sub"><span>${on ? '🔔' : '🔕'} ${on ? 'Anda akan dimaklumkan bila' : 'Dapatkan notifikasi bila'} <b>${esc(CLUBS[k].short)}</b> membuka pendaftaran</span><button class="pill-btn small ${on ? 'light' : 'brand'}" data-csub="${k}">${on ? 'Berhenti' : 'Langgan'}</button></div>`; })() : ''}
+    ${(_homeClub || clubs.length === 1) && store.isCloud && (_homeClub || clubs[0][0]) !== 'sendiri' ? (() => { const k = _homeClub || clubs[0][0], on = subs.includes(k) && notifOn(); return `<div class="hc-sub"><span>${on ? '🔔' : '🔕'} ${on ? 'Anda akan dimaklumkan bila' : 'Dapatkan notifikasi bila'} <b>${esc(CLUBS[k].short)}</b> membuka pendaftaran</span><button class="pill-btn small ${on ? 'light' : 'brand'}" data-csub="${k}">${on ? 'Berhenti' : 'Langgan'}</button></div>`; })() : ''}
     ${mine.length ? `<div class="section-title">📝 Pertandingan saya</div><div class="my-list">${mine.map(t => `<a class="my-item" href="#/daftar/${t.id}"><b>${esc(t.name)}</b><span>${esc(fmtDate(t.date) || '')} · Lihat pendaftaran →</span></a>`).join('')}</div>` : ''}
     <div class="section-title">Akan datang</div>
     ${up.length ? `<div class="hc-list">${up.map(card).join('')}</div>` : '<div class="card empty">Tiada pertandingan akan datang.</div>'}
@@ -470,14 +472,14 @@ function settingsFormAll(t, locked) {
     <div class="section-title" style="margin-top:0">Maklumat</div>
     <label>Nama pertandingan</label><input name="name" value="${esc(t.name)}" required>
     <div class="grid2">
-      <div><label>Kelab / Penganjur</label><select name="clubId">${opt({ ksasall: 'KSAS', ksas: 'KSAS Kumpulan Rimau', kroni: 'Kroni Shell KSAS', kskpkpjb: 'KSKPKPJB', lain: 'Lain-lain', '': '— Tiada —' }, clubOf(t).id)}</select></div>
+      <div><label>Kelab / Penganjur</label><select name="clubId">${opt({ ksasall: 'KSAS', ksas: 'KSAS Kumpulan Rimau', kroni: 'Kroni Shell KSAS', kskpkpjb: 'KSKPKPJB', sendiri: '🙋 Persendirian (main santai)', lain: 'Lain-lain', '': '— Tiada —' }, clubOf(t).id)}</select></div>
       <div><label>Tarikh</label><input name="date" type="date" value="${esc(t.date)}"></div>
       <div><label>Masa mula</label><input name="startTime" type="time" value="${esc(t.startTime)}"></div>
       <div><label>Minit setiap sesi</label><input name="sessionMin" type="number" min="10" max="90" step="5" value="${t.sessionMin}"></div>
     </div>
     <div class="club-preview" id="clubPrev"></div>
     <div data-show="clubX" class="grid2">
-      <div><label>Nama kelab / penganjur</label><input name="club" value="${esc(t.clubId === 'lain' ? t.club : '')}"></div>
+      <div><label data-label="clubN">Nama kelab / penganjur</label><input name="club" value="${esc(t.clubId === 'lain' || t.clubId === 'sendiri' ? t.club : '')}" placeholder=""></div>
     </div>
     <div data-show="clubLogo"><label>Logo (pilihan)</label><input name="logoFile" type="file" accept="image/*"></div>
 
@@ -551,9 +553,11 @@ function wireForm(form) {
     show('groups', f === 'group_ko' && !mx);
     show('ko', f !== 'rr' && !mx);
     show('venueX', form.venue.value === 'X');
-    show('clubX', form.clubId.value === 'lain');
+    { const own = form.clubId.value === 'sendiri'; show('clubX', form.clubId.value === 'lain' || own);
+      form.querySelector('[data-label="clubN"]').textContent = own ? 'Nama penganjur (anda)' : 'Nama kelab / penganjur';
+      if (own && !form.club.value) form.club.value = (cloud.state.user && !cloud.state.user.anon && (cloud.state.user.name || '').split(' ')[0]) || ls.get('pingpong:myname') || ''; }
     show('tieRule', (form.entryMode.value === 'team' && form.tieFormat.value === 'SSD' && Number(form.teamSize.value) >= 4) || (form.entryMode.value !== 'team' && form.groupFormat.value === 'F2'));
-    show('clubLogo', form.clubId.value === 'lain' || form.clubId.value === 'kroni');
+    show('clubLogo', ['lain', 'kroni', 'sendiri'].includes(form.clubId.value));
     show('wa', form.waEnabled.checked);
     show('reg', form.regOpen.checked);
     show('waG', form.waMode.value === 'G'); show('waN', form.waMode.value === 'N');
@@ -572,7 +576,7 @@ function readSettings(form, t) {
   const v = n => (form[n] ? form[n].value : undefined);
   t.name = v('name').trim() || 'Pertandingan';
   t.clubId = v('clubId');
-  t.club = t.clubId === 'lain' ? v('club').trim() : (CLUBS[t.clubId] || {}).short || '';
+  t.club = t.clubId === 'lain' || t.clubId === 'sendiri' ? v('club').trim() : (CLUBS[t.clubId] || {}).short || '';
   t.date = v('date'); t.startTime = v('startTime');
   t.sessionMin = Math.max(5, Number(v('sessionMin')) || 30);
   t.hcMode = v('hcMode'); t.handicap = t.hcMode !== 'off';
@@ -595,7 +599,7 @@ function readSettings(form, t) {
 }
 async function readLogo(form, t) {
   const file = form.logoFile && form.logoFile.files[0];
-  if (!file || !(t.clubId === 'lain' || t.clubId === 'kroni')) return;
+  if (!file || !['lain', 'kroni', 'sendiri'].includes(t.clubId)) return;
   try { t.logo = await resizeLogo(file); } catch { toast('Logo tidak dapat dibaca'); }
 }
 
