@@ -17,7 +17,7 @@ const homeTable = (t, m) => {
   return T[(m.gi ?? 0) % T.length].k;
 };
 const okey = m => m.stage === 'group'
-  ? [m.tg ? 1 : 0, 0, m.gn || 0, 0, 0]
+  ? [m.tg ? 1 : 0, 0, m.px ? (m.session || 0) * 100 + (m.gi || 0) : m.gn || 0, 0, 0]
   : [m.tg ? 1 : 0, 1, m.round || 0, m.bracket === 'ko' ? 0 : 1, m.slot || 0];
 const ocmp = (x, y) => { const a = okey(x), b = okey(y); for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] - b[i]; return 0; };
 
@@ -93,8 +93,15 @@ export function umpirePlan(t) {
 }
 export function umpireOf(t, m, U) {
   if (!m || m.stage !== 'group') return '';
-  if (m.lt && m.ump !== undefined) return m.ump || '';
-  return (U || umpirePlan(t))[m.id] || '';
+  if (m.lt && m.ump) return m.ump;
+  if (m.lt && m.ump !== undefined && t.entryMode !== 'mixer') return '';
+  const u = (U || umpirePlan(t))[m.id] || '';
+  if (u && m.lt && t.entryMode === 'mixer') {
+    // pastikan pengadil dirancang tidak sedang bermain / mengadil di meja lain
+    const other = t.matches.filter(x => x !== m && x.lt && x.status !== 'done');
+    if (other.some(x => (x.px || []).includes(u) || x.ump === u)) return '';
+  }
+  return u;
 }
 function chooseUmp(t, m, busy, U) {
   if (m.stage !== 'group') return '';
