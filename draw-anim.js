@@ -82,6 +82,7 @@ export function playDeal(o) {
     busy = true; if (k >= o.seq.length) clearTimeout(tm);
     if (made) {
       const r = await made.share();
+      busy = false; if (o.auto && o.next && k >= o.seq.length) tm = setTimeout(() => { if (!busy) { close(); o.next.fn(); } }, 4000);
       vm.textContent = r.shared ? '✅ Video dikongsi.' : r.cancelled ? 'Perkongsian dibatalkan. Tekan sekali lagi untuk berkongsi.' : '⬇️ Telefon ini tidak membenarkan kongsi terus, jadi video dimuat turun. Hantar dari galeri / Fail ke WhatsApp.';
       return;
     }

@@ -130,7 +130,8 @@ function makeDrawer(o, logos, cv, sc = 1) {
   return { cv, draw };
 }
 
-const bitrateFor = o => Math.max(400_000, Math.min(2_500_000, Math.floor(11 * 8 * 1048576 / Math.max(1, duration(o)))));
+// sasaran saiz ~6 MB (mudah dihantar di WhatsApp); grafik kebanyakannya statik, jadi kadar bit rendah masih jelas
+const bitrateFor = o => Math.max(300_000, Math.min(2_500_000, Math.floor(6 * 8 * 1048576 / Math.max(1, duration(o)))));
 async function pickCodec() {
   if (typeof VideoEncoder === 'undefined') return null;
   for (const codec of ['avc1.42001f', 'avc1.4d001f', 'avc1.640028', 'avc1.42002a']) {
@@ -175,7 +176,7 @@ async function encodeRecorder(o, D, onP) {
   const type = types.find(x => window.MediaRecorder && MediaRecorder.isTypeSupported(x));
   if (!type) throw new Error('Telefon ini tidak menyokong rakaman video.');
   const FPS = fpsFor(o);
-  const stream = D.cv.captureStream(FPS), rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: bitrateFor(o) }), parts = [];
+  const stream = D.cv.captureStream(FPS), rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: Math.round(bitrateFor(o) * 0.6) }), parts = [];
   rec.ondataavailable = e => e.data.size && parts.push(e.data);
   const done = new Promise(r => (rec.onstop = r));
   const dur = duration(o); rec.start(500);

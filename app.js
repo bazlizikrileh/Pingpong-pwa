@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.16.3';
+const VERSION = '3.16.4';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2445,6 +2445,7 @@ document.addEventListener('keydown', e => { if (!document.body.classList.contain
 let jdSel = null, jdSes = '';
 function viewJadual(t) {
   const head = section('Jadual', 'Jadual Perlawanan') + (canEdit(t) && t.matches.length ? `<div class="row noprint" style="margin:-4px 0 10px"><a class="pill-btn light small" href="#/t/${t.id}/kadskor">🖨️ Kad skor bercetak (sandaran)</a></div>` : '');
+  const mxHead = E.isMixer(t) && t.matches.length ? `<div class="row noprint" style="margin:-4px 0 10px"><button class="pill-btn orange small" data-mxs="1"><span class="dot"></span>▶▶ Tonton undian semua sesi</button></div>` : '';
   const all = t.matches.filter(m => m.status !== 'bye' && m.a !== 'BYE' && m.b !== 'BYE');
   if (!all.length) { $app.innerHTML = head + `<div class="card"><p class="muted">Jadual belum dijana.${canAdmin(t) ? ' Jana kumpulan dan jadual di tab ⚙️ Tetapan.' : ''}</p></div>`; return; }
   const opts = [...t.groups.map(g => [g.name, t.format === 'rr' ? 'Liga' : `Kumpulan ${g.name}`]),
@@ -2455,7 +2456,7 @@ function viewJadual(t) {
   const rows = all.filter(inSel).filter(m => !jdSes || m.session === +jdSes)
     .sort((x, y) => (x.session || 999) - (y.session || 999) || String(x.table).localeCompare(String(y.table), 'ms', { numeric: true }));
   const tno = m => m.lt || (m.table ? (m.table.match(/\d+/) || [''])[0] : '');
-  $app.innerHTML = `${head}
+  $app.innerHTML = `${head}${mxHead}
     <div class="card soft noprint"><div class="grid2">
       <div><label style="margin-top:0">Pilih</label><select id="jdSel">${opt(Object.fromEntries(opts), jdSel)}</select></div>
       <div><label style="margin-top:0">Tapis sesi</label><select id="jdSes">${opt({ '': 'Semua sesi', ...Object.fromEntries(Array.from({ length: NS }, (_, i) => [i + 1, `Sesi ${i + 1} - ${E.sessionTime(t, i + 1)}`])) }, jdSes)}</select></div></div>
@@ -2471,7 +2472,7 @@ function viewJadual(t) {
     </tbody></table></div>
     <p class="muted small">Sesi dan meja ialah anggaran. Semasa pertandingan, ikut tab 🟢 Langsung untuk meja sebenar.${LV.mixFast(t) ? ' <b>⚡ Meja pantas aktif:</b> pasangan bagi perlawanan yang belum bermula diundi semula bila meja kosong.' : ''}</p>`;
   document.getElementById('jdSel').onchange = e => { jdSel = e.target.value; viewJadual(t); };
-  $app.querySelectorAll('[data-mxs]').forEach(b => (b.onclick = e => { e.stopPropagation(); playMixDraw(t, +b.dataset.mxs, false); }));
+  $app.querySelectorAll('[data-mxs]').forEach(b => (b.onclick = e => { e.stopPropagation(); playMixDraw(t, +b.dataset.mxs, true); }));
   document.getElementById('jdSes').onchange = e => { jdSes = e.target.value; viewJadual(t); };
   $app.querySelectorAll('tr[data-go]').forEach(tr => tr.dataset.go && (tr.onclick = () => (location.hash = `#/t/${t.id}/m/${tr.dataset.go}`)));
 }
