@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.19.1';
+const VERSION = '3.19.2';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2398,7 +2398,7 @@ function viewLive(t) {
   };
   const queued = cand.filter(m => !Object.values(nx).includes(m));
   $app.innerHTML = `${head}
-    <div class="card me-box"><label style="margin-top:0">👤 Saya ialah…</label>
+    <div class="card me-box"><label style="margin-top:0">👤 Saya</label>
       <select id="meSel"><option value="">— pilih nama anda —</option>${people.map(p => `<option value="${p.id}" ${p.id === me ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
       ${me && ls.get('pingpong:meAuto:' + t.id) && !ls.get('pingpong:meSet:' + t.id) ? '<p class="muted small" style="margin:6px 0 0">✨ Dipilih automatik daripada pendaftaran anda. Tukar di atas jika salah.</p>' : ''}
       ${stTxt}${me ? `<div style="margin-top:8px">${notifBtn('🔔 Beritahu saya bila tiba giliran')}</div>` : ''}</div>
