@@ -718,7 +718,7 @@ export function matrix(t, groupName) {
 
 // ---------- Laporan WhatsApp ----------
 export function stageLabel(t, m) {
-  if (m.mr) return `Pusingan ${m.mr}`;
+  if (m.px) return `Sesi ${m.session || '-'}`;
   if (m.stage === 'group') return t.format === 'rr' ? 'Liga' : `Kumpulan ${m.group}`;
   return roundName(t, m.bracket, m.round);
 }
@@ -1075,10 +1075,18 @@ export function mixCompact(t) {
   if (firstFree < 0) return false;
   const tail = S.slice(firstFree), full = tail.filter(s => by[s].length >= NT), part = tail.filter(s => by[s].length < NT);
   const order = [...full, ...part];
-  if (order.every((s, i) => s === tail[i])) return false;
-  const map = {}; order.forEach((s, i) => (map[s] = tail[i]));
-  t.matches.forEach(m => { if (m.px && map[m.session]) m.session = map[m.session]; });
-  return true;
+  let ch = false;
+  if (!order.every((s, i) => s === tail[i])) {
+    const map = {}; order.forEach((s, i) => (map[s] = tail[i]));
+    t.matches.forEach(m => { if (m.px && map[m.session]) m.session = map[m.session]; });
+    ch = true;
+  }
+  // nombor game (G1, G2 …) ikut susunan sesi & meja, selagi pertandingan belum bermula
+  if (!t.matches.some(m => m.status === 'done' || m.lt)) {
+    const srt = t.matches.slice().sort((x, y) => (x.session - y.session) || (x.gi || 0) - (y.gi || 0));
+    srt.forEach((m, i) => { if (m.gn !== i + 1) { m.gn = i + 1; ch = true; } });
+  }
+  return ch;
 }
 // Kedudukan individu: menang, beza set, beza mata; serta rekod dengan setiap pasangan
 export function mixStandings(t) {

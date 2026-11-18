@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.14.3';
+const VERSION = '3.14.4';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -901,7 +901,7 @@ function matchRow(t, m, no) {
         return ss; })();
   const [ta, tb] = E.tieScore(t, r);
   const h = E.handicapInfo(t, m.a, m.b);
-  const ctx = m.mr ? `Pusingan ${m.mr}` : m.stage !== 'group' ? E.stageLabel(t, m) : (t.format === 'rr' ? 'Liga' : `Kumpulan ${m.group}`);
+  const ctx = m.px ? `Sesi ${m.session || '-'}` : m.stage !== 'group' ? E.stageLabel(t, m) : (t.format === 'rr' ? 'Liga' : `Kumpulan ${m.group}`);
   const status = done ? '<span class="mc-st ok">✓ Selesai</span>'
     : m.lt ? `<span class="mc-st on"><i class="pulse"></i>Meja ${m.lt}</span>`
     : has ? '<span class="mc-st on">Sedang dimainkan</span>'
@@ -988,11 +988,11 @@ function liveLine(t, m) {
 function viewResults(t) {
   if (store.isCloud(t.id)) cloud.watchLive(t.id);
   const playable = t.matches.filter(m => m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE' && m.status !== 'bye');
-  const mxR = E.isMixer(t) ? [...new Set(t.matches.map(m => m.mr))].sort((a, b) => a - b) : [];
-  const opts = [...mxR.map(r => ['mr' + r, `Pusingan ${r}`]), ...t.groups.map(g => [g.name, t.format === 'rr' ? 'Liga' : `Kumpulan ${g.name}`]),
+  const mxR = E.isMixer(t) ? [...new Set(t.matches.map(m => m.session))].sort((a, b) => a - b) : [];
+  const opts = [...mxR.map(r => ['mr' + r, `Sesi ${r} · ${E.sessionTime(t, r)}`]), ...t.groups.map(g => [g.name, t.format === 'rr' ? 'Liga' : `Kumpulan ${g.name}`]),
     ...(t.rounds.ko ? [['K', 'Kalah mati']] : []), ...(t.rounds.pool ? [['L', 'Pool kalah']] : []), ['ALL', 'Semua perlawanan']];
   if (!jsel || !opts.some(o => o[0] === jsel)) jsel = mxR.length ? 'ALL' : t.stage === 'ko' ? (t.rounds.ko ? 'K' : 'ALL') : (opts[0] || ['ALL'])[0];
-  const inSel = m => jsel === 'ALL' || (jsel.startsWith('mr') ? m.mr === +jsel.slice(2) : jsel === 'K' ? m.bracket === 'ko' : jsel === 'L' ? m.bracket === 'pool' : m.stage === 'group' && m.group === jsel);
+  const inSel = m => jsel === 'ALL' || (jsel.startsWith('mr') ? m.session === +jsel.slice(2) : jsel === 'K' ? m.bracket === 'ko' : jsel === 'L' ? m.bracket === 'pool' : m.stage === 'group' && m.group === jsel);
   if (jst === 'belum' && !playable.some(m => m.status !== 'done')) jst = 'semua';
   const sessions = [...new Set(t.matches.filter(m => m.session).map(m => m.session))].sort((a, b) => a - b);
   const shown = playable.filter(inSel).filter(m => jses === 'ALL' || m.session === +jses)
@@ -1272,7 +1272,7 @@ function viewMixStandings(t) {
     </tbody></table></div></div>
     ${mixMatrix(t, S)}
     <div class="row" style="margin:0 0 12px"><button class="pill-btn small" data-mxp="1"><span class="dot"></span>▶ Tonton undian</button></div>
-    <details class="card fold"><summary>🔁 Senarai pusingan & pemain rehat</summary>${[...new Set(t.matches.map(m => m.mr))].map(r => `<div class="sess">Pusingan ${r}${(t.mixRest || {})[r] && t.mixRest[r].length ? ` · rehat: ${t.mixRest[r].map(nm).join(', ')}` : ''}</div><div class="mlist">${t.matches.filter(m => m.mr === r).map(m => matchRow(t, m)).join('')}</div>`).join('')}</details>`;
+    <details class="card fold"><summary>🔁 Senarai sesi, pengadil & rehat</summary>${(() => { const U = LV.umpirePlan(t); return [...new Set(t.matches.map(m => m.session))].sort((x, y) => x - y).map(r => { const rs = LV.mixRestOf(t, r, U); return `<div class="sess">Sesi ${r} · ${esc(E.sessionTime(t, r))}${rs.length ? ` · 💤 rehat: ${rs.map(nm).join(', ')}` : ''}</div><div class="mlist">${t.matches.filter(m => m.session === r).sort((x, y) => String(x.table).localeCompare(String(y.table), 'ms', { numeric: true })).map(m => matchRow(t, m)).join('')}</div>`; }).join(''); })()}</details>`;
   $app.querySelectorAll('[data-mxp]').forEach(b => (b.onclick = () => playMixDraw(t, +b.dataset.mxp)));
   $app.querySelectorAll('[data-mxm]').forEach(b => (b.onclick = () => { _mxMode = b.dataset.mxm; viewMixStandings(t); }));
 }
@@ -2005,7 +2005,9 @@ function rubberNames(t, m, i) {
 let _kdSel = 'pending';
 async function viewKadSkor(t) {
   const K = await import('./poster-kit.js');
-  const ms = t.matches.filter(m => m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE' && m.status !== 'bye' && (_kdSel === 'all' || m.status !== 'done'));
+  const ms = t.matches.filter(m => m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE' && m.status !== 'bye' && (_kdSel === 'all' || m.status !== 'done'))
+    .sort((x, y) => ((x.session || 999) - (y.session || 999)) || String(x.table || '').localeCompare(String(y.table || ''), 'ms', { numeric: true }));
+  const U = LV.umpirePlan(t);
   const c = clubOf(t), team = E.isTeam(t), base = `${location.origin}${location.pathname}#/t/${t.id}/m/`;
   const card = m => {
     const f = E.fmtFor(t, m.stage), cols = f.bo, h = !team ? E.handicapInfo(t, m.a, m.b) : null;
@@ -2015,7 +2017,7 @@ async function viewKadSkor(t) {
     return `<div class="ks-card">
       <div class="ks-top"><div><b>${esc(t.name)}</b><br><span>${esc(c.short || '')} · ${esc(E.matchCode(m) || '')} · ${esc(E.stageLabel(t, m))}</span></div><img src="${K.qrDataURL(base + m.id, 120)}" alt=""></div>
       <div class="ks-vs"><b>${esc(E.pname(t, m.a))}</b> <span>lwn</span> <b>${esc(E.pname(t, m.b))}</b></div>
-      <div class="ks-meta">Meja: ______ &nbsp; Masa: ________ &nbsp; Format: ${esc(f.label.replace(/ \(.*\)/, ''))}${h && h.n && !h.pending && !h.missing ? ` &nbsp; Handicap: <b>${esc(E.pname(t, h.to))}</b> mula ${h.n}-0` : ''}</div>
+      <div class="ks-meta">${m.px ? `Sesi: <b>${m.session}</b> &nbsp; Meja: <b>${esc(String(m.table || '').replace(/^Meja\s*/i, ''))}</b> &nbsp; Masa: <b>${esc(E.sessionTime(t, m.session))}</b>${LV.umpireOf(t, m, U) ? ` &nbsp; Pengadil: <b>${esc(E.pname(t, LV.umpireOf(t, m, U)))}</b>` : ''}` : 'Meja: ______ &nbsp; Masa: ________'} &nbsp; Format: ${esc(f.label.replace(/ \(.*\)/, ''))}${h && h.n && !h.pending && !h.missing ? ` &nbsp; Handicap: <b>${esc(E.pname(t, h.to))}</b> mula ${h.n}-0` : ''}</div>
       ${m.rubbers.map((_, i) => `${team ? `<div class="ks-rub">${esc(E.rubberLabel(t, i))}</div>` : ''}${grid(i)}`).join('')}
       <div class="ks-foot"><span>Pemenang: ______________________</span><span>Tandatangan pengadil: ______________</span></div>
     </div>`;
