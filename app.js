@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.17.3';
+const VERSION = '3.17.4';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -349,7 +349,7 @@ function playGroupDraw(t) {
   playDeal({
     title: 'Cabutan Kumpulan', subtitle: subtitleOf(t), logos: clubOf(t).logos,
     intro: '<small>1. Semua nama dimasukkan ke dalam satu dek kad &nbsp; 2. Dek dikocok &nbsp; 3. Kad dicabut satu persatu dan dimasukkan ke kumpulan secara rawak. Setiap kumpulan mendapat satu nama dahulu sebelum pusingan seterusnya</small>',
-    boxes: G.map(g => ({ label: `Kumpulan ${g.name}`, slots: g.members.length })), seq,
+    boxes: G.map(g => ({ label: `Kumpulan ${g.name}`, slots: g.members.length })), seq, sound: true, music: true, scene: true,
   });
 }
 function playUnitDraw(t) {
@@ -364,7 +364,7 @@ function playUnitDraw(t) {
   playDeal({
     title: `Undian ${lab}`, subtitle: subtitleOf(t), logos: clubOf(t).logos,
     intro: `<small>1. Semua ${seq.length} nama peserta dimasukkan ke dalam satu dek kad &nbsp; 2. Dek dikocok &nbsp; 3. Kad dicabut satu persatu dan dimasukkan ke ${lab.toLowerCase()} secara rawak. Setiap ${lab.toLowerCase()} mendapat orang pertama dahulu, barulah orang kedua (${P[0].members.length} orang setiap ${lab.toLowerCase()})</small>`,
-    boxes: P.map((p, i) => ({ label: team ? p.name : `Regu ${i + 1}`, slots: p.members.length })), seq, doneText: 'Undian selesai',
+    boxes: P.map((p, i) => ({ label: team ? p.name : `Regu ${i + 1}`, slots: p.members.length })), seq, doneText: 'Undian selesai', sound: true, music: true, scene: true,
   });
 }
 // Undian regu bertukar ikut sesi: setiap nama dicabut secara rawak ke slot (Meja 1 A1/A2 lwn B1/B2, Meja 2 C1/C2 lwn D1/D2, pengadil, rehat)
@@ -408,7 +408,7 @@ function playBracketDraw(t, b) {
   playDeal({
     title: b === 'pool' ? 'Undian Pool Kalah' : 'Undian Kalah Mati', subtitle: subtitleOf(t), logos: clubOf(t).logos,
     intro: '<b>🔀 Menyusun bracket…</b>', prep: 'Menyusun bracket…', introMs: 600, speed: 1200,
-    boxes: ms.map((m, i) => ({ label: `Perlawanan ${i + 1}`, slots: 2, vs: true })), seq, doneText: 'Bracket lengkap',
+    boxes: ms.map((m, i) => ({ label: `Perlawanan ${i + 1}`, slots: 2, vs: true })), seq, doneText: 'Bracket lengkap', sound: true, music: true, scene: true,
   });
 }
 
