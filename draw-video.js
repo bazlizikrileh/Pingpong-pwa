@@ -192,9 +192,11 @@ async function pickCodec() {
   return null;
 }
 
-async function encodeWebCodecs(o, D, onP, cfg, snd) {
+async function encodeWebCodecs(o, D, onP, cfg, snd, P = {}) {
   const { Muxer, ArrayBufferTarget } = await import('./vendor/mp4-muxer.js');
-  const FPS = fpsFor(o);
+  // P.fps: bingkai sebenar; P.decl: kadar bingkai yang diisytiharkan kepada pengekod (lebih tinggi → setiap bingkai diberi bit lebih sedikit);
+  // P.qp: mod kuantiser tetap (jika disokong). Digunakan bila pengekod telefon tidak patuh kadar bit rendah.
+  const FPS = P.fps || fpsFor(o), DECL = P.decl || FPS;
   const target = new ArrayBufferTarget();
   const VW = D.cv.width, VH = D.cv.height;
   const muxer = new Muxer({ target, video: { codec: cfg.mux, width: VW, height: VH, frameRate: FPS },
@@ -217,9 +219,10 @@ async function encodeWebCodecs(o, D, onP, cfg, snd) {
   }
   let err = null, lastOut = Date.now();
   const enc = new VideoEncoder({ output: (ch, meta) => { lastOut = Date.now(); muxer.addVideoChunk(ch, meta); }, error: e => (err = e) });
-  const br = bitrateFor(o); // video panjang: kadar bit lebih rendah supaya saiz < ~12 MB untuk WhatsApp
-  const conf = { codec: cfg.codec, width: VW, height: VH, bitrate: br, framerate: FPS, avc: { format: 'avc' }, latencyMode: 'realtime' };
-  try { if (!(await VideoEncoder.isConfigSupported(conf)).supported) delete conf.latencyMode; } catch { delete conf.latencyMode; }
+  const br = bitrateFor(o); // video panjang: kadar bit lebih rendah supaya saiz kecil untuk WhatsApp
+  const conf = P.qp ? { codec: cfg.codec, width: VW, height: VH, framerate: DECL, bitrateMode: 'quantizer', avc: { format: 'avc' } }
+    : { codec: cfg.codec, width: VW, height: VH, bitrate: br, framerate: DECL, avc: { format: 'avc' }, latencyMode: 'realtime' };
+  try { if (!(await VideoEncoder.isConfigSupported(conf)).supported) { if (P.qp) throw new Error('NOQP'); delete conf.latencyMode; } } catch (e) { if (P.qp) throw new Error('NOQP'); delete conf.latencyMode; }
   enc.configure(conf);
   const total = Math.ceil(duration(o) * FPS);
   const STALL = new Error('STALL');
@@ -227,7 +230,7 @@ async function encodeWebCodecs(o, D, onP, cfg, snd) {
     if (err) throw err;
     D.draw(i / FPS);
     const vf = new VideoFrame(D.cv, { timestamp: Math.round(i * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
-    enc.encode(vf, { keyFrame: i % (FPS * 2) === 0 }); vf.close();
+    enc.encode(vf, { keyFrame: i % (FPS * 3) === 0, ...(P.qp ? { avc: { quantizer: P.qp } } : {}) }); vf.close();
     // tunggu pengekod (telefon lebih perlahan) — elak barisan bingkai bertimbun dalam memori sehingga telefon hang
     // Pengekod perkakasan telefon memegang beberapa bingkai sebelum mengeluarkan hasil — jadi benarkan barisan hingga 12.
     // Dianggap tersekat hanya jika tiada output langsung selama 8 saat.
@@ -324,7 +327,22 @@ export async function makeDrawVideo(o, onP) {
     } catch (e) { snd = null; }
   }
   if (cfg) {
-    try { return await encodeWebCodecs(o, D, onP, cfg, snd && snd.cfg ? snd : null); }
+    try {
+      // Sesetengah pengekod perkakasan (cth. Xiaomi) tidak patuh kadar bit rendah → fail besar.
+      // Cuba beberapa tetapan dan ambil yang pertama di bawah sasaran saiz.
+      const LIMIT = 8 * 1048576, sn = snd && snd.cfg ? snd : null, fps = fpsFor(o);
+      const tries = duration(o) > 40 ? [{}, { qp: 34 }, { fps: 15, decl: 45 }, { fps: 12, decl: 72 }] : [{}];
+      let best = null;
+      for (let k = 0; k < tries.length; k++) {
+        let b;
+        try { b = await encodeWebCodecs(o, D, (p, m) => onP && onP(p, k ? 'shrink' : m), cfg, sn, { fps, ...tries[k] }); }
+        catch (e) { if (e && e.message === 'NOQP') continue; throw e; }
+        if (!best || b.size < best.size) best = b;
+        if (b.size <= LIMIT) break;
+        onP && onP(0, 'shrink');
+      }
+      return best;
+    }
     catch (e) {
       // pengekod telefon tersekat → rakam secara masa nyata (lebih lama tetapi stabil)
       if (e && e.message === 'STALL' && window.MediaRecorder) { onP && onP(0, 'rec'); return encodeRecorder(o, D, p => onP && onP(p, 'rec'), snd); }
