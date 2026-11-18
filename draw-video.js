@@ -148,18 +148,24 @@ async function encodeWebCodecs(o, D, onP, cfg) {
   let err = null;
   const enc = new VideoEncoder({ output: (ch, meta) => muxer.addVideoChunk(ch, meta), error: e => (err = e) });
   const br = bitrateFor(o); // video panjang: kadar bit lebih rendah supaya saiz < ~12 MB untuk WhatsApp
-  enc.configure({ codec: cfg.codec, width: VW, height: VH, bitrate: br, framerate: FPS, avc: { format: 'avc' } });
+  const conf = { codec: cfg.codec, width: VW, height: VH, bitrate: br, framerate: FPS, avc: { format: 'avc' }, latencyMode: 'realtime' };
+  try { if (!(await VideoEncoder.isConfigSupported(conf)).supported) delete conf.latencyMode; } catch { delete conf.latencyMode; }
+  enc.configure(conf);
   const total = Math.ceil(duration(o) * FPS);
+  const STALL = new Error('STALL');
   for (let i = 0; i < total; i++) {
     if (err) throw err;
     D.draw(i / FPS);
     const vf = new VideoFrame(D.cv, { timestamp: Math.round(i * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
     enc.encode(vf, { keyFrame: i % (FPS * 2) === 0 }); vf.close();
     // tunggu pengekod (telefon lebih perlahan) — elak barisan bingkai bertimbun dalam memori sehingga telefon hang
-    while (enc.encodeQueueSize > 3) { if (err) throw err; await new Promise(r => setTimeout(r, 8)); }
+    const w0 = Date.now();
+    while (enc.encodeQueueSize > 3) { if (err) throw err; if (Date.now() - w0 > 6000) { try { enc.close(); } catch {} throw STALL; } await new Promise(r => setTimeout(r, 10)); }
     if (i % 6 === 0) { onP && onP(i / total); await new Promise(r => setTimeout(r, 0)); }
   }
-  await enc.flush(); enc.close(); muxer.finalize();
+  onP && onP(0.99);
+  await Promise.race([enc.flush(), new Promise((_, no) => setTimeout(() => no(STALL), 15000))]).catch(e => { try { enc.close(); } catch {} throw e; });
+  enc.close(); muxer.finalize();
   if (err) throw err;
   return new Blob([target.buffer], { type: 'video/mp4' });
 }
@@ -201,7 +207,15 @@ export async function makeDrawVideo(o, onP) {
   const sc = scaleFor(o);
   const D = o.scenes ? makeSceneDrawer(o, logos, sc) : makeDrawer(o, logos, null, sc);
   const cfg = await pickCodec();
-  return cfg ? encodeWebCodecs(o, D, onP, cfg) : encodeRecorder(o, D, onP);
+  if (cfg) {
+    try { return await encodeWebCodecs(o, D, onP, cfg); }
+    catch (e) {
+      // pengekod telefon tersekat → rakam secara masa nyata (lebih lama tetapi stabil)
+      if (e && e.message === 'STALL' && window.MediaRecorder) { onP && onP(0, 'rec'); return encodeRecorder(o, D, p => onP && onP(p, 'rec')); }
+      throw e;
+    }
+  }
+  return encodeRecorder(o, D, p => onP && onP(p, 'rec'));
 }
 
 export async function prepareDrawVideo(o, onP) {
