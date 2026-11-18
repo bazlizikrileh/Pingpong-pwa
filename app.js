@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.11.0';
+const VERSION = '3.11.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1200,11 +1200,11 @@ function viewMixStandings(t) {
   const S = E.mixStandings(t), done = t.matches.filter(m => m.status === 'done').length;
   const nm = id => esc(E.pname(t, id)), sgn = x => (x > 0 ? '+' : '') + x;
   $app.innerHTML = `${section('Keputusan', 'Kedudukan Individu')}
-    <div class="fmt-box">🔀 Regu bertukar · ${done}/${t.matches.length} perlawanan selesai<br><span class="muted small">Kedudukan: menang → beza set → beza mata. Tekan nama untuk lihat rekod dengan setiap pasangan.</span></div>
-    <div class="card"><div class="tw"><table class="mx-st"><thead><tr><th>#</th><th class="l">Pemain</th><th>Main</th><th>M</th><th>K</th><th>±Set</th><th>±Mata</th></tr></thead><tbody>
+    <div class="fmt-box">🔀 Regu bertukar · ${done}/${t.matches.length} perlawanan selesai<br><span class="muted small">Mata: Menang 3 · Seri 1 · Kalah 0. Sama mata → beza set → beza mata. Tekan nama untuk lihat rekod dengan setiap pasangan.</span></div>
+    <div class="card"><div class="tw"><table class="mx-st"><thead><tr><th>#</th><th class="l">Pemain</th><th>Main</th><th>M</th><th>K</th><th>±Set</th><th>±Skor</th><th>Mata</th></tr></thead><tbody>
     ${S.map((r, i) => `<tr><td>${i + 1}</td><td class="l"><details class="mx-d"><summary><b>${nm(r.id)}</b>${E.levelOf(t, E.pname(t, r.id)) && E.levelInfo(t, E.levelOf(t, E.pname(t, r.id))) ? ` <span class="muted small">${esc(E.levelInfo(t, E.levelOf(t, E.pname(t, r.id)))[1])}</span>` : ''}</summary>
       ${r.with.length ? `<div class="mx-w">${r.with.map(w => `<span class="${w.draw ? '' : w.win ? 'ok' : 'no'}">P${w.mr} · ${nm(w.mate)} · ${w.draw ? 'Seri' : w.win ? 'Menang' : 'Kalah'} ${w.s}</span>`).join('')}</div>` : '<span class="muted small">Belum bermain</span>'}</details></td>
-      <td>${r.p}</td><td><b>${r.w}</b></td><td>${r.l}</td><td>${sgn(r.sf - r.sa)}</td><td>${sgn(r.pf - r.pa)}</td></tr>`).join('')}
+      <td>${r.p}</td><td>${r.w}</td><td>${r.l}</td><td>${sgn(r.sf - r.sa)}</td><td>${sgn(r.pf - r.pa)}</td><td><b>${r.pts}</b></td></tr>`).join('')}
     </tbody></table></div></div>
     <details class="card fold"><summary>🔁 Senarai pusingan & pemain rehat</summary>${[...new Set(t.matches.map(m => m.mr))].map(r => `<div class="sess">Pusingan ${r}${(t.mixRest || {})[r] && t.mixRest[r].length ? ` · rehat: ${t.mixRest[r].map(nm).join(', ')}` : ''}</div><div class="mlist">${t.matches.filter(m => m.mr === r).map(m => matchRow(t, m)).join('')}</div>`).join('')}</details>`;
 }

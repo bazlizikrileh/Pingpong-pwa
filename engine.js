@@ -1038,5 +1038,6 @@ export function mixStandings(t) {
       R.with.push({ mate, win, draw: !!r.draw, mr: m.mr, s: A ? `${r.sa}-${r.sb}` : `${r.sb}-${r.sa}` });
     });
   }
-  return Object.values(rows).sort((x, y) => (y.w - x.w) || ((y.sf - y.sa) - (x.sf - x.sa)) || ((y.pf - y.pa) - (x.pf - x.pa)) || (x.l - y.l) || pname(t, x.id).localeCompare(pname(t, y.id)));
+  Object.values(rows).forEach(r => (r.pts = 3 * r.w + r.d));
+  return Object.values(rows).sort((x, y) => (y.pts - x.pts) || ((y.sf - y.sa) - (x.sf - x.sa)) || ((y.pf - y.pa) - (x.pf - x.pa)) || (x.l - y.l) || pname(t, x.id).localeCompare(pname(t, y.id)));
 }
