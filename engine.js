@@ -993,6 +993,26 @@ export function mixPlan(t, n = (t.individuals || []).length) {
   return { n, nt, act, rest: n - act, per, R, auto, matches, sessions: Math.ceil(matches / nt), min: Math.floor(slots / n), max: Math.ceil(slots / n) };
 }
 export function relevel(t) { (t.individuals || []).forEach(x => { if (x.lv && !levelOf(t, x.name)) takeLevel(t, { name: x.name, lv: x.lv }); }); }
+// Jadual Whist kitaran: setiap pemain berpasangan dengan setiap pemain lain TEPAT sekali dan menentang setiap
+// pemain lain TEPAT dua kali. Wujud untuk n % 4 == 0 (Z_(n-1) ∪ {∞}) dan n % 4 == 1 (Z_n, seorang rehat setiap pusingan).
+function whistRounds(n, budgetMs = 1500) {
+  if (n < 4 || (n % 4 !== 0 && n % 4 !== 1)) return null;
+  const inf = n % 4 === 0, m = inf ? n - 1 : n, INF = m, G = Math.floor(n / 4);
+  const d = (a, b) => { if (a === INF || b === INF) return 'i'; const x = ((a - b) % m + m) % m; return Math.min(x, m - x); };
+  const pts = Array.from({ length: m }, (_, i) => i); if (inf) pts.push(INF);
+  const t0 = Date.now();
+  while (Date.now() - t0 < budgetMs) {
+    for (let it = 0; it < 2000; it++) {
+      const p = shuffle(pts).slice(0, 4 * G), pc = {}, oc = {}; let ok = true;
+      for (let g = 0; g < G && ok; g++) { const [a1, a2, b1, b2] = p.slice(g * 4, g * 4 + 4);
+        for (const [x, y] of [[a1, a2], [b1, b2]]) { const k = d(x, y); if ((pc[k] = (pc[k] || 0) + 1) > 1) ok = false; } }
+      for (let g = 0; g < G && ok; g++) { const [a1, a2, b1, b2] = p.slice(g * 4, g * 4 + 4);
+        for (const [x, y] of [[a1, b1], [a1, b2], [a2, b1], [a2, b2]]) { const k = d(x, y); if ((oc[k] = (oc[k] || 0) + 1) > 2) ok = false; } }
+      if (ok) return Array.from({ length: m }, (_, r) => p.map(x => (x === INF ? INF : (x + r) % m)));
+    }
+  }
+  return null;
+}
 export function buildMixer(t, tries = 80) {
   relevel(t);
   const P = (t.individuals || []).map(x => x.id), n = P.length;
@@ -1010,7 +1030,7 @@ export function buildMixer(t, tries = 80) {
     for (let j = 0; j < pos.length; j += 4) {
       const [a1, a2, b1, b2] = pos.slice(j, j + 4);
       c += 100 * ((pc[k2(a1, a2)] || 0) + (pc[k2(b1, b2)] || 0));
-      c += 10 * ((oc[k2(a1, b1)] || 0) + (oc[k2(a1, b2)] || 0) + (oc[k2(a2, b1)] || 0) + (oc[k2(a2, b2)] || 0));
+      { const q = x => { const v = oc[x] || 0; return v * v; }; c += 10 * (q(k2(a1, b1)) + q(k2(a1, b2)) + q(k2(a2, b1)) + q(k2(a2, b2))); } // kuasa dua: sebar pertemuan lawan sama rata
       if (bal) c += 8 * Math.abs(LV[a1] + LV[a2] - LV[b1] - LV[b2]);
     }
     return c;
@@ -1018,7 +1038,27 @@ export function buildMixer(t, tries = 80) {
   const T = tablesOf(t), NT = T.length;
   t.participants = []; t.matches = []; t.groups = []; t.rounds = {}; t.mixRest = {}; t.format = 'rr';
   let gn = 0, sess = 0;
+  // Mod penuh: cuba jadual Whist sempurna (pasangan sekali, lawan tepat dua kali); label pemain diimbangkan ikut tahap
+  let WH = PL.auto && !t.mixGreedy ? whistRounds(n) : null;
+  if (WH && WH.length !== R) WH = null;
+  let lab = shuffle(P);
+  if (WH && bal) {
+    const imb = L => WH.reduce((a, rd) => { for (let j = 0; j < rd.length; j += 4) a += Math.abs(LV[L[rd[j]]] + LV[L[rd[j + 1]]] - LV[L[rd[j + 2]]] - LV[L[rd[j + 3]]]); return a; }, 0);
+    let cur = imb(lab);
+    for (let it = 0; it < 4000; it++) { const i = Math.floor(Math.random() * n), j = Math.floor(Math.random() * n); if (i === j) continue;
+      [lab[i], lab[j]] = [lab[j], lab[i]]; const c2 = imb(lab); if (c2 <= cur) cur = c2; else [lab[i], lab[j]] = [lab[j], lab[i]]; }
+  }
   for (let r = 1; r <= R; r++) {
+    if (WH) {
+      const best = WH[r - 1].map(x => lab[x]), rs = P.filter(id => !best.includes(id));
+      t.mixRest[r] = rs;
+      for (let j = 0; j < best.length / 4; j++) {
+        const [a1, a2, b1, b2] = best.slice(j * 4, j * 4 + 4);
+        const mk = (x, y) => { const p = { id: uid(), name: `${nm(x)} & ${nm(y)}`, members: [nm(x), nm(y)], ids: [x, y], unit: '', hc: 0, rd: r }; t.participants.push(p); return p.id; };
+        t.matches.push(blankMatch(t, { stage: 'group', group: 'M', gn: ++gn, gi: j, a: mk(a1, a2), b: mk(b1, b2), mr: r, px: [a1, a2, b1, b2] }));
+      }
+      continue;
+    }
     const restN = PL.rest;
     const order = shuffle(P).sort((a, b) => (rest[a] - rest[b]) || (lastRest.has(a) - lastRest.has(b)));
     const rs = order.slice(0, restN), act = P.filter(id => !rs.includes(id));
