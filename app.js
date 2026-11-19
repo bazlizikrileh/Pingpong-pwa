@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.21.2';
+const VERSION = '3.21.3';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2316,7 +2316,19 @@ function viewLiveScore(t, mid) {
   if (!S && remote) S = { ri: remote.ri, rs: remote.rs.map(r => r.map(g => [...g])), cur: [...remote.cur], swap: !!remote.sw };
   if (!S) { const rs = m.rubbers.map(r => r.sets.map(g => [...g])); let ri = rs.findIndex(s => !lsRubberDone(t, m, s)); if (ri < 0) ri = nR - 1; S = { ri, rs, cur: lsStart(t, m, ri), swap: false }; }
   while (S.rs.length < nR) S.rs.push([]);
+  if (S.lu) m.lineup = { ...(m.lineup || {}), ...S.lu };
   const H = (_lsHist[m.id] = _lsHist[m.id] || []);
+  // Pilih pemain bagi perlawanan semasa (berpasukan) terus di skrin jaga skor → handicap dikira
+  const luTypes = E.rubberTypes(t), luKey = i => { const n = luTypes.slice(0, i + 1).filter(x => x === 'S').length; return n === 1 ? 's' : 's' + n; };
+  const luPick = () => {
+    if (!E.isTeam(t) || allDone()) return '';
+    const PA = E.pobj(t, m.a) || { members: [] }, PB = E.pobj(t, m.b) || { members: [] }, L = m.lineup || {};
+    const sel = (k, mem) => `<select data-lsu="${k}"><option value="">— pilih —</option>${mem.map(n => `<option ${n === L[k] ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>`;
+    const D = luTypes[S.ri] === 'D', ks = luKey(S.ri);
+    const row = D ? `${sel('ad1', PA.members)} &amp; ${sel('ad2', PA.members)} <span class="muted">lwn</span> ${sel('bd1', PB.members)} &amp; ${sel('bd2', PB.members)}`
+      : `${sel('a' + ks, PA.members)} <span class="muted">lwn</span> ${sel('b' + ks, PB.members)}`;
+    return `<div class="card soft lu-live"><div class="small"><b>👥 Pemain ${esc(E.rubberLabel(t, S.ri))}</b>${t.handicap ? ' — pilih untuk mengira handicap' : ''}</div><div class="lu">${row}</div></div>`;
+  };
   const allDone = () => S.rs.every(s => lsRubberDone(t, m, s));
   const push = () => {
     takeNote = '';
@@ -2357,6 +2369,7 @@ function viewLiveScore(t, mid) {
         <div class="sb-nm">${esc(nm)}</div><div class="sb-pt">${S.cur[k]}</div><div class="sb-g">Set menang <b>${k ? wb : wa}</b></div></button>`;
     $app.innerHTML = `${back}${eyebrow}${takeNote}
       ${E.isTeam(t) ? `<div class="sb-tabs">${m.rubbers.map((_, i) => `<button type="button" class="pill-btn small ${i === S.ri ? 'brand' : 'light'}" data-ri="${i}">${esc(E.rubberLabel(t, i))}${lsRubberDone(t, m, S.rs[i]) ? ' ✓' : ''}</button>`).join('')}</div>` : ''}
+      ${luPick()}
       ${done ? '' : `<div class="sb-set">SET ${sets.length + 1}</div>`}
       <div class="sb${S.swap ? ' sw' : ''}">${side(0, A)}${side(1, B)}</div>
       <div class="sb-ctl"><button type="button" class="pill-btn light small" data-mn="${S.swap ? 1 : 0}">−1</button>
@@ -2373,6 +2386,14 @@ function viewLiveScore(t, mid) {
       <p class="muted small">Tekan nama pemain untuk tambah 1 mata. <b>−1</b> tolak satu mata pemain itu dalam set semasa. <b>↶ Undur</b> batalkan tindakan terakhir, termasuk set yang baru tamat. Set tamat sendiri pada 11 (beza 2). Skrin tidak akan padam semasa halaman ini dibuka. Penonton nampak skor ini di tab Langsung dan Mod TV.</p>`;
     $app.querySelectorAll('[data-pt]').forEach(b => (b.onclick = () => point(+b.dataset.pt, 1)));
     $app.querySelectorAll('[data-mn]').forEach(b => (b.onclick = () => point(+b.dataset.mn, -1)));
+    $app.querySelectorAll('[data-lsu]').forEach(sl => (sl.onchange = () => {
+      const before = lsStart(t, m, S.ri);
+      m.lineup = { ...(m.lineup || {}), [sl.dataset.lsu]: sl.value }; S.lu = { ...(S.lu || {}), [sl.dataset.lsu]: sl.value };
+      // set semasa belum bermula (masih pada mata mula lama) → guna mata mula handicap baharu
+      if (S.cur[0] === before[0] && S.cur[1] === before[1]) S.cur = lsStart(t, m, S.ri);
+      if (edit) { const tm = t.matches.find(x => x.id === m.id); if (tm) { tm.lineup = { ...m.lineup }; save(t); } }
+      push(); draw();
+    }));
     $app.querySelectorAll('[data-ri]').forEach(b => (b.onclick = () => { H.push(JSON.stringify(S)); S.ri = +b.dataset.ri; S.cur = lsStart(t, m, S.ri); push(); draw(); }));
     document.getElementById('sbUndo').onclick = () => { if (!H.length) return; S = JSON.parse(H.pop()); push(); draw(); };
     document.getElementById('sbSnd').onclick = () => { ls.set('pingpong:lsSound', ls.get('pingpong:lsSound') === '0' ? null : '0'); tick('up'); draw(); };
