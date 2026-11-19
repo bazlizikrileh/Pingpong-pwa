@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.30.1';
+const VERSION = '3.30.2';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1539,7 +1539,7 @@ function rulesOf(t) {
     rules.push(`Format setiap perlawanan: ${E.fmtFor(t, 'group').label}. Tiada keputusan seri.`);
     if (E.lvScheme(t)) rules.push('Regu diimbangkan mengikut tahap pemain supaya kekuatan kedua-dua pihak hampir sama.');
     rules.push('Mata individu: kedua-dua pemain dalam regu yang menang mendapat 3 mata; regu yang kalah 0 mata.');
-    rules.push('Kedudukan individu ditentukan mengikut turutan: (1) jumlah mata, (2) beza set (set menang tolak set kalah), (3) beza skor (jumlah mata permainan dijaringkan tolak dibolosi). Juara ialah pemain di tangga teratas selepas semua perlawanan selesai.');
+    rules.push('Kedudukan individu ditentukan mengikut turutan: (1) jumlah mata, (2) beza set (set menang tolak set kalah), (3) beza skor (jumlah mata permainan dimenangi tolak dibolosi). Juara ialah pemain di tangga teratas selepas semua perlawanan selesai.');
     rules.push('Pengadil: pemain yang tidak bermain dalam sesi itu, secara bergilir. Pemain selebihnya berehat.');
   } else if (t.format === 'rr') rules.push('Format liga: setiap peserta bertemu semua peserta lain sekali. Juara ialah peserta di tangga teratas selepas semua perlawanan selesai.', `Format perlawanan: ${gf}.`);
   else if (t.format === 'ko') rules.push(`Kalah mati sahaja: ${kf}.`);
@@ -2828,7 +2828,7 @@ function mixAwards(t, S) {
   if (cons) out.push(card('🎯', 'Pemain paling konsisten', nm(cons.id), (cons.sa ? `hanya kalah ${cons.sa} set dalam ${cons.p} perlawanan` : `tidak kalah sebarang set dalam ${cons.p} perlawanan`)));
   // Penjaring mata terbanyak
   const pts = P.slice().sort((x, y) => y.pf - x.pf)[0];
-  if (pts) out.push(card('🏓', 'Mata permainan terbanyak', nm(pts.id), `${pts.pf} mata dijaringkan`));
+  if (pts) out.push(card('🏓', 'Mata permainan terbanyak', nm(pts.id), `${pts.pf} mata dimenangi`));
   // Pembawa pasangan: pasangan menang lebih kerap bersamanya berbanding dengan pasangan lain
   const res = {}; ms.forEach(m => m.px.forEach((id, i) => (res[id] = res[id] || []).push({ m, win: m.winner === (i < 2 ? m.a : m.b), mate: m.px[i < 2 ? 1 - i : 5 - i] })));
   const uplift = Object.keys(res).map(id => { let u = 0, n = 0;
@@ -2865,7 +2865,7 @@ function unitAwards(t, played) {
   const cons = S.slice().sort((x, y) => x.sa / x.p - y.sa / y.p || y.w - x.w)[0];
   if (cons) out.push(card('🎯', 'Paling konsisten', nm(cons.id), (cons.sa ? `hanya kalah ${cons.sa} set dalam ${cons.p} perlawanan` : `tidak kalah sebarang set dalam ${cons.p} perlawanan`)));
   const pts = S.slice().sort((x, y) => y.pf - x.pf)[0];
-  if (pts) out.push(card('🏓', 'Mata permainan terbanyak', nm(pts.id), `${pts.pf} mata dijaringkan dalam ${pts.p} perlawanan`));
+  if (pts) out.push(card('🏓', 'Mata permainan terbanyak', nm(pts.id), `${pts.pf} mata dimenangi dalam ${pts.p} perlawanan`));
   const dom = S.slice().sort((x, y) => y.c - x.c)[0];
   if (dom && dom.c > 0 && dom.id !== pts.id) out.push(card('📈', 'Purata beza mata terbaik', nm(dom.id), `+${dom.c.toFixed(1)} mata setiap perlawanan`));
   return `<section class="rp-sec pb"><h3>🏅 Anugerah &amp; Statistik</h3><div class="aw-grid">${out.join('')}</div>
