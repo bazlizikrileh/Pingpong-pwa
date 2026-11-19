@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.30.0';
+const VERSION = '3.30.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2907,7 +2907,7 @@ function recapData(t) {
     when: [d && !isNaN(d) ? `${HARI[d.getDay()]}, ${fmtDate(t.date)}` : '', t.startTime ? E.sessionTime(t, 1) : ''].filter(Boolean).join(' · '),
     where: t.venue === 'X' ? t.venueName || '' : E.VENUES[t.venue] || '',
     c1: cs.getPropertyValue('--hd1').trim(), c2: cs.getPropertyValue('--hd2').trim(), url: appUrl(`t/${t.id}/laporan`),
-    stats: [{ ic: '👥', n: (mixer ? t.individuals : t.participants).length, label: mixer ? 'Pemain' : UNIT(t) }, { ic: '🏓', n: played.length, label: 'Perlawanan' }, { ic: '🎯', n: sets, label: 'Set dimainkan' }, { ic: '⚡', n: pts, label: 'Mata dijaringkan' }],
+    stats: [{ ic: '👥', n: (mixer ? t.individuals : t.participants).length, label: mixer ? 'Pemain' : UNIT(t) }, { ic: '🏓', n: played.length, label: 'Perlawanan' }, { ic: '🎯', n: sets, label: 'Set dimainkan' }, { ic: '⚡', n: pts, label: 'Mata dimainkan' }],
   };
   // kedudukan individu (regu bertukar) atau liga terlalu besar untuk matriks → jadual; selain itu matriks setiap kumpulan + jumlah mata
   const big = t.format === 'rr' && t.groups[0] && t.groups[0].members.length > 12;
