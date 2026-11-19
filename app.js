@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.21.4';
+const VERSION = '3.21.5';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -758,7 +758,7 @@ function viewSetupCore(t, part = 'tetapan') {
       <div class="row"><input id="pin" inputmode="numeric" maxlength="8" placeholder="cth. 2468" style="max-width:160px;font-family:var(--mono);font-size:18px">
       <button class="pill-btn brand small" id="savePin">Simpan PIN</button><button class="pill-btn light small" id="genPin">Jana rawak</button></div>
       <p class="muted small" id="pinMsg"></p>
-      <div class="row" style="gap:6px;flex-wrap:wrap"><button type="button" class="pill-btn orange small" id="pinWa"><span class="dot"></span>💬 Kongsi ke group WhatsApp</button><button type="button" class="pill-btn light small" id="pinCopy">📋 Salin mesej</button></div>
+      <div class="row" style="gap:6px;flex-wrap:wrap"><button type="button" class="pill-btn orange small" id="pinWa"><span class="dot"></span>💬 Kongsi ke group WhatsApp</button><button type="button" class="pill-btn light small" id="pinCopy">📋 Salin mesej</button><button type="button" class="pill-btn light small" id="pinPrev">👁️ Lihat mesej</button></div>
       <p class="muted small" style="margin:6px 0 0">Mesej mengandungi pautan portal, cara pilih 👤 Saya untuk tahu status (bermain / pengadil / bersedia), notifikasi dan cara jaga skor dengan PIN.</p></div>
       <div class="card"><label class="test-chk" style="margin:0"><input type="checkbox" id="hideChk" ${isHidden(t) ? 'checked' : ''}> <span>🙈 <b>Sembunyikan dari senarai awam</b><br><small class="muted">Peserta tidak nampak di laman utama, tetapi pautan terus masih boleh dibuka.</small></span></label></div>`
       : `<div class="notice">📱 Pertandingan ini disimpan dalam peranti ini sahaja. ${cloud.isAdmin() ? '<button class="pill-btn small brand" id="upNow">☁️ Pindah ke awan</button>' : 'Log masuk sebagai admin untuk memindahkannya ke awan supaya semua orang boleh melihat dan menghantar skor.'}</div><br>`}
@@ -801,6 +801,16 @@ function viewSetupCore(t, part = 'tetapan') {
       if (v !== cur) { if (!confirm(`PIN ${v} belum disimpan. Simpan sekarang dan kongsi?`)) return ''; await cloud.setPin(t.id, v); document.getElementById('pinMsg').textContent = `✅ PIN disimpan: ${v}`; }
       return v; };
     document.getElementById('pinWa').onclick = async () => { const p = await pinNow(); if (p) window.open(waLink(pinMessage(t, p)), '_blank'); };
+    document.getElementById('pinPrev').onclick = () => {
+      const v = pinIn.value.trim(), txt = pinMessage(t, /^\d{4,8}$/.test(v) ? v : '____'), md = document.getElementById('modal');
+      md.innerHTML = `<div class="sheet"><div class="row" style="justify-content:space-between"><h3 style="margin:0">Mesej WhatsApp</h3><button class="pill-btn light small" id="mx">✕</button></div>
+        ${/^\d{4,8}$/.test(v) ? '' : '<p class="notice small">PIN belum diisi. Tekan <b>Jana rawak</b> dahulu.</p>'}
+        <div class="wa-bubble">${esc(txt).replace(/\*([^*\n]+)\*/g, '<b>$1</b>').replace(/_([^_\n]+)_/g, '<i>$1</i>')}</div>
+        <div class="row" style="gap:6px;margin-top:10px"><button type="button" class="pill-btn small" style="background:#25d366;color:#fff" id="pvWa">💬 Kongsi ke WhatsApp</button><button type="button" class="pill-btn light small" id="pvCp">📋 Salin</button></div></div>`;
+      md.hidden = false; md.onclick = e => { if (e.target === md || e.target.id === 'mx') md.hidden = true; };
+      document.getElementById('pvWa').onclick = () => { md.hidden = true; document.getElementById('pinWa').click(); };
+      document.getElementById('pvCp').onclick = () => { md.hidden = true; document.getElementById('pinCopy').click(); };
+    };
     document.getElementById('pinCopy').onclick = async () => { const p = await pinNow(); if (!p) return; try { await navigator.clipboard.writeText(pinMessage(t, p)); toast('Mesej disalin. Tampal di group WhatsApp.'); } catch { prompt('Salin mesej ini:', pinMessage(t, p)); } };
     document.getElementById('savePin').onclick = async () => {
       const v = pinIn.value.trim();
