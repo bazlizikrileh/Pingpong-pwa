@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.19.5';
+const VERSION = '3.20.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1540,9 +1540,9 @@ function rosterOf(t) {
   const regName = r => r.partner ? `${r.name} & ${r.partner}` : r.name;
   const base = E.usesDraw(t) ? personsOf(t) : t.participants.map(p => p.name);
   const units = Object.fromEntries([...t.individuals, ...t.participants].map(x => [key(x.name), x.unit || '']));
-  const out = base.map(n => { const r = regs.find(x => key(regName(x)) === key(n) || key(x.name) === key(n)); return { name: n, partner: '', unit: r ? r.unit : units[key(n)] || '', level: r ? r.level : E.levelOf(t, n) || '', status: 'ok', uid: r ? r.uid : '' }; });
+  const out = base.map(n => { const r = regs.find(x => key(regName(x)) === key(n) || key(x.name) === key(n)); return { name: n, partner: '', unit: r ? r.unit : units[key(n)] || '', level: r ? r.level : E.levelOf(t, n) || '', status: 'ok', uid: r ? r.uid : '', rid: r ? r.id : '', full: r ? r.full || '' : '' }; });
   const have = new Set(base.map(key));
-  regs.forEach(r => { if (!have.has(key(regName(r))) && !have.has(key(r.name))) out.push({ ...r }); });
+  regs.forEach(r => { if (!have.has(key(regName(r))) && !have.has(key(r.name))) out.push({ ...r, rid: r.id }); });
   return out;
 }
 function levelsCard(t) {
@@ -1713,6 +1713,19 @@ function wireShare(t) {
   }));
 }
 
+// Penganjur ubah nama peserta (tanpa pendaftaran baharu): senarai, regu, tahap, bayaran & dokumen pendaftaran
+function renamePerson(t, oldN, newN) {
+  const k = s => String(s || '').trim().toLowerCase();
+  if (!newN || k(oldN) === k(newN)) return false;
+  t.individuals.forEach(x => { if (k(x.name) === k(oldN)) x.name = newN; });
+  t.participants.forEach(p => {
+    if (k(p.name) === k(oldN)) p.name = newN;
+    if (p.members) { p.members = p.members.map(m => (k(m) === k(oldN) ? newN : m)); if (p.ids && p.members.length === 2 && /&/.test(p.name)) p.name = `${p.members[0]} & ${p.members[1]}`; }
+  });
+  if (t.levels) for (const n of Object.keys(t.levels)) if (k(n) === k(oldN)) { t.levels[newN] = t.levels[n]; delete t.levels[n]; }
+  if (t.paid && t.paid[k(oldN)]) { t.paid[k(newN)] = t.paid[k(oldN)]; delete t.paid[k(oldN)]; }
+  return true;
+}
 // ---------- Pendaftaran sendiri ----------
 // Status bayaran yuran (disimpan dalam data pertandingan; hanya penganjur nampak)
 const payKey = r => String(r.partner ? `${r.name} & ${r.partner}` : r.name).trim().toLowerCase();
@@ -1735,7 +1748,8 @@ function regCard(t) {
   const S = E.HC_SCHEMES[t.hcMode], lvName = c => { const L = E.levelInfo(t, c); return L ? L[1] : ''; };
   const notIn = ok.filter(r => !personsOf(t).some(n => n.toLowerCase() === r.name.toLowerCase()));
   const formHtml = r => `<div class="reg-form" id="regForm" ${mine && !r ? 'hidden' : ''}>
-      <div class="grid2"><div><label>Nama paparan</label><input id="rgName" maxlength="40" value="${esc(r ? r.name : (cloud.state.user?.name || '').split(' ').slice(0, 2).join(' '))}"></div>
+      <label>Nama penuh</label><input id="rgFull" maxlength="80" value="${esc(r ? r.full || '' : cloud.state.user?.name || '')}" placeholder="cth. Mohd Hazlan bin Mohd Haliman">
+      <div class="grid2"><div><label>Nama panggilan <small class="muted">(untuk jadual & undian)</small></label><input id="rgName" maxlength="40" value="${esc(r ? r.name : (cloud.state.user?.name || '').split(' ').slice(0, 2).join(' '))}" placeholder="cth. Hazlan"></div>
       <div><label>Unit / Jabatan / Kumpulan</label><input id="rgUnit" maxlength="40" value="${esc(r ? r.unit : '')}"></div></div>
       ${S ? `<label>Tahap</label><select id="rgLv">${opt({ '': '— pilih tahap —', ...Object.fromEntries(S.levels.map(l => [l[0], l[1]])) }, r ? r.level : '')}</select>` : ''}
       ${t.entryMode === 'double' ? `<label>Nama pasangan</label><input id="rgPartner" maxlength="40" value="${esc(r ? r.partner : '')}" placeholder="pasangan anda">` : ''}
@@ -1753,8 +1767,9 @@ ${esc(t.regCond)}</div>` : ''}
         ${regOn(t) ? `<a class="pill-btn light small" href="#/daftar/${t.id}">Ubah / batal</a>` : ''}</div>`
       : regOn(t) ? `<a class="pill-btn orange" href="#/daftar/${t.id}"><span class="dot"></span>📝 ${admin ? 'Buka halaman pendaftaran' : 'Daftar penyertaan'}</a>` : ''}
     ${rows.length ? `<div class="reg-list">${rows.map((r, i) => `<div class="reg-row ${r.status}"><span class="no">${i + 1}</span><span class="nm"><b>${esc(r.name)}</b>${r.partner ? ` &amp; ${esc(r.partner)}` : ''}
-        <small>${[r.level ? lvName(r.level) : '', r.unit].filter(Boolean).map(esc).join(' · ')}${admin && r.note ? ` · <i>${esc(r.note)}</i>` : ''}${admin && !r.uid ? '<i>ditambah penganjur</i>' : ''}</small></span>
+        <small>${[admin ? r.full : '', r.level ? lvName(r.level) : '', r.unit].filter(Boolean).map(esc).join(' · ')}${admin && r.note ? ` · <i>${esc(r.note)}</i>` : ''}${admin && !r.uid ? '<i>ditambah penganjur</i>' : ''}</small></span>
         <span class="st">${REG_ST[r.status][0]}</span>
+        ${admin ? `<button type="button" class="pay" data-ren="${esc(r.name)}" data-rid="${esc(r.rid || '')}" title="Ubah nama">✏️</button>` : ''}
         ${admin ? `<button type="button" class="pay ${isPaid(t, r) ? 'on' : ''}" data-pay="${esc(payKey(r))}" title="Status bayaran">${isPaid(t, r) ? '💰' : '○'}</button>` : ''}
         ${admin && r.uid ? `<span class="act">${r.status !== 'ok' ? `<button type="button" class="pill-btn small light" data-rok="${r.id}">✓</button>` : ''}${r.status !== 'no' ? `<button type="button" class="pill-btn small light" data-rno="${r.id}">✕</button>` : ''}<button type="button" class="pill-btn small light" data-rdel="${r.id}">🗑</button></span>` : ''}</div>`).join('')}</div>` : ''}
     ${admin && rows.length ? payBar(t, rows) : ''}
@@ -1779,9 +1794,9 @@ function wireReg(t) {
     try {
       const editId = _rgEdit && _rgEdit !== 'new' ? _rgEdit : '', isNew = !editId;
       const firstReg = !(cloud.state.regs[t.id] || []).some(r => r.uid === cloud.myUid());
-      const data = { name, unit: $('rgUnit').value.trim(), level: $('rgLv') ? $('rgLv').value : '', partner: $('rgPartner') ? $('rgPartner').value.trim() : '', note: $('rgNote').value.trim() };
+      const data = { name, full: $('rgFull') ? $('rgFull').value.trim() : '', unit: $('rgUnit').value.trim(), level: $('rgLv') ? $('rgLv').value : '', partner: $('rgPartner') ? $('rgPartner').value.trim() : '', note: $('rgNote').value.trim() };
       await cloud.register(t.id, data, editId);
-      if (firstReg || (editId && editId === cloud.myUid())) ls.set('pingpong:profile', JSON.stringify({ name: data.name, unit: data.unit, level: data.level }));
+      if (firstReg || (editId && editId === cloud.myUid())) ls.set('pingpong:profile', JSON.stringify({ name: data.name, full: data.full, unit: data.unit, level: data.level }));
       ls.set('pingpong:myRegs', JSON.stringify([...new Set([t.id, ...myRegTids()])].slice(0, 30)));
       try { const L = JSON.parse(ls.get('pingpong:regn:' + t.id) || '[]'); if (!L.includes(data.name)) L.push(data.name); ls.set('pingpong:regn:' + t.id, JSON.stringify(L.slice(-10))); } catch {}
       _rgEdit = null;
@@ -1793,6 +1808,14 @@ function wireReg(t) {
   $app.querySelectorAll('[data-rok],[data-rno]').forEach(b => (b.onclick = async () => {
     const rid = b.dataset.rok || b.dataset.rno, ok = !!b.dataset.rok, rg = (cloud.state.regs[t.id] || []).find(x => x.id === rid), uid = rg ? rg.uid : rid;
     try { await cloud.setRegStatus(t.id, rid, ok ? 'ok' : 'no'); PUSH.send([`reg:${t.id}:${uid}`], ok ? '✅ Pendaftaran disahkan' : '✕ Pendaftaran ditolak', t.name, `#/daftar/${t.id}`, 'myreg-' + t.id); } catch (e) { toast('Gagal: ' + (e.code || e.message)); }
+  }));
+  $app.querySelectorAll('[data-ren]').forEach(b => (b.onclick = async () => {
+    const old = b.dataset.ren, rid = b.dataset.rid, reg = rid ? (cloud.state.regs[t.id] || []).find(x => x.id === rid) : null;
+    const nv = (prompt(`Nama panggilan (dipapar dalam jadual & undian)`, old) || '').trim(); if (!nv) return;
+    const full = reg ? (prompt('Nama penuh (pilihan)', reg.full || '') ?? (reg.full || '')).trim() : '';
+    if (renamePerson(t, old, nv)) save(t);
+    if (reg) try { await cloud.adminEditReg(t.id, rid, { name: nv.slice(0, 50), full: full.slice(0, 80) }); } catch (e) { try { await cloud.adminEditReg(t.id, rid, { name: nv.slice(0, 50) }); } catch (e2) { toast('Gagal kemas kini pendaftaran: ' + (e2.code || e2.message), 4000); } }
+    toast('Nama dikemas kini'); render();
   }));
   $app.querySelectorAll('[data-pay]').forEach(b => (b.onclick = () => { t.paid = { ...(t.paid || {}) }; const k = b.dataset.pay; if (t.paid[k]) delete t.paid[k]; else t.paid[k] = 1; save(t); render(); }));
   if ($('payCopy')) $('payCopy').onclick = async () => {
@@ -1835,7 +1858,8 @@ function viewDaftar(t) {
   const lvOpts = S ? S.levels.filter(l => !(t.regLevels || []).length || t.regLevels.includes(l[0]) || (r && r.level === l[0])) : [];
   const form = `<div class="reg-form" id="regForm">
       ${!first && !r ? '<div class="section-title" style="margin-top:0">➕ Daftar orang lain</div>' : ''}
-      <label>Nama</label><input id="rgName" maxlength="40" value="${esc(r ? r.name : first ? prof.name || '' : '')}" placeholder="nama seperti dikenali" autocomplete="${first ? 'name' : 'off'}">
+      <label>Nama penuh</label><input id="rgFull" maxlength="80" value="${esc(r ? r.full || '' : first ? prof.full || '' : '')}" placeholder="cth. Mohd Hazlan bin Mohd Haliman" autocomplete="${first ? 'name' : 'off'}">
+      <label>Nama panggilan <small class="muted">(dipapar dalam jadual, undian & keputusan)</small></label><input id="rgName" maxlength="40" value="${esc(r ? r.name : first ? prof.name || '' : '')}" placeholder="cth. Hazlan">
       <label>Unit / Jabatan / Kumpulan (pilihan)</label><input id="rgUnit" maxlength="40" value="${esc(r ? r.unit : first ? prof.unit || '' : '')}">
       ${S ? `<label>Tahap</label><select id="rgLv">${opt({ '': '— pilih tahap —', ...Object.fromEntries(lvOpts.map(l => [l[0], l[1]])) }, r ? r.level : first ? prof.level || '' : '')}</select>` : ''}
       ${t.entryMode === 'double' ? `<label>Nama pasangan</label><input id="rgPartner" maxlength="40" value="${esc(r ? r.partner : '')}">` : ''}
@@ -1986,6 +2010,8 @@ const normN = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').tri
 function autoMe(t) {
   if (ls.get(meKey(t)) || ls.get('pingpong:meSet:' + t.id) || canAdmin(t)) return; // pilihan sendiri ("Saya ialah…") sentiasa diutamakan
   let names = []; try { names = JSON.parse(ls.get('pingpong:regn:' + t.id) || '[]'); } catch {}
+  // nama terkini dalam dokumen pendaftaran saya (cth. selepas penganjur mengubah nama)
+  const uid = cloud.myUid && cloud.myUid(); if (uid) (cloud.state.regs[t.id] || []).filter(r => r.uid === uid).forEach(r => names.unshift(r.name));
   if (!names.length && ls.get('pingpong:regd:' + t.id) && profile().name) names = [profile().name];
   if (!names.length) return;
   const want = names.map(normN);
