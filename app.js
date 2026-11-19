@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.19.2';
+const VERSION = '3.19.3';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -433,7 +433,7 @@ function viewHome() {
       regOn(t) ? (regLive(t) ? '<span class="tg ok">Pendaftaran dibuka</span>' : '<span class="tg">Penuh</span>') : '',
       t.stage === 'group' || t.stage === 'ko' ? '<span class="tg live">● Sedang berlangsung</span>' : '',
       t.hcMode && t.hcMode !== 'off' ? '<span class="tg">Handicap</span>' : '',
-      t.regCond ? `<span class="tg">${esc(t.regCond)}</span>` : '',
+      t.regCond ? `<span class="tg">${esc(condShort(t.regCond))}</span>` : '',
       store.isCloud(t.id) && isHidden(t) ? '<span class="tg mute">🙈 Tersembunyi</span>' : '',
       store.isLocal(t.id) ? '<span class="tg mute">📱 Peranti ini</span>' : '',
       cloud.isAdmin() ? `<span class="tg mute">👤 ${esc(t.createdBy ? t.createdBy.name : 'pencipta tidak direkod')}</span>` : '',
@@ -563,7 +563,7 @@ function settingsFormAll(t, locked) {
       <div><label>Had peserta</label><input name="regMax" maxlength="30" value="${esc(t.regMaxText || (t.regMax ? String(t.regMax) : ''))}" placeholder="cth. 16 / tiada had"></div></div>
       <label>Hadiah (satu baris setiap tempat)</label><textarea name="prizes" rows="3" placeholder="Johan: RM100 + piala&#10;Naib johan: RM50&#10;Ketiga: Hadiah saguhati">${esc(t.prizes || '')}</textarea>
       <label>Catatan</label><textarea name="regNote" rows="3" placeholder="cth. Terbuka untuk semua ahli KSAS">${esc(t.regNote || '')}</textarea>
-      <label>Syarat penyertaan (pilihan)</label><input name="regCond" maxlength="60" value="${esc(t.regCond || '')}" placeholder="cth. Wanita sahaja / Staf HSAJB sahaja">
+      <label>Syarat penyertaan (pilihan)</label><textarea name="regCond" maxlength="600" rows="3" placeholder="cth. Wanita sahaja / Staf HSAJB sahaja. Boleh tulis beberapa baris.">${esc(t.regCond || '')}</textarea>
       ${E.HC_SCHEMES[t.hcMode] ? `<label>Tahap dibenarkan</label><div class="lv-allow">${E.HC_SCHEMES[t.hcMode].levels.map(l => `<label class="check"><input type="checkbox" name="regLv" value="${l[0]}" ${!(t.regLevels || []).length || t.regLevels.includes(l[0]) ? 'checked' : ''}> ${esc(l[1])}</label>`).join('')}</div><p class="muted small" style="margin-top:0">Tanda semua = terbuka kepada semua tahap.</p>` : ''}
     </div>
 
@@ -1743,6 +1743,8 @@ function regCard(t) {
     <p class="small" style="margin:6px 0"><b>Peserta: ${rosterOf(t).length}${t.regMax ? '/' + t.regMax : ''}</b> · ${rosterOf(t).filter(r => r.status === 'ok').length} disahkan · ${regs.filter(r => r.status === 'pending').length} menunggu${t.entryMode !== 'single' && E.usesDraw(t) ? ` · ${t.entryMode === 'team' ? E.teamWord(t).toLowerCase() : 'regu'} diundi oleh penganjur` : ''}</p>
     ${t.regNote ? `<p class="muted small" style="margin:0 0 8px;white-space:pre-line">${esc(t.regNote)}</p>` : ''}
     ${t.regCond || (t.regLevels || []).length ? `<div class="row" style="gap:6px;margin-bottom:8px;flex-wrap:wrap">${condTags(t)}</div>` : ''}
+    ${t.regCond && condShort(t.regCond) !== t.regCond.trim() ? `<div class="notice small" style="white-space:pre-line;margin-bottom:8px"><b>⚠️ Syarat penyertaan</b>
+${esc(t.regCond)}</div>` : ''}
     ${mine ? `<div class="notice small">Anda telah mendaftar sebagai <b>${esc(mine.name)}</b>${mine.level ? ` (${esc(lvName(mine.level))})` : ''} · ${REG_ST[mine.status][0]} ${REG_ST[mine.status][1]}
         ${regOn(t) ? `<a class="pill-btn light small" href="#/daftar/${t.id}">Ubah / batal</a>` : ''}</div>`
       : regOn(t) ? `<a class="pill-btn orange" href="#/daftar/${t.id}"><span class="dot"></span>📝 ${admin ? 'Buka halaman pendaftaran' : 'Daftar penyertaan'}</a>` : ''}
@@ -1813,7 +1815,7 @@ const myRegTids = () => { try { return JSON.parse(ls.get('pingpong:myRegs') || '
 let _rgEdit = null;
 function condTags(t) {
   const S = E.HC_SCHEMES[t.hcMode], lv = (t.regLevels || []).length && S ? S.levels.filter(l => t.regLevels.includes(l[0])).map(l => l[1]) : [];
-  return `${t.regCond ? `<span class="role-chip cond">⚠️ ${esc(t.regCond)}</span>` : ''}${lv.length ? `<span class="role-chip cond">🎚️ ${esc(lv.join(', '))} sahaja</span>` : ''}`;
+  return `${t.regCond ? `<span class="role-chip cond">⚠️ ${esc(condShort(t.regCond))}</span>` : ''}${lv.length ? `<span class="role-chip cond">🎚️ ${esc(lv.join(', '))} sahaja</span>` : ''}`;
 }
 // ---------- Halaman pendaftaran berasingan: #/daftar/<id> ----------
 function viewDaftar(t) {
@@ -1834,7 +1836,7 @@ function viewDaftar(t) {
       ${S ? `<label>Tahap</label><select id="rgLv">${opt({ '': '— pilih tahap —', ...Object.fromEntries(lvOpts.map(l => [l[0], l[1]])) }, r ? r.level : first ? prof.level || '' : '')}</select>` : ''}
       ${t.entryMode === 'double' ? `<label>Nama pasangan</label><input id="rgPartner" maxlength="40" value="${esc(r ? r.partner : '')}">` : ''}
       <label>Catatan (pilihan)</label><input id="rgNote" maxlength="140" value="${esc(r ? r.note : '')}" placeholder="cth. no. telefon / saiz baju">
-      ${t.regCond ? `<label class="check" style="margin-top:10px"><input type="checkbox" id="rgCond" ${r ? 'checked' : ''}> <span>Saya memenuhi syarat: <b>${esc(t.regCond)}</b></span></label>` : ''}
+      ${t.regCond ? `<label class="check" style="margin-top:10px"><input type="checkbox" id="rgCond" ${r ? 'checked' : ''}> <span>Saya memenuhi syarat penyertaan:<br><b style="white-space:pre-line">${esc(t.regCond)}</b></span></label>` : ''}
       <button type="button" class="pill-btn orange big" id="rgSave" style="margin-top:14px;width:100%"><span class="dot"></span>${r ? 'Simpan perubahan' : 'Daftar sekarang'}</button>
       ${_rgEdit ? '<button type="button" class="pill-btn light small" id="rgBack" style="margin-top:8px">Batal</button>' : ''}
       <p class="muted small" style="margin-bottom:0">Tiada log masuk diperlukan. Pendaftaran disimpan untuk telefon ini, jadi anda boleh mengubah atau membatalkannya dari telefon yang sama.</p></div>`;
@@ -1974,6 +1976,8 @@ const STAT = {
   ready: ['#f4b400', '#1a1200', '🟡', 'Sila bersedia: anda seterusnya'],
 };
 // Peserta yang mendaftar dari peranti ini: kenal pasti nama mereka dalam senarai secara automatik (untuk status & notifikasi)
+// Syarat ringkas untuk label kecil (baris pertama, maks 60 aksara)
+const condShort = c => { const f = String(c || '').split('\n')[0].trim(); return f.length > 60 || String(c).includes('\n') ? f.slice(0, 57).trim() + '…' : f; };
 const normN = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 function autoMe(t) {
   if (ls.get(meKey(t)) || ls.get('pingpong:meSet:' + t.id) || canAdmin(t)) return; // pilihan sendiri ("Saya ialah…") sentiasa diutamakan
