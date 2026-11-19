@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.21.0';
+const VERSION = '3.21.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2662,6 +2662,40 @@ function mixAwards(t, S) {
   return `<section class="rp-sec pb"><h3>🏅 Anugerah &amp; Statistik</h3><div class="aw-grid">${out.join('')}</div>
     <p class="muted small">Dikira secara automatik daripada keputusan perlawanan.</p></section>`;
 }
+// Anugerah & statistik untuk format lain (liga, kumpulan, kalah mati) — unit = pemain / regu / pasukan
+function unitAwards(t, played) {
+  const ms = played.filter(m => m.winner && m.a && m.b);
+  if (!ms.length) return '';
+  const nm = id => esc(E.pname(t, id)), E2 = m => E.evaluateMatch(t, m), lose = m => (m.winner === m.a ? m.b : m.a);
+  const stg = m => esc(E.stageLabel(t, m)) + (E.matchCode(m) ? ' · ' + esc(E.matchCode(m)) : '');
+  const sc = (r, wa) => { const [x, y] = E.tieScore(t, r); return wa ? `${x}-${y}` : `${y}-${x}`; };
+  const card = (ic, title, who, note) => `<div class="aw"><div class="aw-ic">${ic}</div><div><div class="aw-t">${title}</div><div class="aw-w">${who}</div>${note ? `<div class="aw-n">${note}</div>` : ''}</div></div>`;
+  const out = [], X = ms.map(m => { const r = E2(m), wa = m.winner === m.a; return { m, r, wa, ds: wa ? r.sa - r.sb : r.sb - r.sa, dp: wa ? r.pa - r.pb : r.pb - r.pa, n: r.sa + r.sb }; });
+  const big = X.slice().sort((x, y) => y.ds - x.ds || y.dp - x.dp)[0];
+  out.push(card('💥', 'Kemenangan paling besar', nm(big.m.winner), `${sc(big.r, big.wa)} menentang ${nm(lose(big.m))} (beza ${big.dp} mata) · ${stg(big.m)}`));
+  const close = X.slice().sort((x, y) => y.n - x.n || Math.abs(x.dp) - Math.abs(y.dp))[0];
+  if (close !== big) out.push(card('🔥', 'Perlawanan paling sengit', `${nm(close.m.a)} <small>lwn</small> ${nm(close.m.b)}`, `${sc(close.r, true)} · ${esc(gamesTxt(close.m, t))} · beza ${Math.abs(close.dp)} mata`));
+  let ls = null; ms.forEach(m => m.rubbers.forEach(rb => rb.sets.forEach(x => { const mx = Math.max(...x); if (!ls || mx > ls.mx) ls = { m, x, mx }; })));
+  if (ls && ls.mx > 11) out.push(card('⏱️', 'Set paling panjang (deuce)', `${ls.x[0]}-${ls.x[1]}`, `${nm(ls.m.a)} lwn ${nm(ls.m.b)} · ${stg(ls.m)}`));
+  // Kemenangan bangkit: pemenang ketinggalan set pertama (atau perlawanan pertama bagi berpasukan) tetapi menang
+  const cb = X.filter(o => { const r0 = o.m.rubbers.length > 1 ? o.r.rubbers[0] : null, s0 = (o.m.rubbers[0].sets || [])[0];
+    return r0 ? r0.winner && r0.winner !== (o.wa ? 'a' : 'b') : s0 && (o.wa ? s0[0] < s0[1] : s0[1] < s0[0]); }).sort((x, y) => y.n - x.n)[0];
+  if (cb) out.push(card('🔄', 'Kemenangan bangkit', nm(cb.m.winner), `kalah ${cb.m.rubbers.length > 1 ? 'perlawanan' : 'set'} pertama, menang ${sc(cb.r, cb.wa)} menentang ${nm(lose(cb.m))} · ${stg(cb.m)}`));
+  const ids = [...new Set(ms.flatMap(m => [m.a, m.b]))].filter(id => id !== 'BYE'), S = ids.map(id => E.playerStats(t, id)).filter(r => r.p);
+  const cons = S.slice().sort((x, y) => x.sa / x.p - y.sa / y.p || y.w - x.w)[0];
+  if (cons) out.push(card('🎯', 'Paling konsisten', nm(cons.id), `hanya kalah ${cons.sa} set dalam ${cons.p} perlawanan`));
+  const pts = S.slice().sort((x, y) => y.pf - x.pf)[0];
+  if (pts) out.push(card('🏓', 'Mata permainan terbanyak', nm(pts.id), `${pts.pf} mata dijaringkan dalam ${pts.p} perlawanan`));
+  const dom = S.slice().sort((x, y) => y.c - x.c)[0];
+  if (dom && dom.c > 0 && dom.id !== pts.id) out.push(card('📈', 'Purata beza mata terbaik', nm(dom.id), `+${dom.c.toFixed(1)} mata setiap perlawanan`));
+  return `<section class="rp-sec pb"><h3>🏅 Anugerah &amp; Statistik</h3><div class="aw-grid">${out.join('')}</div>
+    <p class="muted small">Dikira secara automatik daripada keputusan perlawanan.</p></section>`;
+}
+function podiumHtml(t) {
+  if (E.isMixer(t) || !t.matches.length || !t.matches.every(m => m.status === 'done' || m.status === 'bye')) return '';
+  const R = E.finalRanking(t).filter(x => x.place <= 3), at = p => (R.find(x => x.place === p) || { ids: [] }).ids.map(id => esc(E.pname(t, id))).join(', ');
+  return at(1) ? `<div class="champ">🏆 Johan: ${at(1)}${at(2) ? ` · 🥈 ${at(2)}` : ''}${at(3) ? ` · 🥉 ${at(3)}` : ''}</div>` : '';
+}
 function mixReport(t, played, resTable) {
   const S = E.mixStandings(t), nm = id => esc(E.pname(t, id)), sgn = x => (x > 0 ? '+' : '') + x;
   const top = S.filter(r => r.p);
@@ -2696,10 +2730,12 @@ function viewReport(t) {
       <tr><td>Kategori</td><td>${esc(ENTRY[t.entryMode])}</td><td>Format</td><td>${esc(E.isMixer(t) ? `Penuh (pasangan sekali dengan semua) · ${E.lastSession(t)} sesi` : FORMAT[t.format])}</td></tr>
       <tr><td>Peserta</td><td>${E.isMixer(t) ? t.individuals.length : t.participants.length} ${esc(UNIT(t).toLowerCase())}</td><td>Set</td><td>${esc(f[t.groupFormat].label)}${t.format === 'group_ko' ? ' · KO: ' + esc(f[t.koFormat].label) : ''}</td></tr>
       <tr><td>Perlawanan</td><td>${played.length} selesai</td><td>Meja</td><td>${E.numTablesOf(t)}</td></tr></table>
-    ${final && final.winner ? `<div class="champ">🏆 Johan: ${esc(E.pname(t, final.winner))}${final.a && final.b ? ` · Naib johan: ${esc(E.pname(t, final.winner === final.a ? final.b : final.a))}` : ''}</div>` : ''}
+    ${podiumHtml(t) || (final && final.winner ? `<div class="champ">🏆 Johan: ${esc(E.pname(t, final.winner))}${final.a && final.b ? ` · Naib johan: ${esc(E.pname(t, final.winner === final.a ? final.b : final.a))}` : ''}</div>` : '')}
     ${E.isMixer(t) ? mixReport(t, played, resTable) : ''}
     ${t.groups.length ? `<h3>${t.format === 'rr' ? 'Kedudukan Liga' : 'Kedudukan Kumpulan'}</h3>${t.groups.map(g => `<h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${standingsTable(t, g)}`).join('')}` : ''}
-    ${t.groups.length ? `<h3>Keputusan Peringkat ${t.format === 'rr' ? 'Liga' : 'Kumpulan'}</h3>${t.groups.map(g => { const ms = played.filter(m => m.stage === 'group' && m.group === g.name).sort((x, y) => x.gn - y.gn); return ms.length ? `<h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${resTable(ms)}` : ''; }).join('') || '<p class="muted small">Belum ada keputusan.</p>'}` : ''}
+    ${E.isMixer(t) ? '' : unitAwards(t, played)}
+    ${!E.isMixer(t) && t.groups.length && played.some(m => m.stage === 'group') ? `<section class="rp-sec pb"><h3>Matriks Keputusan</h3>${t.groups.map(g => `<div class="mx-mat"><h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${matrixHtml(t, g)}</div>`).join('')}</section>` : ''}
+    ${t.groups.length ? `<section class="rp-sec pb"><h3>Keputusan Peringkat ${t.format === 'rr' ? 'Liga' : 'Kumpulan'}</h3>${t.groups.map(g => { const ms = played.filter(m => m.stage === 'group' && m.group === g.name).sort((x, y) => x.gn - y.gn); return ms.length ? `<h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${resTable(ms)}` : ''; }).join('') || '<p class="muted small">Belum ada keputusan.</p>'}</section>` : ''}
     ${ko('ko')}${ko('pool')}
     ${t.stage === 'done' && t.format !== 'rr' ? rankingHtml(t).replace(/<button[^>]*>Cetak<\/button>/, '') : ''}
     <section class="rp-sec pb"><h3>Peraturan &amp; Penentuan Kedudukan</h3><ol class="rules small">${rulesOf(t).map(r => `<li>${esc(r)}</li>`).join('')}</ol>
