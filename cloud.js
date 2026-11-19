@@ -267,13 +267,15 @@ export async function setLive(tid, mid, { rs, cur, ri, by, tb, sw }) {
     await F.setDoc(F.doc(db, 'tournaments', tid, 'live', mid), { ...e, at: F.serverTimestamp() });
     _lockAt[k] = Date.now();
   }
-  await F.setDoc(F.doc(db, 'livesum', tid), { m: { [mid]: { ...e, at: F.serverTimestamp() } }, at: F.serverTimestamp() }, { merge: true });
+  // ralat di sini (cth. peraturan baharu belum dipublish) tidak menghentikan penjaga skor — kunci di atas sudah berjaya
+  try { await F.setDoc(F.doc(db, 'livesum', tid), { m: { [mid]: { ...e, at: F.serverTimestamp() } }, at: F.serverTimestamp() }, { merge: true }); }
+  catch (err) { console.warn('livesum', err); }
   state.live[tid] = { ...(state.live[tid] || {}), [mid]: { ...e, rs, cur, at: Date.now() } };
 }
 export async function clearLive(tid, mid) {
   await init(); delete _lockAt[tid + '/' + mid];
   await F.deleteDoc(F.doc(db, 'tournaments', tid, 'live', mid)).catch(() => {});
-  await F.setDoc(F.doc(db, 'livesum', tid), { m: { [mid]: F.deleteField() }, at: F.serverTimestamp() }, { merge: true });
+  await F.setDoc(F.doc(db, 'livesum', tid), { m: { [mid]: F.deleteField() }, at: F.serverTimestamp() }, { merge: true }).catch(() => {});
   if (state.live[tid]) delete state.live[tid][mid];
 }
 
