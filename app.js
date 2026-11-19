@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.27.0';
+const VERSION = '3.28.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2909,9 +2909,17 @@ function recapData(t) {
     c1: cs.getPropertyValue('--hd1').trim(), c2: cs.getPropertyValue('--hd2').trim(), url: appUrl(`t/${t.id}/laporan`),
     stats: [{ ic: '👥', n: (mixer ? t.individuals : t.participants).length, label: mixer ? 'Pemain' : UNIT(t) }, { ic: '🏓', n: played.length, label: 'Perlawanan' }, { ic: '🎯', n: sets, label: 'Set dimainkan' }, { ic: '⚡', n: pts, label: 'Mata dijaringkan' }],
   };
+  // kedudukan individu (regu bertukar) atau liga terlalu besar untuk matriks → jadual; selain itu matriks setiap kumpulan + jumlah mata
+  const big = t.format === 'rr' && t.groups[0] && t.groups[0].members.length > 12;
+  out.isLiga = t.format === 'rr';
   if (mixer) out.table = { title: 'KEDUDUKAN INDIVIDU', rows: E.mixStandings(t).filter(r => r.p).map(r => ({ name: nm(r.id), sub: `${r.w} menang · ${r.l} kalah · set ${sgn(r.sf - r.sa)}`, pts: r.pts })) };
-  else if (t.format === 'rr' && t.groups[0]) out.table = { title: 'KEDUDUKAN LIGA', rows: E.groupStandings(t, t.groups[0].name).map(r => ({ name: nm(r.id), sub: `${r.w} menang · ${r.l} kalah · set ${sgn(r.sf - r.sa)}`, pts: r.pts })) };
-  else if (t.groups.length) out.groups = t.groups.map(g => ({ name: 'Kumpulan ' + g.name, rows: E.groupStandings(t, g.name).map((r, i) => ({ name: nm(r.id), pts: r.pts, q: i < (t.qualifyPerGroup || 2) })) }));
+  else if (big) out.table = { title: 'KEDUDUKAN LIGA', rows: E.groupStandings(t, t.groups[0].name).map(r => ({ name: nm(r.id), sub: `${r.w} menang · ${r.l} kalah · set ${sgn(r.sf - r.sa)}`, pts: r.pts })) };
+  else if (t.groups.length) out.groups = t.groups.map(g => {
+    const M = E.matrix(t, g.name), st = E.groupStandings(t, g.name), q = t.format === 'group_ko' ? t.qualifyPerGroup || 2 : 1;
+    return { name: t.format === 'rr' ? 'Liga' : 'Kumpulan ' + g.name,
+      rows: M.ids.map((id, i) => ({ name: nm(id), pts: (st.find(r => r.id === id) || {}).pts || 0, q: i < q })),
+      cells: M.rows.map(row => row.map(cl => cl === 'self' ? 'x' : cl ? { s: `${cl.v[0]}-${cl.v[1]}`, r: cl.draw ? 'd' : cl.win ? 'w' : 'l' } : null)) };
+  });
   try {
     const html = mixer ? mixAwards(t, E.mixStandings(t)) : unitAwards(t, played);
     out.awards = [...new DOMParser().parseFromString(html || '', 'text/html').querySelectorAll('.aw')].map(a => {
@@ -2919,16 +2927,21 @@ function recapData(t) {
       return { ic: g('.aw-ic'), t: g('.aw-t'), w: g('.aw-w'), n: g('.aw-n') };
     });
   } catch { out.awards = []; }
-  const R = t.rounds && t.rounds.ko;
-  if (R) {
+  // bracket penuh (kalah mati & pool): setiap pusingan, setiap slot
+  const bracket = b => {
+    const R = t.rounds && t.rounds[b]; if (!R) return null;
     const rounds = [];
-    for (let r = Math.max(1, R - 2); r <= R; r++) {
-      const ms = t.matches.filter(m => m.bracket === 'ko' && m.round === r && m.status === 'done' && m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE').sort((x, y) => x.slot - y.slot)
-        .map(m => ({ a: nm(m.a), b: nm(m.b), w: m.winner === m.a ? 'a' : 'b', sc: E.tieScore(t, E.evaluateMatch(t, m)).join('-'), sets: gamesTxt(m, t) }));
-      if (ms.length) rounds.push({ name: E.roundName(t, 'ko', r), ms, final: r === R ? { sets: ms[0].sets } : null });
+    for (let r = 1; r <= R; r++) {
+      const ms = t.matches.filter(m => m.bracket === b && m.round === r).sort((x, y) => x.slot - y.slot).map(m => {
+        const real = m.status === 'done' && m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE', sc = real ? E.tieScore(t, E.evaluateMatch(t, m)) : null;
+        const lab = id => (id === 'BYE' ? 'BYE' : id ? nm(id) : '');
+        return { a: lab(m.a), b: lab(m.b), w: m.winner && m.winner !== 'BYE' ? (m.winner === m.a ? 'a' : 'b') : null, sa: sc ? sc[0] : '', sb: sc ? sc[1] : '' };
+      });
+      rounds.push({ name: E.roundName(t, b, r).replace(/^Pool:\s*/, ''), ms });
     }
-    if (rounds.length) out.ko = { rounds };
-  }
+    return rounds.some(x => x.ms.some(m => m.w)) ? { rounds } : null;
+  };
+  out.ko = bracket('ko'); out.pool = bracket('pool');
   out.podium = mixer ? E.mixStandings(t).filter(r => r.p).slice(0, 3).map((r, i) => ({ place: i + 1, names: [nm(r.id)] }))
     : E.finalRanking(t).filter(x => x.place <= 3).map(x => ({ place: x.place, names: x.ids.map(nm) }));
   return out;
