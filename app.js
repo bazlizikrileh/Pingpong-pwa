@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.19.3';
+const VERSION = '3.19.4';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1718,7 +1718,8 @@ const feeAmt = t => { const m = String(t.regFee || '').replace(/,/g, '').match(/
 function payBar(t, rows) {
   const n = rows.filter(r => r.status !== 'no'), paid = n.filter(r => isPaid(t, r)).length, amt = feeAmt(t);
   return `<div class="pay-bar"><span>💰 Bayar: <b>${paid}/${n.length}</b>${amt ? ` · Kutipan <b>RM${(paid * amt).toFixed(amt % 1 ? 2 : 0)}</b> / RM${(n.length * amt).toFixed(amt % 1 ? 2 : 0)}` : ''}</span>
-    ${paid < n.length ? '<button type="button" class="pill-btn light small" id="payCopy">📋 Salin senarai belum bayar</button>' : '<span class="muted small">Semua sudah bayar ✓</span>'}</div>`;
+    ${paid < n.length ? '<button type="button" class="pill-btn light small" id="payCopy">📋 Salin senarai belum bayar</button>' : '<span class="muted small">Semua sudah bayar ✓</span>'}
+    <span class="muted small" style="flex-basis:100%">Tekan <b>○</b> di sebelah nama untuk tanda <b>💰 sudah bayar</b>; tekan sekali lagi untuk batal. Hanya penganjur nampak status ini.</span></div>`;
 }
 const REG_ST = { pending: ['⏳', 'Menunggu'], ok: ['✓', 'Disahkan'], no: ['✕', 'Ditolak'] };
 function regCard(t) {
