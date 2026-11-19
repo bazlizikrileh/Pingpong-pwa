@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.19.4';
+const VERSION = '3.19.5';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1556,7 +1556,9 @@ function levelsCard(t) {
     <div class="lv-list">${P.map(n => `<div class="lv-row"><span>${esc(n)}</span>${admin ? `<select data-lvn="${esc(n)}">${opt({ '': '— tahap —', ...Object.fromEntries(S.levels.map(l => [l[0], `${l[1]} (S${l[2]} · D${l[3]})`])) }, E.levelOf(t, n))}</select>` : chip(E.levelOf(t, n))}</div>`).join('')}</div></details>`;
 }
 // ---------- Pautan kongsi ----------
-const regFull = t => !!t.regMax && rosterOf(t).length >= t.regMax;
+// Tempat hanya dikira bila penganjur sahkan (atau nama ditambah sendiri oleh penganjur)
+const okCount = t => rosterOf(t).filter(r => r.status === 'ok').length;
+const regFull = t => !!t.regMax && okCount(t) >= t.regMax;
 // Pendaftaran tutup sendiri bila jadual dijana / pertandingan bermula atau tamat
 const regOn = t => !!t.regOpen && t.stage === 'setup' && !(t.matches || []).length;
 const regLive = t => regOn(t) && !regFull(t);
@@ -1586,11 +1588,12 @@ function waText(t) {
   if (prizes.length) { L.push('🏆 Hadiah:'); prizes.forEach((p, i) => L.push(`   ${medal[i] || '🏅'} ${p}`)); }
   if (t.regNote) L.push(`📝 ${t.regNote.replace(/\n+/g, '\n   ')}`);
   L.push('');
-  L.push(`👥 *Peserta (${regs.length}${t.regMax ? '/' + t.regMax : ''})*`);
+  const okN = regs.filter(r => r.status === 'ok').length;
+  L.push(`👥 *Peserta (${regs.length} mendaftar${t.regMax ? ` · ${okN}/${t.regMax} disahkan` : ''})*`);
   if (regs.length) regs.forEach((r, i) => L.push(`${i + 1}. ${r.name}${r.partner ? ' & ' + r.partner : ''} ${r.status === 'ok' ? '✅' : '⏳'}`));
   else L.push('_Belum ada. Jadi yang pertama!_');
   if (!t.regMax && t.regMaxText) L.push(`_Had peserta: ${t.regMaxText}_`);
-  if (t.regMax) L.push(regs.length < t.regMax ? `_Tinggal ${t.regMax - regs.length} tempat lagi_` : '_🔒 Tempat penuh_');
+  if (t.regMax) L.push(okN < t.regMax ? `_Tinggal ${t.regMax - okN} tempat lagi (dikira selepas disahkan penganjur)_` : '_🔒 Tempat penuh_');
   L.push('');
   if (days != null && days > 0) L.push(`⏰ ${days === 1 ? 'Esok!' : days + ' hari lagi'}`);
   L.push(regLive(t) ? `👉 *Daftar di sini:*\n${shareUrl(t)}` : `${regOn(t) ? '🔒 *Pendaftaran ditutup (tempat penuh)*\n' : ''}🔗 ${shareUrl(t)}`);
@@ -1741,7 +1744,7 @@ function regCard(t) {
   return `<div class="card reg-card">
     <div class="row" style="justify-content:space-between"><div class="section-title" style="margin:0">🏓 Pendaftaran</div>
       <span class="role-chip">${regLive(t) ? '🟢 Dibuka' : regOn(t) ? '🔒 Penuh' : 'Ditutup'}</span></div>
-    <p class="small" style="margin:6px 0"><b>Peserta: ${rosterOf(t).length}${t.regMax ? '/' + t.regMax : ''}</b> · ${rosterOf(t).filter(r => r.status === 'ok').length} disahkan · ${regs.filter(r => r.status === 'pending').length} menunggu${t.entryMode !== 'single' && E.usesDraw(t) ? ` · ${t.entryMode === 'team' ? E.teamWord(t).toLowerCase() : 'regu'} diundi oleh penganjur` : ''}</p>
+    <p class="small" style="margin:6px 0"><b>Disahkan: ${okCount(t)}${t.regMax ? '/' + t.regMax : ''}</b>${t.regMax ? ` · tinggal ${Math.max(0, t.regMax - okCount(t))} tempat` : ''} · ${rosterOf(t).length} mendaftar · ${regs.filter(r => r.status === 'pending').length} menunggu${t.entryMode !== 'single' && E.usesDraw(t) ? ` · ${t.entryMode === 'team' ? E.teamWord(t).toLowerCase() : 'regu'} diundi oleh penganjur` : ''}</p>
     ${t.regNote ? `<p class="muted small" style="margin:0 0 8px;white-space:pre-line">${esc(t.regNote)}</p>` : ''}
     ${t.regCond || (t.regLevels || []).length ? `<div class="row" style="gap:6px;margin-bottom:8px;flex-wrap:wrap">${condTags(t)}</div>` : ''}
     ${t.regCond && condShort(t.regCond) !== t.regCond.trim() ? `<div class="notice small" style="white-space:pre-line;margin-bottom:8px"><b>⚠️ Syarat penyertaan</b>
@@ -1845,7 +1848,7 @@ function viewDaftar(t) {
     ['🏓', `${E.isTeam(t) ? E.teamWord(t) + (t.tieFormat === 'SSD' ? ' (Single + Single + Double)' : '') : ENTRY[t.entryMode]} · ${f[t.groupFormat].label}`],
     ['⚖️', t.hcMode === 'manual' ? 'Handicap' : S ? `Handicap ${S.name}` : ''], ['💰', t.regFee ? 'Yuran: ' + t.regFee : '']].filter(x => x[1]);
   const prizes = (t.prizes || '').split('\n').map(x => x.trim()).filter(Boolean);
-  const active = regs.length, full = t.regMax && active >= t.regMax && !r;
+  const okN = regs.filter(x => x.status === 'ok').length, full = t.regMax && okN >= t.regMax && !r;
   const showForm = regOn(t) && !full && (first || _rgEdit);
   const own = posterOf(t);
   $app.innerHTML = `
@@ -1856,7 +1859,7 @@ function viewDaftar(t) {
       ${attachLinks(t)}
       ${prizes.length ? `<div class="d-prize">${prizes.map((p, i) => `<div><span>${['🥇', '🥈', '🥉'][i] || '🏅'}</span>${esc(p)}</div>`).join('')}</div>` : ''}
       ${t.regNote ? `<p class="d-note">${esc(t.regNote)}</p>` : ''}
-      <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap"><span class="role-chip">${regLive(t) ? '🟢 Pendaftaran dibuka' : regOn(t) ? '🔒 Penuh' : '🔒 Pendaftaran ditutup'}</span><span class="role-chip">${active}${t.regMax ? '/' + t.regMax : ''} peserta · ${ok.length} disahkan</span>${condTags(t)}</div>
+      <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap"><span class="role-chip">${regLive(t) ? '🟢 Pendaftaran dibuka' : regOn(t) ? '🔒 Penuh' : '🔒 Pendaftaran ditutup'}</span><span class="role-chip">${ok.length}${t.regMax ? '/' + t.regMax : ''} disahkan · ${regs.length} mendaftar</span>${condTags(t)}</div>
     </div>
     <div class="card reg-card">
       <div class="section-title" style="margin-top:0">📝 ${mineList.length ? 'Pendaftaran dari telefon ini' : 'Daftar penyertaan'}</div>
@@ -1866,7 +1869,7 @@ function viewDaftar(t) {
       ${showForm ? form : full && !mineList.length ? '<p class="notice">Maaf, tempat sudah penuh.</p>' : !regOn(t) && !mineList.length ? '<p class="muted">Pendaftaran telah ditutup.</p>' : ''}
       ${regOn(t) && !full && mineList.length && !_rgEdit && mineList.length < 10 ? '<button type="button" class="pill-btn light" data-rgedit="new" style="margin-top:10px">➕ Daftar orang lain (keluarga / rakan)</button>' : ''}
     </div>
-    <div class="card"><div class="section-title" style="margin-top:0">👥 Peserta (${regs.length}${t.regMax ? '/' + t.regMax : ''})</div>
+    <div class="card"><div class="section-title" style="margin-top:0">👥 Peserta (${regs.length} mendaftar${t.regMax ? ` · ${regs.filter(x => x.status === 'ok').length}/${t.regMax} disahkan` : ''})</div>
       ${regs.length ? `<div class="reg-list">${regs.map((x, i) => `<div class="reg-row ${x.status}"><span class="no">${i + 1}</span><span class="nm"><b>${esc(x.name)}</b>${x.partner ? ` &amp; ${esc(x.partner)}` : ''}
         <small>${[x.level ? lvName(x.level) : '', x.unit].filter(Boolean).map(esc).join(' · ')}</small></span><span class="st" title="${REG_ST[x.status][1]}">${REG_ST[x.status][0]}</span></div>`).join('')}</div>
         <p class="muted small">✓ disahkan · ⏳ menunggu pengesahan penganjur</p>` : '<p class="muted">Belum ada peserta. Jadilah yang pertama!</p>'}
