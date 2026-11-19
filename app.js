@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.26.1';
+const VERSION = '3.27.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2895,6 +2895,74 @@ function mixReport(t, played, resTable) {
             <td class="l ${wa ? 'win' : ''}">${esc(E.pname(t, m.a))}</td><td><b>${r.sa}-${r.sb}</b></td><td class="l ${!wa ? 'win' : ''}">${esc(E.pname(t, m.b))}</td><td class="l small sets">${m.rubbers[0].sets.map(x => `<span>${x[0]}-${x[1]}</span>`).join(' ')}</td></tr>`; }).join('')}</tbody>`; }).join('')}
     </table></section>`;
 }
+// ---------- 🎬 Video ringkasan pertandingan ----------
+function recapData(t) {
+  const c = clubOf(t), played = t.matches.filter(m => m.status === 'done' && m.a !== 'BYE' && m.b !== 'BYE');
+  const nm = id => E.pname(t, id), d = t.date ? new Date(t.date + 'T00:00') : null, mixer = E.isMixer(t);
+  const cs = getComputedStyle(document.documentElement);
+  let sets = 0, pts = 0; played.forEach(m => { const r = E.evaluateMatch(t, m); sets += r.sa + r.sb; pts += r.pa + r.pb; });
+  const sgn = x => (x > 0 ? '+' : '') + x;
+  const out = {
+    title: t.name, club: c.name || c.short || '', logos: c.logos || [],
+    when: [d && !isNaN(d) ? `${HARI[d.getDay()]}, ${fmtDate(t.date)}` : '', t.startTime ? E.sessionTime(t, 1) : ''].filter(Boolean).join(' · '),
+    where: t.venue === 'X' ? t.venueName || '' : E.VENUES[t.venue] || '',
+    c1: cs.getPropertyValue('--hd1').trim(), c2: cs.getPropertyValue('--hd2').trim(), url: appUrl(`t/${t.id}/laporan`),
+    stats: [{ ic: '👥', n: (mixer ? t.individuals : t.participants).length, label: mixer ? 'Pemain' : UNIT(t) }, { ic: '🏓', n: played.length, label: 'Perlawanan' }, { ic: '🎯', n: sets, label: 'Set dimainkan' }, { ic: '⚡', n: pts, label: 'Mata dijaringkan' }],
+  };
+  if (mixer) out.table = { title: 'KEDUDUKAN INDIVIDU', rows: E.mixStandings(t).filter(r => r.p).map(r => ({ name: nm(r.id), sub: `${r.w} menang · ${r.l} kalah · set ${sgn(r.sf - r.sa)}`, pts: r.pts })) };
+  else if (t.format === 'rr' && t.groups[0]) out.table = { title: 'KEDUDUKAN LIGA', rows: E.groupStandings(t, t.groups[0].name).map(r => ({ name: nm(r.id), sub: `${r.w} menang · ${r.l} kalah · set ${sgn(r.sf - r.sa)}`, pts: r.pts })) };
+  else if (t.groups.length) out.groups = t.groups.map(g => ({ name: 'Kumpulan ' + g.name, rows: E.groupStandings(t, g.name).map((r, i) => ({ name: nm(r.id), pts: r.pts, q: i < (t.qualifyPerGroup || 2) })) }));
+  try {
+    const html = mixer ? mixAwards(t, E.mixStandings(t)) : unitAwards(t, played);
+    out.awards = [...new DOMParser().parseFromString(html || '', 'text/html').querySelectorAll('.aw')].map(a => {
+      const g = k => ((a.querySelector(k) || {}).textContent || '').replace(/\s+/g, ' ').trim();
+      return { ic: g('.aw-ic'), t: g('.aw-t'), w: g('.aw-w'), n: g('.aw-n') };
+    });
+  } catch { out.awards = []; }
+  const R = t.rounds && t.rounds.ko;
+  if (R) {
+    const rounds = [];
+    for (let r = Math.max(1, R - 2); r <= R; r++) {
+      const ms = t.matches.filter(m => m.bracket === 'ko' && m.round === r && m.status === 'done' && m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE').sort((x, y) => x.slot - y.slot)
+        .map(m => ({ a: nm(m.a), b: nm(m.b), w: m.winner === m.a ? 'a' : 'b', sc: E.tieScore(t, E.evaluateMatch(t, m)).join('-'), sets: gamesTxt(m, t) }));
+      if (ms.length) rounds.push({ name: E.roundName(t, 'ko', r), ms, final: r === R ? { sets: ms[0].sets } : null });
+    }
+    if (rounds.length) out.ko = { rounds };
+  }
+  out.podium = mixer ? E.mixStandings(t).filter(r => r.p).slice(0, 3).map((r, i) => ({ place: i + 1, names: [nm(r.id)] }))
+    : E.finalRanking(t).filter(x => x.place <= 3).map(x => ({ place: x.place, names: x.ids.map(nm) }));
+  return out;
+}
+function recapCard(t) {
+  if (!t.matches.some(m => m.status === 'done')) return '';
+  return `<div class="card noprint"><b>🎬 Video ringkasan</b><p class="muted small" style="margin:4px 0 8px">Video menegak (~40 saat) berserta muzik: angka, kedudukan, detik menarik, kalah mati dan podium. Dijana dalam telefon ini.</p>
+    <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center"><select id="rcSty" style="max-width:190px"><option value="">🎲 Muzik rawak</option></select>
+    <button type="button" class="pill-btn brand small" id="rcGo"><span class="dot"></span>🎬 Jana video</button></div>
+    <p class="small" id="rcMsg" style="margin:8px 0 0"></p><div id="rcOut"></div></div>`;
+}
+function wireRecap(t) {
+  const go = document.getElementById('rcGo'); if (!go) return;
+  const sel = document.getElementById('rcSty'), msg = document.getElementById('rcMsg'), out = document.getElementById('rcOut');
+  import('./sound.js').then(S => { sel.insertAdjacentHTML('beforeend', S.RECAP.map(([i, x]) => `<option value="${i}">🎵 ${esc(x.name)} · ${x.kind === 2 ? 'Arena' : 'Bertenaga'}</option>`).join('')); try { sel.value = ls.get('pingpong:rcSty') || ''; } catch {} });
+  sel.onchange = () => ls.set('pingpong:rcSty', sel.value || null);
+  go.onclick = async () => {
+    go.disabled = true; out.innerHTML = ''; msg.textContent = 'Menyediakan video dalam telefon ini. Jangan tutup skrin…';
+    try {
+      const [{ buildRecap }, V, S] = await Promise.all([import('./recap-video.js'), import('./draw-video.js'), import('./sound.js')]);
+      const R = buildRecap(recapData(t)), style = sel.value !== '' ? +sel.value : S.RECAP[Math.floor(Math.random() * S.RECAP.length)][0];
+      const made = await V.prepareDrawVideo({ custom: R, logos: recapData(t).logos, music: true, musicStyle: style, title: `Ringkasan ${t.name}`, subtitle: '' }, (p, mode) => {
+        go.textContent = mode === 'audio' ? '🎵 Menyediakan muzik…' : mode === 'shrink' ? `🗜️ Mengecilkan saiz… ${Math.round(p * 100)}%` : `⏳ ${mode === 'rec' ? 'Merakam' : 'Menyediakan'} video… ${Math.round(p * 100)}%`;
+      });
+      const url = URL.createObjectURL(made.blob);
+      msg.innerHTML = `✅ Video siap (${(made.file.size / 1048576).toFixed(1)} MB · muzik: ${esc(S.STYLES[style].name)})`;
+      out.innerHTML = `<video src="${url}" controls playsinline style="width:100%;max-width:300px;border-radius:14px;margin-top:8px;display:block"></video>
+        <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap"><button type="button" class="pill-btn small" style="background:#25d366;color:#fff" id="rcShare">📤 Kongsi ke WhatsApp</button><button type="button" class="pill-btn light small" id="rcDl">⬇️ Simpan ke telefon</button></div>`;
+      document.getElementById('rcShare').onclick = async () => { const r = await made.share(); msg.textContent = r.shared ? '✅ Video dikongsi.' : r.cancelled ? 'Dibatalkan.' : '⬇️ Video dimuat turun. Hantar dari galeri / Fail ke WhatsApp.'; };
+      document.getElementById('rcDl').onclick = () => { made.download(); msg.textContent = '⬇️ Video dimuat turun ke telefon.'; };
+    } catch (e) { msg.textContent = 'Gagal menyediakan video: ' + (e && e.message || e); }
+    go.disabled = false; go.innerHTML = '<span class="dot"></span>🎬 Jana semula';
+  };
+}
 // Ringkasan keputusan untuk group WhatsApp: podium, anugerah, statistik, pautan laporan
 function resultsMessage(t) {
   const played = t.matches.filter(m => m.status === 'done' && m.a !== 'BYE' && m.b !== 'BYE');
@@ -2941,9 +3009,11 @@ function viewReport(t) {
   $app.innerHTML = `${section('Laporan', 'Laporan Pertandingan')}
     <div class="card noprint"><p class="muted small" style="margin-top:0">Laporan lengkap: maklumat, kedudukan, keputusan semua perlawanan${t.rounds.ko ? ', kalah mati' : ''}${t.stage === 'done' ? ' dan ranking' : ''}. Tekan butang di bawah dan pilih <b>Simpan sebagai PDF</b>.</p>
       <button class="pill-btn brand" id="prt"><span class="dot"></span>🖨️ Cetak / Simpan PDF</button></div>
+    ${recapCard(t)}
     ${t.matches.some(m => m.status === 'done') ? `<div class="card noprint"><b>💬 Ringkasan keputusan untuk WhatsApp</b><p class="muted small" style="margin:4px 0 8px">Johan, naib johan, tempat ketiga, statistik dan pautan laporan, sedia untuk dikongsi ke group.</p>
       <div class="row" style="gap:6px;flex-wrap:wrap"><button type="button" class="pill-btn small" style="background:#25d366;color:#fff" id="resWa">💬 Kongsi ke WhatsApp</button><button type="button" class="pill-btn light small" id="resCp">📋 Salin</button><button type="button" class="pill-btn light small" id="resPv">👁️ Lihat mesej</button></div></div>` : ''}
     <div class="card report">${body}</div>`;
+  wireRecap(t);
   const rw = document.getElementById('resWa');
   if (rw) {
     rw.onclick = () => window.open(waLink(resultsMessage(t)), '_blank');

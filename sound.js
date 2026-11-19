@@ -10,9 +10,21 @@ export const STYLES = [
   { name: 'Suspens', bpm: 120, prog: [[45, 57, 60, 64], [41, 57, 60, 65], [50, 57, 62, 65], [40, 56, 59, 64]] },     // Am–F–Dm–E, minor tegang
   { name: 'Arena', bpm: 138, prog: [[40, 55, 59, 64], [48, 55, 60, 64], [43, 55, 59, 62], [38, 54, 57, 62]] },      // Em–C–G–D, gaya stadium
   { name: 'Ceria', bpm: 112, prog: [[48, 60, 64, 67], [43, 59, 62, 67], [45, 60, 64, 69], [41, 60, 65, 69]] },       // C–G–Am–F, pop riang (asal)
+  // ---- 10 templat video ringkasan (gabungan Bertenaga + Arena). kind 0 = Bertenaga, 2 = Arena; v = variasi ----
+  { name: 'Juara', recap: 1, kind: 0, bpm: 128, prog: [[45, 57, 60, 64], [41, 57, 60, 65], [48, 55, 60, 64], [43, 55, 59, 62]], v: { arp: 1 } },           // Am–F–C–G
+  { name: 'Stadium', recap: 1, kind: 2, bpm: 138, prog: [[40, 55, 59, 64], [48, 55, 60, 64], [43, 55, 59, 62], [38, 54, 57, 62]], v: {} },                // Em–C–G–D
+  { name: 'Lonjakan', recap: 1, kind: 0, bpm: 132, prog: [[38, 53, 57, 62], [46, 53, 58, 62], [41, 57, 60, 65], [48, 55, 60, 64]], v: { arp: 2, hat16: 1 } }, // Dm–Bb–F–C
+  { name: 'Gemuruh', recap: 1, kind: 2, bpm: 132, prog: [[45, 57, 60, 64], [43, 55, 59, 62], [41, 57, 60, 65], [40, 56, 59, 64]], v: { stab2: 1 } },      // Am–G–F–E
+  { name: 'Kemenangan', recap: 1, kind: 0, bpm: 124, prog: [[48, 55, 60, 64], [43, 55, 59, 62], [45, 57, 60, 64], [41, 57, 60, 65]], v: { arp: 2 } },      // C–G–Am–F
+  { name: 'Pahlawan', recap: 1, kind: 2, bpm: 140, prog: [[38, 53, 57, 62], [48, 55, 60, 64], [46, 53, 58, 62], [45, 57, 61, 64]], v: { stab2: 1, hat16: 1 } }, // Dm–C–Bb–A
+  { name: 'Pecut', recap: 1, kind: 0, bpm: 140, prog: [[40, 55, 59, 64], [48, 55, 60, 64], [38, 54, 57, 62], [47, 54, 59, 63]], v: { hat16: 1, arp: 1 } },  // Em–C–D–B
+  { name: 'Final', recap: 1, kind: 2, bpm: 128, prog: [[48, 55, 60, 63], [44, 56, 60, 63], [39, 55, 58, 63], [46, 53, 58, 62]], v: {} },                  // Cm–Ab–Eb–Bb
+  { name: 'Semangat', recap: 1, kind: 0, bpm: 120, prog: [[43, 55, 59, 62], [38, 54, 57, 62], [40, 55, 59, 64], [48, 55, 60, 64]], v: { arp: 2 } },        // G–D–Em–C
+  { name: 'Gelanggang', recap: 1, kind: 2, bpm: 136, prog: [[42, 57, 61, 66], [38, 54, 57, 62], [45, 57, 61, 64], [40, 56, 59, 64]], v: { stab2: 1 } },   // F#m–D–A–E
 ];
+export const RECAP = STYLES.map((x, i) => [i, x]).filter(([, x]) => x.recap);
 export const loopLen = style => 8 * 4 * 60 / STYLES[style || 0].bpm;
-export const randomStyle = () => Math.floor(Math.random() * STYLES.length);
+export const randomStyle = () => Math.floor(Math.random() * 4);   // undian: 4 gaya asal sahaja
 export async function renderSoundtrack(dur, events, sr = 44100, music = true, fade = true, style = 0) {
   const ctx = new OfflineAudioContext(1, Math.ceil(dur * sr), sr);
   const master = ctx.createDynamicsCompressor(); master.threshold.value = -14; master.ratio.value = 4;
@@ -31,11 +43,11 @@ export async function renderSoundtrack(dur, events, sr = 44100, music = true, fa
     env(g, t, 0.005, peak, d); s.connect(fl); fl.connect(g); g.connect(master); s.start(t); s.stop(t + d + 0.05);
   };
   if (music) {
-    const S = STYLES[style] || STYLES[0], bt = 60 / S.bpm, chords = S.prog;
+    const S = STYLES[style] || STYLES[0], bt = 60 / S.bpm, chords = S.prog, V = S.v || {}, kind = S.kind ?? style;
     const bars = Math.ceil((dur - 0.3) / (bt * 4));
     for (let b = 0; b < bars; b++) {
       const ch = chords[Math.floor(b / 2) % 4], t0 = 0.3 + b * 4 * bt;
-      if (style === 3) {
+      if (kind === 3) {
         // Ceria (asal): pad lembut, kick, hi-hat, bass, arpeggio
         if (b % 2 === 0) ch.slice(1).forEach(n => tone('triangle', NOTE(n), t0, 0.25, 0.018, 8 * bt - 0.4));
         for (let q = 0; q < 4; q++) {
@@ -45,9 +57,11 @@ export async function renderSoundtrack(dur, events, sr = 44100, music = true, fa
           tone('triangle', NOTE(ch[0] - 12 + (q === 3 ? 7 : 0)), t, 0.01, 0.11, bt * 0.8);
           const ar = ch.slice(1); tone('square', NOTE(ar[q % 3] + 12), t + bt / 2, 0.005, 0.012, 0.18);
         }
-      } else if (style === 2) {
+      } else if (kind === 2) {
         // Arena: kick 4/4 kuat, snare besar pada 2 & 4, bass 8 berdenyut, "brass" sawtooth pada awal bar
-        tone('sawtooth', NOTE(ch[1]), t0, 0.01, 0.035, bt * 0.9); tone('sawtooth', NOTE(ch[2]), t0, 0.01, 0.03, bt * 0.9); tone('sawtooth', NOTE(ch[3]), t0, 0.01, 0.03, bt * 0.9);
+        const stab = t => { tone('sawtooth', NOTE(ch[1]), t, 0.01, 0.035, bt * 0.9); tone('sawtooth', NOTE(ch[2]), t, 0.01, 0.03, bt * 0.9); tone('sawtooth', NOTE(ch[3]), t, 0.01, 0.03, bt * 0.9); };
+        stab(t0); if (V.stab2) stab(t0 + 2.5 * bt);
+        if (V.hat16) for (let h = 0; h < 16; h++) if (h % 2) hiss(t0 + h * bt / 4, 0.02, 0.035, 'highpass', 9000);
         for (let q = 0; q < 4; q++) {
           const t = t0 + q * bt; if (t > dur - 0.6) break;
           tone('sine', 170, t, 0.003, 0.42, 0.15, 42);
@@ -56,7 +70,7 @@ export async function renderSoundtrack(dur, events, sr = 44100, music = true, fa
           for (let e = 0; e < 2; e++) tone('square', NOTE(ch[0] - 12), t + e * bt / 2, 0.004, 0.06, bt * 0.38);
         }
         if (b % 4 === 3) for (let k = 0; k < 4; k++) tone('triangle', 110 - k * 12, t0 + 3 * bt + k * bt / 4, 0.003, 0.18, 0.12, 60); // tom fill
-      } else if (style === 1) {
+      } else if (kind === 1) {
         // Suspens: ostinato bass 16 not, timpani, string "tremolo", detik jam
         if (b % 2 === 0) ch.slice(1).forEach(n => tone('sawtooth', NOTE(n), t0, 0.6, 0.012, 8 * bt - 0.8));
         for (let q = 0; q < 4; q++) {
@@ -76,7 +90,9 @@ export async function renderSoundtrack(dur, events, sr = 44100, music = true, fa
           if (q % 2 === 1) { hiss(t, 0.12, 0.12, 'bandpass', 1500, 0, 0.8); hiss(t + 0.012, 0.1, 0.07, 'bandpass', 2200, 0, 0.8); }
           hiss(t + bt / 2, 0.04, 0.05, 'highpass', 8000);
           tone('square', NOTE(ch[0] - 12), t, 0.005, 0.055, bt * 0.4); tone('square', NOTE(ch[0]), t + bt / 2, 0.005, 0.05, bt * 0.35);
-          if (q === 3 && b % 2 === 1) [0, 1, 2].forEach(k => tone('triangle', NOTE(ch[1 + k] + 12), t + k * bt / 3, 0.005, 0.035, 0.15));
+          if (q === 3 && b % 2 === 1 && V.arp !== 2) [0, 1, 2].forEach(k => tone('triangle', NOTE(ch[1 + k] + 12), t + k * bt / 3, 0.005, 0.035, 0.15));
+          if (V.arp === 2) for (let e = 0; e < 2; e++) tone('triangle', NOTE(ch[1 + ((q * 2 + e) % 3)] + 12), t + e * bt / 2, 0.005, 0.03, bt * 0.4);   // arpeggio 8 not
+          if (V.hat16) hiss(t + bt / 4, 0.02, 0.03, 'highpass', 9000), hiss(t + 3 * bt / 4, 0.02, 0.03, 'highpass', 9000);
         }
       }
     }
@@ -87,6 +103,8 @@ export async function renderSoundtrack(dur, events, sr = 44100, music = true, fa
     else if (e.kind === 'shuffle') for (let i = 0; i < 9; i++) hiss(t + i * 0.055, 0.04, 0.12, 'bandpass', 2500 + (i % 3) * 600, 0, 2); // kocok kad
     else if (e.kind === 'card') { const f = 700 + (e.i % 12) * 45; tone('sine', f, t, 0.004, 0.22, 0.09, f * 1.5); hiss(t, 0.02, 0.08, 'highpass', 3000); }
     else if (e.kind === 'done') [72, 76, 79, 84].forEach((n, k) => tone('sine', NOTE(n), t + k * 0.08, 0.005, 0.16, 0.5));
+    else if (e.kind === 'boom') { tone('sine', 90, t, 0.003, 0.6, 0.7, 38); hiss(t, 0.5, 0.18, 'lowpass', 900, 120); [60, 67, 72].forEach(n => tone('sawtooth', NOTE(n), t, 0.01, 0.04, 0.6)); }
+    else if (e.kind === 'tick') tone('square', 1800 + (e.i % 4) * 200, t, 0.002, 0.05, 0.03);
     else if (e.kind === 'end') { [60, 64, 67, 72].forEach(n => tone('triangle', NOTE(n), t, 0.02, 0.07, 2.2)); [72, 76, 79, 84, 88].forEach((n, k) => tone('sine', NOTE(n), t + k * 0.1, 0.005, 0.14, 0.7)); }
   }
   // pudar di hujung
@@ -143,16 +161,16 @@ export function musicOff(delay = 500) {
 export async function buildSoundtrack(dur, events, sr = 44100, style = 0) {
   const LOOP = loopLen(style), LEAD = 0.3;
   const loopB = await renderSoundtrack(LOOP + LEAD + 0.3, [], sr, true, false, style);
-  const kinds = {}; const need = new Set(events.map(e => e.kind === 'card' ? 'card' + (e.i % 12) : e.kind));
+  const kinds = {}; const need = new Set(events.map(e => e.kind === 'card' ? 'card' + (e.i % 12) : e.kind === 'tick' ? 'tick' + (e.i % 4) : e.kind));
   await Promise.all([...need].map(async k => {
-    const ev = k.startsWith('card') ? { t: 0.01, kind: 'card', i: +k.slice(4) } : { t: 0.01, kind: k };
+    const ev = k.startsWith('card') ? { t: 0.01, kind: 'card', i: +k.slice(4) } : k.startsWith('tick') ? { t: 0.01, kind: 'tick', i: +k.slice(4) } : { t: 0.01, kind: k };
     kinds[k] = (await renderSoundtrack(k === 'end' ? 3 : 1.2, [ev], sr, false, false)).getChannelData(0);
   }));
   const N = Math.ceil(dur * sr), out = new Float32Array(N), lp = loopB.getChannelData(0);
   const l0 = Math.round(LEAD * sr), ll = Math.round(LOOP * sr);
   for (let i = l0; i < N; i++) out[i] = lp[l0 + ((i - l0) % ll)] * 0.75;
   for (const e of events) {
-    const b = kinds[e.kind === 'card' ? 'card' + (e.i % 12) : e.kind]; if (!b) continue;
+    const b = kinds[e.kind === 'card' ? 'card' + (e.i % 12) : e.kind === 'tick' ? 'tick' + (e.i % 4) : e.kind]; if (!b) continue;
     const o = Math.round(e.t * sr);
     for (let j = 0; j < b.length && o + j < N; j++) out[o + j] += b[j];
   }

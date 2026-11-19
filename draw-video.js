@@ -29,7 +29,7 @@ function fitText0(c, s, maxW, size, weight = 700, min = 12) {
   return t === s ? s : t + '…';
 }
 
-export function duration(o) { if (o.end) return o.dur || 4; if (o.scenes) return o.scenes.reduce((a, x) => a + duration(x), 0); const { INTRO, SHUF, STEP, OUTRO } = TM(o); return INTRO + SHUF + o.seq.length * STEP + OUTRO; }
+export function duration(o) { if (o.custom) return o.custom.dur; if (o.end) return o.dur || 4; if (o.scenes) return o.scenes.reduce((a, x) => a + duration(x), 0); const { INTRO, SHUF, STEP, OUTRO } = TM(o); return INTRO + SHUF + o.seq.length * STEP + OUTRO; }
 
 function layout(o) {
   const n = o.boxes.length, cols = n <= 2 ? n : n <= 6 ? 2 : n <= 12 ? 3 : 4;
@@ -315,7 +315,7 @@ function makeSceneDrawer(o, logos, sc = 1) {
 export async function makeDrawVideo(o, onP) {
   const logos = await Promise.all((o.logos || []).map(loadImg));
   const sc = scaleFor(o);
-  const D = o.scenes ? makeSceneDrawer(o, logos, sc) : makeDrawer(o, logos, null, sc);
+  const D = o.custom ? o.custom.make(logos, sc) : o.scenes ? makeSceneDrawer(o, logos, sc) : makeDrawer(o, logos, null, sc);
   const cfg = await pickCodec();
   let snd = null;
   if (o.music) {
@@ -323,7 +323,7 @@ export async function makeDrawVideo(o, onP) {
       onP && onP(0, 'audio');
       const acfg = await pickAudio(), sr = acfg ? acfg.sampleRate : 44100;
       const { buildSoundtrack } = await import('./sound.js');
-      snd = { cfg: acfg, buf: await buildSoundtrack(duration(o), soundEvents(o), sr, o.musicStyle ?? Math.floor(Math.random() * 4)) };
+      snd = { cfg: acfg, buf: await buildSoundtrack(duration(o), o.custom ? o.custom.events : soundEvents(o), sr, o.musicStyle ?? Math.floor(Math.random() * 4)) };
     } catch (e) { snd = null; }
   }
   if (cfg) {
@@ -375,3 +375,6 @@ export async function prepareDrawVideo(o, onP) {
   };
   return { blob, file, share, download };
 }
+
+// Alat lukisan dikongsi dengan video ringkasan pertandingan
+export const VID = { W, H, rr, fitText, ease, css };
