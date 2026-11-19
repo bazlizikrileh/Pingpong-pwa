@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.24.1';
+const VERSION = '3.25.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2391,7 +2391,7 @@ function viewLiveScore(t, mid0) {
     _lsTimer = setTimeout(() => cloud.setLive(t.id, lid, { rs: S.rs, cur: S.cur, ri: S.ri, sw: !!S.swap, by: ls.get('pingpong:myname') || (edit ? 'Penganjur' : ''), tb: m.lt || m.table || '' }).catch(err => {
       if (err.code === 'permission-denied') { ls.set(key, null); toast('🔒 Perlawanan ini kini dijaga oleh orang lain', 4000); viewLiveScore(load(t.id) || t, mid0); }
       else toast('Skor langsung tidak dapat dihantar: ' + (err.code || err.message), 3500);
-    }), 1200);   // himpun tekanan pantas (−1, undur) menjadi satu tulisan
+    }), 400);   // himpun tekanan pantas (−1, undur) menjadi satu tulisan
   };
   const point = (k, d) => {
     if (d > 0 && allDone()) return;

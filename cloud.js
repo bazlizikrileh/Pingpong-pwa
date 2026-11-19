@@ -222,43 +222,93 @@ export const myUid = () => (auth && auth.currentUser ? auth.currentUser.uid : ''
 // ---------- Skor langsung (setiap meja) ----------
 // tournaments/{tid}/live/{mid}: { uid, rs:"11-8,9-11|...", cur:"7-5", ri, by, tb, at } — semua boleh baca.
 // Penjaga skor bukan penganjur mendaftar sekali dengan PIN: tournaments/{tid}/scorers/{uid} { pin, at } (tidak boleh dibaca umum).
-// Skor langsung untuk penonton: satu dokumen ringkasan bagi setiap pertandingan (livesum/{tid}, peta m: { id perlawanan: skor }).
-// Penonton membaca dokumen ini setiap 30 saat (TV: 10 saat) (bukan pendengar masa nyata) supaya bacaan Firestore kekal dalam had percuma:
-// 1 bacaan setiap tinjauan, tidak kira berapa banyak mata ditekan. Tinjauan berhenti bila skrin tertutup / halaman lain dibuka.
-const _poll = {};
+// ---------- Skor langsung ----------
+// Utama: Firebase Realtime Database (rtdb) — skor sampai serta-merta, tidak dikira setiap bacaan (hanya data dimuat turun).
+//   live/{tid}/{id perlawanan}/{uid penjaga} = { rs, cur, ri, by, tb, sw, at }   · live/{tid}/{id}/_clr = masa dilepaskan
+//   Sambungan dibuka hanya semasa halaman Langsung / Keputusan / Jaga skor / TV dipaparkan (had percuma 100 serentak).
+// Sandaran: dokumen ringkasan Firestore livesum/{tid} dibaca setiap 30 saat jika rtdb tidak dapat disambung.
+let rdb = null, rdbOff = false;
+const _poll = {}, _rt = {};
 const LIVE_PAGE = tid => new RegExp(`^#/(t/${tid}/(langsung|keputusan|ls|m)(/|$)|tv/${tid})`);
+const liveEntry = x => ({ ...x, rs: decodeRubbers(x.rs), cur: String(x.cur || '0-0').split('-').map(Number), at: typeof x.at === 'number' ? x.at : x.at?.toMillis?.() || Date.now() });
 function parseSum(d) {
   const o = {}, m = (d && d.m) || {};
-  for (const [k, x] of Object.entries(m)) if (x && typeof x === 'object') o[k] = { ...x, rs: decodeRubbers(x.rs), cur: String(x.cur || '0-0').split('-').map(Number), at: x.at?.toMillis?.() || Date.now() };
+  for (const [k, x] of Object.entries(m)) if (x && typeof x === 'object') o[k] = liveEntry(x);
   return o;
+}
+function parseRt(v) {
+  const o = {};
+  for (const [lid, node] of Object.entries(v || {})) {
+    if (!node || typeof node !== 'object') continue;
+    const clr = Number(node._clr) || 0;
+    let best = null;
+    for (const [uid, x] of Object.entries(node)) if (uid !== '_clr' && x && typeof x === 'object' && (Number(x.at) || 0) > clr && (!best || x.at > best.at)) best = { ...x, uid };
+    if (best) o[lid] = liveEntry(best);
+  }
+  return o;
+}
+function rtdb() {
+  if (rdb || rdbOff || !F || !F.getDatabase || !firebaseConfig.databaseURL) return rdb;
+  try { rdb = F.getDatabase(app, firebaseConfig.databaseURL); } catch (e) { console.warn('rtdb', e); rdbOff = true; }
+  return rdb;
+}
+function stopLive(tid) {
+  const p = _poll[tid]; if (p) { clearInterval(p.timer); delete _poll[tid]; }
+  const r = _rt[tid]; if (r) { r.unsub && r.unsub(); clearTimeout(r.fb); delete _rt[tid]; }
+  if (rdb && !Object.keys(_rt).length && !_scoring) try { F.dbOffline(rdb); } catch {}
 }
 async function pollLive(tid, force) {
   const p = _poll[tid]; if (!p) return;
-  if (!LIVE_PAGE(tid).test(location.hash)) { clearInterval(p.timer); delete _poll[tid]; return; }
+  if (!LIVE_PAGE(tid).test(location.hash)) return stopLive(tid);
   if (!force && document.visibilityState !== 'visible') return;
   try {
     const d = await F.getDoc(F.doc(db, 'livesum', tid)), o = parseSum(d.exists() ? d.data() : null);
-    const sig = JSON.stringify(Object.entries(o).map(([k, x]) => [k, x.rs, x.cur, x.ri, x.uid, x.sw]));
-    if (sig !== p.sig || !state.live[tid]) { p.sig = sig; state.live[tid] = o; emit('live'); }
+    setLiveState(tid, o, p);
   } catch (e) { console.warn('live', e); state.live[tid] = state.live[tid] || {}; }
 }
-export function watchLive(tid, ms = 30000) {
-  if (!F) return;
+function setLiveState(tid, o, holder) {
+  const sig = JSON.stringify(Object.entries(o).map(([k, x]) => [k, x.rs, x.cur, x.ri, x.uid, x.sw]));
+  if (sig !== holder.sig || !state.live[tid]) { holder.sig = sig; state.live[tid] = o; emit('live'); }
+}
+function startPoll(tid, ms) {
   const p = _poll[tid];
   if (p && p.ms <= ms) return;
   if (p) clearInterval(p.timer);
   _poll[tid] = { ms, sig: p ? p.sig : '', timer: setInterval(() => pollLive(tid), ms) };
   pollLive(tid, true);
 }
+export function watchLive(tid, ms = 30000) {
+  if (!F) return;
+  const r = rtdb();
+  if (!r) return startPoll(tid, ms);
+  if (_rt[tid]) return;
+  const h = (_rt[tid] = { sig: '' });
+  try { F.dbOnline(r); } catch {}
+  // jika tiada data dalam 10 saat (contoh had sambungan penuh), guna tinjauan Firestore sebagai sandaran
+  h.fb = setTimeout(() => { if (!h.got) startPoll(tid, ms); }, 10000);
+  h.unsub = F.dbOnValue(F.dbRef(r, 'live/' + tid), snap => {
+    h.got = true; clearTimeout(h.fb); if (_poll[tid]) { clearInterval(_poll[tid].timer); delete _poll[tid]; }
+    if (!LIVE_PAGE(tid).test(location.hash)) return stopLive(tid);
+    setLiveState(tid, parseRt(snap.val()), h);
+  }, err => { console.warn('rtdb live', err); clearTimeout(h.fb); startPoll(tid, ms); });
+}
 export const refreshLive = tid => pollLive(tid, true);
-if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') Object.keys(_poll).forEach(tid => pollLive(tid)); });
+if (typeof window !== 'undefined') {
+  // tinggalkan halaman skor langsung → tutup sambungan (jimat had 100 sambungan serentak)
+  window.addEventListener('hashchange', () => { for (const tid of new Set([...Object.keys(_rt), ...Object.keys(_poll)])) if (!LIVE_PAGE(tid).test(location.hash)) stopLive(tid); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') { if (rdb && Object.keys(_rt).length) try { F.dbOnline(rdb); } catch {} Object.keys(_poll).forEach(tid => pollLive(tid)); }
+    else if (rdb && !_scoring) setTimeout(() => { if (document.visibilityState !== 'visible') try { F.dbOffline(rdb); } catch {} }, 60000);
+  });
+}
 export async function claimScorer(tid, pin) {
   const u = await ensureAnon();
   await F.setDoc(F.doc(db, 'tournaments', tid, 'scorers', u.uid), { pin: String(pin), at: F.serverTimestamp() });
 }
-// Penjaga skor: kunci perlawanan (live/{mid}) ditulis bila mula dan setiap 60 saat (peraturan: seorang penjaga sahaja);
-// skor setiap mata ditulis ke dokumen ringkasan penonton.
-const _lockAt = {};
+// Penjaga skor: kunci perlawanan (Firestore live/{mid}; seorang penjaga sahaja) ditulis bila mula dan setiap 60 saat.
+// Setiap mata ditulis ke rtdb (penonton nampak serta-merta); ringkasan Firestore (sandaran) paling kerap setiap 30 saat.
+const _lockAt = {}, _sumAt = {}, _sumT = {};
+let _scoring = 0;
 export async function setLive(tid, mid, { rs, cur, ri, by, tb, sw }) {
   const u = await ensureAnon();
   const e = { uid: u.uid, rs: encodeRubbers(rs), cur: `${cur[0]}-${cur[1]}`, ri: ri | 0, by: String(by || '').slice(0, 50), tb: String(tb || '').slice(0, 15), sw: !!sw };
@@ -267,15 +317,27 @@ export async function setLive(tid, mid, { rs, cur, ri, by, tb, sw }) {
     await F.setDoc(F.doc(db, 'tournaments', tid, 'live', mid), { ...e, at: F.serverTimestamp() });
     _lockAt[k] = Date.now();
   }
-  // ralat di sini (cth. peraturan baharu belum dipublish) tidak menghentikan penjaga skor — kunci di atas sudah berjaya
-  try { await F.setDoc(F.doc(db, 'livesum', tid), { m: { [mid]: { ...e, at: F.serverTimestamp() } }, at: F.serverTimestamp() }, { merge: true }); }
-  catch (err) { console.warn('livesum', err); }
+  _scoring = Date.now();
+  const r = rtdb();
+  if (r) { try { F.dbOnline(r); } catch {} F.dbSet(F.dbRef(r, `live/${tid}/${mid}/${u.uid}`), { rs: e.rs, cur: e.cur, ri: e.ri, by: e.by, tb: e.tb, sw: e.sw, at: F.dbNow() }).catch(err => console.warn('rtdb set', err)); }
+  // ringkasan Firestore (sandaran) — paling kerap setiap 30 saat; tulisan terakhir sentiasa dihantar
+  const writeSum = () => { _sumAt[k] = Date.now(); return F.setDoc(F.doc(db, 'livesum', tid), { m: { [mid]: { ...e, at: F.serverTimestamp() } }, at: F.serverTimestamp() }, { merge: true }).catch(err => console.warn('livesum', err)); };
+  clearTimeout(_sumT[k]);
+  const wait = 30e3 - (Date.now() - (_sumAt[k] || 0));
+  if (wait <= 0) await writeSum(); else _sumT[k] = setTimeout(writeSum, wait);
   state.live[tid] = { ...(state.live[tid] || {}), [mid]: { ...e, rs, cur, at: Date.now() } };
 }
 export async function clearLive(tid, mid) {
-  await init(); delete _lockAt[tid + '/' + mid];
+  await init(); const k = tid + '/' + mid; delete _lockAt[k]; clearTimeout(_sumT[k]); _scoring = 0;
   await F.deleteDoc(F.doc(db, 'tournaments', tid, 'live', mid)).catch(() => {});
   await F.setDoc(F.doc(db, 'livesum', tid), { m: { [mid]: F.deleteField() }, at: F.serverTimestamp() }, { merge: true }).catch(() => {});
+  const r = rtdb();
+  if (r) {
+    const uid = myUid();
+    // buang entri sendiri; tanda "dilepaskan" supaya entri penjaga lain tidak dipaparkan lagi
+    if (uid) await F.dbRemove(F.dbRef(r, `live/${tid}/${mid}/${uid}`)).catch(() => {});
+    await F.dbSet(F.dbRef(r, `live/${tid}/${mid}/_clr`), F.dbNow()).catch(() => {});
+  }
   if (state.live[tid]) delete state.live[tid][mid];
 }
 
