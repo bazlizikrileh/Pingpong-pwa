@@ -1,6 +1,6 @@
 // Service worker: simpan fail app supaya boleh dibuka walaupun internet lemah.
 // Tukar VERSION setiap kali fail app berubah supaya pengguna dapat versi baharu.
-const VERSION = 'v3.23.0';
+const VERSION = 'v3.24.0';
 const CACHE = `pingpong-${VERSION}`;
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'engine.js', 'store.js',
   'draw-anim.js', 'cloud.js', 'live.js', 'draw-video.js', 'sound.js', 'vendor/mp4-muxer.js', 'poster.js', 'reg-poster.js', 'poster-kit.js', 'vendor/qrcode.js', 'push.js', 'push-config.js', 'firebase-config.js', 'manifest.webmanifest', 'logos/kskpkpjb.webp', 'logos/ksas-pingpong.webp', 'logos/ksas.webp', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-180.png'];
@@ -35,7 +35,9 @@ self.addEventListener('push', e => {
 // Ketik notifikasi → buka app pada halaman berkaitan
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  const url = (e.notification.data && e.notification.data.url) || '';
+  // hanya buka halaman dalam app ini (elak pautan luar daripada notifikasi palsu)
+  let url = (e.notification.data && e.notification.data.url) || '';
+  try { if (new URL(url, self.registration.scope).origin !== self.location.origin) url = ''; } catch { url = ''; }
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(cs => {
     const c = cs[0];
     if (c) { if (url) c.navigate(new URL(url, self.registration.scope).href).catch(() => {}); return c.focus(); }

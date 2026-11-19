@@ -222,24 +222,60 @@ export const myUid = () => (auth && auth.currentUser ? auth.currentUser.uid : ''
 // ---------- Skor langsung (setiap meja) ----------
 // tournaments/{tid}/live/{mid}: { uid, rs:"11-8,9-11|...", cur:"7-5", ri, by, tb, at } — semua boleh baca.
 // Penjaga skor bukan penganjur mendaftar sekali dengan PIN: tournaments/{tid}/scorers/{uid} { pin, at } (tidak boleh dibaca umum).
-const unsubLive = {};
-export function watchLive(tid) {
-  if (unsubLive[tid] || !F) return;
-  unsubLive[tid] = F.onSnapshot(F.collection(db, 'tournaments', tid, 'live'), snap => {
-    const o = {};
-    snap.forEach(d => { const x = d.data(); o[d.id] = { ...x, rs: decodeRubbers(x.rs), cur: String(x.cur || '0-0').split('-').map(Number), at: x.at?.toMillis?.() || Date.now() }; });
-    state.live[tid] = o; emit('live');
-  }, err => { console.warn('live', err); state.live[tid] = state.live[tid] || {}; emit('live'); });
+// Skor langsung untuk penonton: satu dokumen ringkasan bagi setiap pertandingan (livesum/{tid}, peta m: { id perlawanan: skor }).
+// Penonton membaca dokumen ini setiap 30 saat (TV: 10 saat) (bukan pendengar masa nyata) supaya bacaan Firestore kekal dalam had percuma:
+// 1 bacaan setiap tinjauan, tidak kira berapa banyak mata ditekan. Tinjauan berhenti bila skrin tertutup / halaman lain dibuka.
+const _poll = {};
+const LIVE_PAGE = tid => new RegExp(`^#/(t/${tid}/(langsung|keputusan|ls|m)(/|$)|tv/${tid})`);
+function parseSum(d) {
+  const o = {}, m = (d && d.m) || {};
+  for (const [k, x] of Object.entries(m)) if (x && typeof x === 'object') o[k] = { ...x, rs: decodeRubbers(x.rs), cur: String(x.cur || '0-0').split('-').map(Number), at: x.at?.toMillis?.() || Date.now() };
+  return o;
 }
+async function pollLive(tid, force) {
+  const p = _poll[tid]; if (!p) return;
+  if (!LIVE_PAGE(tid).test(location.hash)) { clearInterval(p.timer); delete _poll[tid]; return; }
+  if (!force && document.visibilityState !== 'visible') return;
+  try {
+    const d = await F.getDoc(F.doc(db, 'livesum', tid)), o = parseSum(d.exists() ? d.data() : null);
+    const sig = JSON.stringify(Object.entries(o).map(([k, x]) => [k, x.rs, x.cur, x.ri, x.uid, x.sw]));
+    if (sig !== p.sig || !state.live[tid]) { p.sig = sig; state.live[tid] = o; emit('live'); }
+  } catch (e) { console.warn('live', e); state.live[tid] = state.live[tid] || {}; }
+}
+export function watchLive(tid, ms = 30000) {
+  if (!F) return;
+  const p = _poll[tid];
+  if (p && p.ms <= ms) return;
+  if (p) clearInterval(p.timer);
+  _poll[tid] = { ms, sig: p ? p.sig : '', timer: setInterval(() => pollLive(tid), ms) };
+  pollLive(tid, true);
+}
+export const refreshLive = tid => pollLive(tid, true);
+if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') Object.keys(_poll).forEach(tid => pollLive(tid)); });
 export async function claimScorer(tid, pin) {
   const u = await ensureAnon();
   await F.setDoc(F.doc(db, 'tournaments', tid, 'scorers', u.uid), { pin: String(pin), at: F.serverTimestamp() });
 }
+// Penjaga skor: kunci perlawanan (live/{mid}) ditulis bila mula dan setiap 60 saat (peraturan: seorang penjaga sahaja);
+// skor setiap mata ditulis ke dokumen ringkasan penonton.
+const _lockAt = {};
 export async function setLive(tid, mid, { rs, cur, ri, by, tb, sw }) {
   const u = await ensureAnon();
-  await F.setDoc(F.doc(db, 'tournaments', tid, 'live', mid), { uid: u.uid, rs: encodeRubbers(rs), cur: `${cur[0]}-${cur[1]}`, ri: ri | 0, by: String(by || '').slice(0, 50), tb: String(tb || '').slice(0, 15), sw: !!sw, at: F.serverTimestamp() });
+  const e = { uid: u.uid, rs: encodeRubbers(rs), cur: `${cur[0]}-${cur[1]}`, ri: ri | 0, by: String(by || '').slice(0, 50), tb: String(tb || '').slice(0, 15), sw: !!sw };
+  const k = tid + '/' + mid;
+  if (!_lockAt[k] || Date.now() - _lockAt[k] > 60e3) {
+    await F.setDoc(F.doc(db, 'tournaments', tid, 'live', mid), { ...e, at: F.serverTimestamp() });
+    _lockAt[k] = Date.now();
+  }
+  await F.setDoc(F.doc(db, 'livesum', tid), { m: { [mid]: { ...e, at: F.serverTimestamp() } }, at: F.serverTimestamp() }, { merge: true });
+  state.live[tid] = { ...(state.live[tid] || {}), [mid]: { ...e, rs, cur, at: Date.now() } };
 }
-export async function clearLive(tid, mid) { await init(); await F.deleteDoc(F.doc(db, 'tournaments', tid, 'live', mid)); }
+export async function clearLive(tid, mid) {
+  await init(); delete _lockAt[tid + '/' + mid];
+  await F.deleteDoc(F.doc(db, 'tournaments', tid, 'live', mid)).catch(() => {});
+  await F.setDoc(F.doc(db, 'livesum', tid), { m: { [mid]: F.deleteField() }, at: F.serverTimestamp() }, { merge: true });
+  if (state.live[tid]) delete state.live[tid][mid];
+}
 
 // ---------- Poster sendiri (gambar dimuat naik penganjur) ----------
 // posters/{tid}: { img: dataURL webp/jpeg ≤ ~900KB, at } — semua boleh baca, hanya admin tulis

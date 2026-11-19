@@ -1,11 +1,11 @@
 import * as E from './engine.js';
-import { store } from './store.js';
+import { store, backups, snapshot } from './store.js';
 import { playDeal } from './draw-anim.js';
 import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.23.0';
+const VERSION = '3.24.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -745,6 +745,7 @@ function viewSetupCore(t, part = 'tetapan') {
       </div>
     </details>
     </form>
+    ${canAdmin(t) ? backupCard(t) : ''}
     ${store.isCloud(t.id) ? `<div class="card"><div class="section-title" style="margin-top:0">PIN pengadil &amp; peserta</div>
       <p class="muted small">Kongsi dengan peserta. Skor yang dihantar perlu disahkan penganjur.</p>
       <div class="row"><input id="pin" inputmode="numeric" maxlength="8" placeholder="cth. 2468" style="max-width:160px;font-family:var(--mono);font-size:18px">
@@ -775,7 +776,7 @@ function viewSetupCore(t, part = 'tetapan') {
   }); }
 
   const f = document.getElementById('f');
-  wireExtras(t); wireCoAdmin(t);
+  wireExtras(t); wireCoAdmin(t); wireBackup(t);
   const hc = document.getElementById('hideChk');
   if (hc) hc.onchange = () => { t.hidden = hc.checked; save(t); toast(hc.checked ? '🙈 Disembunyikan dari senarai awam' : '👁 Dipaparkan dalam senarai awam'); };
   if (f) wireForm(f);
@@ -787,7 +788,7 @@ function viewSetupCore(t, part = 'tetapan') {
   const pinIn = document.getElementById('pin');
   if (pinIn) {
     cloud.getPin(t.id).then(p => { if (document.activeElement !== pinIn) pinIn.value = p || ''; document.getElementById('pinMsg').textContent = p ? `PIN semasa: ${p}` : 'Belum ada PIN — pengadil belum boleh menghantar skor.'; }).catch(() => {});
-    document.getElementById('genPin').onclick = () => { pinIn.value = String(Math.floor(1000 + Math.random() * 9000)); toast('Tekan "Simpan PIN" untuk guna PIN ini'); };
+    document.getElementById('genPin').onclick = () => { pinIn.value = String(Math.floor(100000 + Math.random() * 900000)); /* 6 digit: sukar diteka */ toast('Tekan "Simpan PIN" untuk guna PIN ini'); };
     const pinNow = async () => { const v = pinIn.value.trim(), cur = await cloud.getPin(t.id).catch(() => '');
       if (!/^\d{4,8}$/.test(v)) { toast('Jana atau isi PIN dahulu'); return ''; }
       if (v !== cur) { if (!confirm(`PIN ${v} belum disimpan. Simpan sekarang dan kongsi?`)) return ''; await cloud.setPin(t.id, v); document.getElementById('pinMsg').textContent = `✅ PIN disimpan: ${v}`; }
@@ -2390,7 +2391,7 @@ function viewLiveScore(t, mid0) {
     _lsTimer = setTimeout(() => cloud.setLive(t.id, lid, { rs: S.rs, cur: S.cur, ri: S.ri, sw: !!S.swap, by: ls.get('pingpong:myname') || (edit ? 'Penganjur' : ''), tb: m.lt || m.table || '' }).catch(err => {
       if (err.code === 'permission-denied') { ls.set(key, null); toast('🔒 Perlawanan ini kini dijaga oleh orang lain', 4000); viewLiveScore(load(t.id) || t, mid0); }
       else toast('Skor langsung tidak dapat dihantar: ' + (err.code || err.message), 3500);
-    }), 250);
+    }), 1200);   // himpun tekanan pantas (−1, undur) menjadi satu tulisan
   };
   const point = (k, d) => {
     if (d > 0 && allDone()) return;
@@ -2603,7 +2604,7 @@ function tvLiveRefresh() {
 }
 function viewTV(t) {
   document.body.classList.add('tv');
-  if (store.isCloud(t.id)) cloud.watchLive(t.id);
+  if (store.isCloud(t.id)) cloud.watchLive(t.id, 10000);
   const c = clubOf(t), S = tvSlides(t);
   if (_tv.id !== t.id) { stopTV(); _tv.id = t.id; _tv.i = 0; }
   const sl = S[_tv.i % S.length];
@@ -2942,6 +2943,51 @@ function showAccount() {
   on('eChk', async () => { const ok = await cloud.refreshUser(); toast(ok ? '✅ E-mel disahkan' : 'Belum disahkan — klik pautan dalam e-mel dahulu', 4000); showAccount(); render(); });
 }
 
+// ---------- Sandaran & pemulihan ----------
+const fmtAt = ms => new Date(ms).toLocaleString('ms-MY', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+function backupCard(t) {
+  const B = backups(t.id);
+  return `<details class="card fold" data-fold="bak"><summary>💾 Sandaran &amp; pemulihan</summary>
+    <p class="muted small" style="margin-top:6px">Muat turun sandaran sebelum dan selepas pertandingan. Salinan automatik juga disimpan di telefon ini setiap kali anda membuat perubahan (10 versi terakhir).</p>
+    <div class="row" style="gap:6px;flex-wrap:wrap"><button type="button" class="pill-btn brand small" id="bakDl"><span class="dot"></span>⬇️ Muat turun sandaran</button>
+      <button type="button" class="pill-btn light small" id="bakUp">⬆️ Pulih dari fail</button><input type="file" id="bakFile" accept=".json,application/json" hidden></div>
+    ${B.length ? `<div class="section-title" style="margin:12px 0 4px">Salinan automatik di telefon ini</div>
+      ${B.map((b, i) => `<div class="list-item"><span><b>${esc(fmtAt(b.at))}</b><br><span class="muted small">${b.p} ${esc(UNIT(t).toLowerCase())} · ${b.m} perlawanan · ${b.n} keputusan</span></span><button type="button" class="pill-btn light small" data-bak="${i}">↩️ Pulih</button></div>`).join('')}` : ''}
+  </details>`;
+}
+function restoreTo(t, data, label) {
+  const n = (data.matches || []).filter(m => m.status === 'done').length;
+  if (!confirm(`Pulihkan "${t.name}" kepada ${label}?\n${(data.participants || []).length} ${UNIT(t).toLowerCase()} · ${(data.matches || []).length} perlawanan · ${n} keputusan.\n\nKeadaan semasa akan disalin dahulu supaya boleh diundur.`)) return;
+  snapshot(t, null, true);
+  const nt = E.migrate({ ...data, id: t.id });
+  save(nt); toast('✅ Dipulihkan'); render(true);
+}
+function wireBackup(t) {
+  const dl = document.getElementById('bakDl'); if (!dl) return;
+  dl.onclick = () => {
+    const regs = (cloud.state.regs || {})[t.id] || [];
+    const blob = new Blob([JSON.stringify({ app: 'pingpong-pwa', version: VERSION, savedAt: new Date().toISOString(), tournament: t, registrations: regs }, null, 1)], { type: 'application/json' });
+    const a = document.createElement('a'), d = new Date();
+    a.href = URL.createObjectURL(blob); a.download = `sandaran-${(t.name || 'pertandingan').replace(/[^\w-]+/g, '_').slice(0, 40)}-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}.json`;
+    document.body.appendChild(a); a.click(); a.remove(); toast('Sandaran dimuat turun');
+  };
+  const up = document.getElementById('bakUp'), fi = document.getElementById('bakFile');
+  up.onclick = () => fi.click();
+  fi.onchange = async () => {
+    const f = fi.files[0]; if (!f) return;
+    try {
+      const j = JSON.parse(await f.text()), d = j.tournament || (j.tournaments && j.tournaments.find(x => x.id === t.id)) || j;
+      if (!d || !Array.isArray(d.participants) || !Array.isArray(d.matches)) throw 0;
+      if (d.id && d.id !== t.id && !confirm(`Fail ini dari pertandingan lain ("${d.name || d.id}"). Teruskan memulihkan ke pertandingan ini?`)) return;
+      restoreTo(t, d, `sandaran fail${j.savedAt ? ' (' + fmtAt(Date.parse(j.savedAt)) + ')' : ''}`);
+    } catch { toast('Fail sandaran tidak sah'); }
+    fi.value = '';
+  };
+  $app.querySelectorAll('[data-bak]').forEach(b => (b.onclick = () => {
+    const x = backups(t.id)[+b.dataset.bak]; if (!x) return;
+    try { restoreTo(t, JSON.parse(x.data), 'versi ' + fmtAt(x.at)); } catch { toast('Salinan rosak'); }
+  }));
+}
 // Admin bersama untuk satu pertandingan (dijemput oleh pengurus utama)
 function coAdminCard(t) {
   const o = cloud.managerOf(t.id) || {}, co = o.co || [], nm = o.coNames || [];

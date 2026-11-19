@@ -78,7 +78,10 @@ async function setTopic(env, t, list) { list.length ? await env.PUSH.put('T:' + 
 
 function json(data, cors, status = 200) { return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...cors } }); }
 
+// Hanya pautan dalaman app (#/… atau laluan relatif), teks dipendekkan — elak notifikasi palsu berpautan luar
+const safeLink = l => { l = String(l || ''); return /^(#\/|\.?\/?[A-Za-z0-9#?=&_\/-]*$)/.test(l) && !/^\/\//.test(l) && !/:/.test(l) ? l.slice(0, 200) : ''; };
 async function deliver(env, { topics = [], title, body = '', url: link = '', tag = '' }) {
+  title = String(title || '').slice(0, 80); body = String(body || '').slice(0, 240); link = safeLink(link); tag = String(tag || '').slice(0, 64);
   const payload = { title: String(title).slice(0, 80), body: String(body).slice(0, 220), url: String(link).slice(0, 200), tag: String(tag).slice(0, 60) };
   const ids = new Set();
   for (const t of topics.filter(t => TOPIC_RE.test(t)).slice(0, 10)) (await topicList(env, t)).forEach(x => ids.add(x));
