@@ -10,21 +10,39 @@ export const STYLES = [
   { name: 'Suspens', bpm: 120, prog: [[45, 57, 60, 64], [41, 57, 60, 65], [50, 57, 62, 65], [40, 56, 59, 64]] },     // Am–F–Dm–E, minor tegang
   { name: 'Arena', bpm: 138, prog: [[40, 55, 59, 64], [48, 55, 60, 64], [43, 55, 59, 62], [38, 54, 57, 62]] },      // Em–C–G–D, gaya stadium
   { name: 'Ceria', bpm: 112, prog: [[48, 60, 64, 67], [43, 59, 62, 67], [45, 60, 64, 69], [41, 60, 65, 69]] },       // C–G–Am–F, pop riang (asal)
-  // ---- 10 templat video ringkasan (gabungan Bertenaga + Arena). kind 0 = Bertenaga, 2 = Arena; v = variasi ----
-  { name: 'Juara', recap: 1, kind: 0, bpm: 128, prog: [[45, 57, 60, 64], [41, 57, 60, 65], [48, 55, 60, 64], [43, 55, 59, 62]], v: { arp: 1 } },           // Am–F–C–G
-  { name: 'Stadium', recap: 1, kind: 2, bpm: 138, prog: [[40, 55, 59, 64], [48, 55, 60, 64], [43, 55, 59, 62], [38, 54, 57, 62]], v: {} },                // Em–C–G–D
-  { name: 'Lonjakan', recap: 1, kind: 0, bpm: 132, prog: [[38, 53, 57, 62], [46, 53, 58, 62], [41, 57, 60, 65], [48, 55, 60, 64]], v: { arp: 2, hat16: 1 } }, // Dm–Bb–F–C
-  { name: 'Gemuruh', recap: 1, kind: 2, bpm: 132, prog: [[45, 57, 60, 64], [43, 55, 59, 62], [41, 57, 60, 65], [40, 56, 59, 64]], v: { stab2: 1 } },      // Am–G–F–E
-  { name: 'Kemenangan', recap: 1, kind: 0, bpm: 124, prog: [[48, 55, 60, 64], [43, 55, 59, 62], [45, 57, 60, 64], [41, 57, 60, 65]], v: { arp: 2 } },      // C–G–Am–F
-  { name: 'Pahlawan', recap: 1, kind: 2, bpm: 140, prog: [[38, 53, 57, 62], [48, 55, 60, 64], [46, 53, 58, 62], [45, 57, 61, 64]], v: { stab2: 1, hat16: 1 } }, // Dm–C–Bb–A
-  { name: 'Pecut', recap: 1, kind: 0, bpm: 140, prog: [[40, 55, 59, 64], [48, 55, 60, 64], [38, 54, 57, 62], [47, 54, 59, 63]], v: { hat16: 1, arp: 1 } },  // Em–C–D–B
-  { name: 'Final', recap: 1, kind: 2, bpm: 128, prog: [[48, 55, 60, 63], [44, 56, 60, 63], [39, 55, 58, 63], [46, 53, 58, 62]], v: {} },                  // Cm–Ab–Eb–Bb
-  { name: 'Semangat', recap: 1, kind: 0, bpm: 120, prog: [[43, 55, 59, 62], [38, 54, 57, 62], [40, 55, 59, 64], [48, 55, 60, 64]], v: { arp: 2 } },        // G–D–Em–C
-  { name: 'Gelanggang', recap: 1, kind: 2, bpm: 136, prog: [[42, 57, 61, 66], [38, 54, 57, 62], [45, 57, 61, 64], [40, 56, 59, 64]], v: { stab2: 1 } },   // F#m–D–A–E
+  // ---- 10 lagu sebenar (Pixabay, lesen bebas royalti) — dipotong 70 s, kenyaringan diseragamkan ----
+  { name: 'Sukan', file: 'music/sukan.mp3', track: 1 },
+  { name: 'Dram Pantas', file: 'music/dram.mp3', track: 1 },
+  { name: 'Bertenaga', file: 'music/bertenaga.mp3', track: 1 },
+  { name: 'Rock Sukan', file: 'music/rock.mp3', track: 1 },
+  { name: 'Semangat', file: 'music/semangat.mp3', track: 1 },
+  { name: 'Aksi', file: 'music/aksi.mp3', track: 1 },
+  { name: 'Epik', file: 'music/epik.mp3', track: 1 },
+  { name: 'Pertempuran', file: 'music/pertempuran.mp3', track: 1 },
+  { name: 'Wira', file: 'music/wira.mp3', track: 1 },
+  { name: 'Motivasi', file: 'music/motivasi.mp3', track: 1 },
 ];
-export const RECAP = STYLES.map((x, i) => [i, x]).filter(([, x]) => x.recap);
+export const RECAP = STYLES.map((x, i) => [i, x]).filter(([, x]) => x.track);
+// Lagu sebenar: dimuat turun bila perlu, dijadikan gelung lancar (hujung bercantum ke awal dengan resapan 2 saat)
+const _trk = {};
+async function trackBuffer(style, sr) {
+  const k = style + '@' + sr; if (_trk[k]) return _trk[k];
+  _trk[k] = (async () => {
+    const r = await fetch(STYLES[style].file); if (!r.ok) throw new Error('lagu tidak dapat dimuat');
+    const ab = await r.arrayBuffer(), ctx = new OfflineAudioContext(2, 1, sr), buf = await ctx.decodeAudioData(ab);
+    const X = Math.min(Math.floor(2 * sr), Math.floor(buf.length / 4)), L = buf.length - X;
+    const out = new AudioBuffer({ length: L, numberOfChannels: buf.numberOfChannels, sampleRate: sr });
+    for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+      const s = buf.getChannelData(ch), o = out.getChannelData(ch);
+      for (let i = 0; i < L; i++) o[i] = i < X ? s[i] * (i / X) + s[L + i] * (1 - i / X) : s[i];
+    }
+    return out;
+  })();
+  try { return await _trk[k]; } catch (e) { delete _trk[k]; throw e; }
+}
+export const isTrack = style => !!(STYLES[style] && STYLES[style].file);
 export const loopLen = style => 8 * 4 * 60 / STYLES[style || 0].bpm;
-export const randomStyle = () => Math.floor(Math.random() * 4);   // undian: 4 gaya asal sahaja
+export const randomStyle = () => RECAP[Math.floor(Math.random() * RECAP.length)][0];   // lagu sebenar dipilih secara rawak
 export async function renderSoundtrack(dur, events, sr = 44100, music = true, fade = true, style = 0) {
   const ctx = new OfflineAudioContext(1, Math.ceil(dur * sr), sr);
   const master = ctx.createDynamicsCompressor(); master.threshold.value = -14; master.ratio.value = 4;
@@ -141,12 +159,15 @@ export async function musicOn(style = 0) {
   if (muted()) return; const c = ac(); if (!c) return;
   clearTimeout(offT); offT = null;
   if (loopSrc) return; // muzik sedang berbunyi (cth. sesi seterusnya) — teruskan gaya yang sama
+  if (isTrack(style) && !loopBufs[style]) { try { loopBufs[style] = await trackBuffer(style, c.sampleRate); } catch (e) { console.warn('lagu', e); style = 0; } }
   if (!loopBufs[style]) { loopPs[style] = loopPs[style] || renderSoundtrack(loopLen(style) + 0.6, [], c.sampleRate, true, false, style).then(b => (loopBufs[style] = b)); await loopPs[style]; }
   if (loopSrc || muted()) return;
   const loopBuf = loopBufs[style];
   const comp = c.createDynamicsCompressor(); comp.threshold.value = -18; comp.ratio.value = 4; comp.connect(c.destination);
-  loopGain = c.createGain(); loopGain.gain.value = 1.25; loopGain.connect(comp);
-  loopSrc = c.createBufferSource(); loopSrc.buffer = loopBuf; loopSrc.loop = true; loopSrc.loopStart = 0.3; loopSrc.loopEnd = 0.3 + loopLen(style); playing = style;
+  loopGain = c.createGain(); loopGain.gain.value = isTrack(style) ? 0.7 : 1.25; loopGain.connect(comp);
+  loopSrc = c.createBufferSource(); loopSrc.buffer = loopBuf; loopSrc.loop = true;
+  if (isTrack(style)) { loopSrc.loopStart = 0; loopSrc.loopEnd = loopBuf.duration; } else { loopSrc.loopStart = 0.3; loopSrc.loopEnd = 0.3 + loopLen(style); }
+  playing = style;
   loopSrc.connect(loopGain); loopSrc.start();
 }
 let playing = null;
@@ -159,6 +180,7 @@ export function musicOff(delay = 500) {
 // Versi pantas untuk video panjang: muzik dirender sekali (gelung ~17 s) dan disalin berulang,
 // setiap kesan bunyi dirender sekali dan dicampur terus — jauh lebih ringan untuk telefon.
 export async function buildSoundtrack(dur, events, sr = 44100, style = 0) {
+  if (isTrack(style)) { try { return await buildFromTrack(dur, events, sr, style); } catch (e) { console.warn('lagu', e); style = 0; } }
   const LOOP = loopLen(style), LEAD = 0.3;
   const loopB = await renderSoundtrack(LOOP + LEAD + 0.3, [], sr, true, false, style);
   const kinds = {}; const need = new Set(events.map(e => e.kind === 'card' ? 'card' + (e.i % 12) : e.kind === 'tick' ? 'tick' + (e.i % 4) : e.kind));
@@ -178,5 +200,27 @@ export async function buildSoundtrack(dur, events, sr = 44100, style = 0) {
   for (let i = 0; i < N; i++) { let v = Math.tanh(out[i] * 1.2); if (i > N - fo) v *= (N - i) / fo; out[i] = v; }
   const buf = new AudioBuffer({ length: N, numberOfChannels: 1, sampleRate: sr });
   buf.copyToChannel(out, 0);
+  return buf;
+}
+
+// Runut bunyi video daripada lagu sebenar + kesan bunyi (mono, untuk pengekod video)
+async function sfxBufs(events, sr) {
+  const kinds = {}; const key = e => (e.kind === 'card' ? 'card' + (e.i % 12) : e.kind === 'tick' ? 'tick' + (e.i % 4) : e.kind);
+  await Promise.all([...new Set(events.map(key))].map(async k => {
+    const ev = k.startsWith('card') ? { t: 0.01, kind: 'card', i: +k.slice(4) } : k.startsWith('tick') ? { t: 0.01, kind: 'tick', i: +k.slice(4) } : { t: 0.01, kind: k };
+    kinds[k] = (await renderSoundtrack(k === 'end' ? 3 : 1.2, [ev], sr, false, false)).getChannelData(0);
+  }));
+  return { kinds, key };
+}
+async function buildFromTrack(dur, events, sr, style) {
+  const lp = await trackBuffer(style, sr), { kinds, key } = await sfxBufs(events, sr);
+  const N = Math.ceil(dur * sr), out = new Float32Array(N), ll = lp.length, nc = lp.numberOfChannels;
+  const chs = [...Array(nc)].map((_, c) => lp.getChannelData(c));
+  const fi = Math.round(0.4 * sr);
+  for (let i = 0; i < N; i++) { let v = 0; for (let c = 0; c < nc; c++) v += chs[c][i % ll]; out[i] = (v / nc) * 0.62 * (i < fi ? i / fi : 1); }
+  for (const e of events) { const b = kinds[key(e)]; if (!b) continue; const o = Math.round(e.t * sr), g = e.kind === 'tick' ? 0.5 : 0.8; for (let j = 0; j < b.length && o + j < N; j++) out[o + j] += b[j] * g; }
+  const fo = Math.round(2 * sr);
+  for (let i = 0; i < N; i++) { let v = Math.tanh(out[i] * 1.1); if (i > N - fo) v *= (N - i) / fo; out[i] = v; }
+  const buf = new AudioBuffer({ length: N, numberOfChannels: 1, sampleRate: sr }); buf.copyToChannel(out, 0);
   return buf;
 }

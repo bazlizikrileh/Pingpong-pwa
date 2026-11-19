@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.29.0';
+const VERSION = '3.30.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2963,7 +2963,7 @@ function wireRecap(t) {
   import('./recap-video.js').then(R => { op.insertAdjacentHTML('beforeend', R.OPEN_NAMES.map((n, i) => `<option value="${i}">${i + 1}. ${esc(n)}</option>`).join('')); op.value = ls.get('pingpong:rcOpen') || ''; });
   op.onchange = () => ls.set('pingpong:rcOpen', op.value || null);
   awc.onchange = () => ls.set('pingpong:rcAw', awc.checked ? null : '0');
-  import('./sound.js').then(S => { sel.insertAdjacentHTML('beforeend', S.RECAP.map(([i, x]) => `<option value="${i}">🎵 ${esc(x.name)} · ${x.kind === 2 ? 'Arena' : 'Bertenaga'}</option>`).join('')); try { sel.value = ls.get('pingpong:rcSty') || ''; } catch {} });
+  import('./sound.js').then(S => { sel.insertAdjacentHTML('beforeend', S.RECAP.map(([i, x]) => `<option value="${i}">🎵 ${esc(x.name)}</option>`).join('')); try { sel.value = ls.get('pingpong:rcSty') || ''; } catch {} });
   sel.onchange = () => ls.set('pingpong:rcSty', sel.value || null);
   go.onclick = async () => {
     go.disabled = true; out.innerHTML = ''; msg.textContent = 'Menyediakan video dalam telefon ini. Jangan tutup skrin…';

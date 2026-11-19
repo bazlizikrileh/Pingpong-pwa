@@ -322,8 +322,8 @@ export async function makeDrawVideo(o, onP) {
     try {
       onP && onP(0, 'audio');
       const acfg = await pickAudio(), sr = acfg ? acfg.sampleRate : 44100;
-      const { buildSoundtrack } = await import('./sound.js');
-      snd = { cfg: acfg, buf: await buildSoundtrack(duration(o), o.custom ? o.custom.events : soundEvents(o), sr, o.musicStyle ?? Math.floor(Math.random() * 4)) };
+      const { buildSoundtrack, randomStyle } = await import('./sound.js');
+      snd = { cfg: acfg, buf: await buildSoundtrack(duration(o), o.custom ? o.custom.events : soundEvents(o), sr, o.musicStyle ?? randomStyle()) };
     } catch (e) { snd = null; }
   }
   if (cfg) {
