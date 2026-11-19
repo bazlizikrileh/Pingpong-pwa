@@ -21,13 +21,27 @@ const okey = m => m.stage === 'group'
   : [m.tg ? 1 : 0, 1, m.round || 0, m.bracket === 'ko' ? 0 : 1, m.slot || 0];
 const ocmp = (x, y) => { const a = okey(x), b = okey(y); for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] - b[i]; return 0; };
 
+// Trio/kuartet di peringkat kalah mati: perlawanan (Single/Double) dalam pertemuan yang sama boleh dimainkan
+// serentak di meja lain yang kosong. m.xt = { indeks perlawanan: meja }.
+let liveRiOf = () => null;   // indeks perlawanan yang sedang dijaga di meja utama (dari skor langsung), ditetapkan oleh app
+export const setLiveRi = f => { liveRiOf = f; };
+export const canSplit = (t, m) => E.isTeam(t) && m.stage !== 'group' && t.splitKO !== false && (m.rubbers || []).length > 1;
+export const rubDone = (t, m, i) => !!(E.evaluateMatch(t, m).rubbers[i] || {}).complete;
+const away = (m, i) => !!m.xt && m.xt[i] != null;
+// Meja utama masih digunakan selagi ada perlawanan (bukan di meja lain) yang belum tamat
+const primActive = (t, m) => !m.xt || m.rubbers.some((_, i) => !away(m, i) && !rubDone(t, m, i));
+export const awayActive = (t, m) => Object.entries(m.xt || {}).filter(([i]) => !rubDone(t, m, +i)).map(([i, k]) => [+i, +k]);
 export function liveState(t) {
   const ks = new Set(tableList(t).map(x => x.k)), onT = m => m.lt && ks.has(m.lt);
   const live = t.matches.filter(m => onT(m) && !isDone(m) && real(m.a) && real(m.b));
-  const occ = {}, busy = new Set();
-  live.forEach(m => { occ[m.lt] = m; pl2(m).forEach(p => busy.add(p)); });
+  const occ = {}, xr = {}, busy = new Set();
+  live.forEach(m => {
+    if (primActive(t, m)) occ[m.lt] = m;
+    awayActive(t, m).forEach(([i, k]) => { if (ks.has(k) && !occ[k]) { occ[k] = m; xr[k] = i; } });
+    pl2(m).forEach(p => busy.add(p));
+  });
   const cand = t.matches.filter(m => !onT(m) && !isDone(m) && real(m.a) && real(m.b)).sort(ocmp);
-  return { live, occ, busy, cand };
+  return { live, occ, xr, busy, cand };
 }
 function pick(t, k, cand, busy, used) {
   const fr = m => !used.has(m) && pl2(m).every(p => !busy.has(p));
@@ -97,13 +111,30 @@ export function plan(t) {
     const m = pick(t, k, cand, b, used);
     if (m) { used.add(m); pl2(m).forEach(p => b.add(p)); as.push([m, k]); }
   });
+  // Meja yang masih kosong: pecahkan pertemuan trio/kuartet kalah mati (perlawanan lain dimainkan serentak)
+  const taken = new Set([...Object.keys(occ).map(Number), ...as.map(x => x[1])]), xs = [], given = new Set();
+  const ties = [...Object.values(occ), ...as.map(x => x[0])].filter((m, i, A) => A.indexOf(m) === i && canSplit(t, m));
+  tableList(t).forEach(({ k }) => {
+    if (taken.has(k)) return;
+    // agih sama rata: pertemuan yang paling sedikit meja tambahan didahulukan
+    const nAway = m => Object.keys(m.xt || {}).filter(i => !rubDone(t, m, +i)).length + [...given].filter(g => g.startsWith(m.id + ':')).length;
+    for (const m of ties.slice().sort((x, y) => nAway(x) - nAway(y))) {
+      // perlawanan yang sedang dijaga di meja utama (skor langsung) dan sebelumnya kekal di meja utama
+      const cur = liveRiOf(t, m);
+      let free = m.rubbers.map((_, i) => i).filter(i => !away(m, i) && !given.has(m.id + ':' + i) && !rubDone(t, m, i));
+      if (cur != null) free = free.filter(i => i > cur); else if (free.length < 2) continue;   // meja utama kekal dengan sekurang-kurangnya satu perlawanan
+      if (!free.length) continue;
+      const i = free[free.length - 1]; given.add(m.id + ':' + i); taken.add(k); xs.push([m, i, k]); return;
+    }
+  });
+  as.xs = xs;
   return as;
 }
 // Perlawanan seterusnya bagi setiap meja yang sedang digunakan
 export function nextUp(t) {
-  const { occ, busy, cand } = liveState(t), used = new Set(), nx = {};
+  const { occ, xr, busy, cand } = liveState(t), used = new Set(), nx = {};
   tableList(t).forEach(({ k }) => {
-    const cur = occ[k]; if (!cur) return;
+    const cur = occ[k]; if (!cur || xr[k] != null) return;
     const b = new Set(busy); pl2(cur).forEach(p => b.delete(p));
     Object.values(nx).forEach(m => pl2(m).forEach(p => b.add(p)));
     const m = pick(t, k, cand, b, used);
@@ -184,8 +215,9 @@ function chooseUmp(t, m, busy, U) {
 
 // Agih meja kosong (mengubah t). Pulangkan bilangan perlawanan yang diagih.
 export function allocate(t) {
-  const as = plan(t);
-  if (!as.length) return 0;
+  const as = plan(t), xs = as.xs || [];
+  xs.forEach(([m, i, k]) => { m.xt = { ...(m.xt || {}), [i]: k }; });
+  if (!as.length) return xs.length;
   const U = umpirePlan(t), { live } = liveState(t), busy = new Set(), np = new Set();
   live.forEach(m => { pl2(m).forEach(p => busy.add(p)); if (m.ump) busy.add(m.ump); });
   as.forEach(([m]) => pl2(m).forEach(p => { busy.add(p); np.add(p); }));
@@ -193,13 +225,13 @@ export function allocate(t) {
   as.forEach(([m]) => { const u = chooseUmp(t, m, busy, U); if (u) busy.add(u); up.set(m, u); });
   live.forEach(m => { if (m.ump && np.has(m.ump)) { const u = chooseUmp(t, m, busy, U); if (u) busy.add(u); m.ump = u; } });
   as.forEach(([m, k]) => { m.lt = k; m.tg = 0; m.ump = up.get(m) || ''; });
-  return as.length;
+  return as.length + xs.length;
 }
 // Tangguh: keluarkan dari meja, letak di hujung giliran, kemudian agih semula
 export function defer(t, mid) {
   const m = t.matches.find(x => x.id === mid); if (!m) return;
   const active = t.matches.some(x => x.lt && x.status !== 'done');
-  m.lt = 0; m.tg = Date.now(); m.ump = '';
+  m.lt = 0; m.tg = Date.now(); m.ump = ''; delete m.xt;
   if (active) allocate(t);
 }
 // Selepas skor disimpan: kosongkan meja perlawanan yang tamat dan agih semula jika sistem langsung sedang aktif
