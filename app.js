@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.21.1';
+const VERSION = '3.21.2';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1828,9 +1828,9 @@ function wireReg(t) {
     const full = reg ? (prompt('Nama penuh (pilihan)', reg.full || '') ?? (reg.full || '')).trim() : '';
     if (renamePerson(t, old, nv)) save(t);
     if (reg) try { await cloud.adminEditReg(t.id, rid, { name: nv.slice(0, 50), full: full.slice(0, 80) }); } catch (e) { try { await cloud.adminEditReg(t.id, rid, { name: nv.slice(0, 50) }); } catch (e2) { toast('Gagal kemas kini pendaftaran: ' + (e2.code || e2.message), 4000); } }
-    toast('Nama dikemas kini'); render();
+    toast('Nama dikemas kini'); render(true);
   }));
-  $app.querySelectorAll('[data-pay]').forEach(b => (b.onclick = () => { t.paid = { ...(t.paid || {}) }; const k = b.dataset.pay; if (t.paid[k]) delete t.paid[k]; else t.paid[k] = 1; save(t); render(); }));
+  $app.querySelectorAll('[data-pay]').forEach(b => (b.onclick = () => { t.paid = { ...(t.paid || {}) }; const k = b.dataset.pay; if (t.paid[k]) delete t.paid[k]; else t.paid[k] = 1; save(t); render(true); }));
   if ($('payCopy')) $('payCopy').onclick = async () => {
     const list = rosterOf(t).filter(r => r.status !== 'no' && !isPaid(t, r)), amt = feeAmt(t);
     const txt = `💰 *Peringatan yuran · ${t.name}*\n${amt ? `Yuran: RM${amt}\n` : t.regFee ? `Yuran: ${t.regFee}\n` : ''}\nBelum bayar:\n${list.map((r, i) => `${i + 1}. ${r.partner ? r.name + ' & ' + r.partner : r.name}`).join('\n')}`;
