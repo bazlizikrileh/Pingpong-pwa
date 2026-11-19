@@ -725,3 +725,15 @@ table.rp-mx td.sets span { white-space:nowrap; display:inline-block; margin-righ
 .ks-ko { width:100%; border-collapse:collapse; font-size:12px; margin-bottom:8px; } .ks-ko td { border-bottom:1px solid #999; padding:8px 4px; } .ks-ko td.c { text-align:center; color:#555; } .ks-msheet h4 { margin:10px 0 4px; }
 @media print { .ks-msheet { break-inside: avoid; border:none; padding:0; margin-bottom:10mm; } .ks-msheet.wide { break-before: page; break-after: page; } .ks-mat td.d, .ks-mat th.x { -webkit-print-color-adjust: exact; print-color-adjust: exact; } @page { size: A4; } }
 @media print { .ks-msheet.wide { page: wide; } @page wide { size: A4 landscape; margin: 10mm; } }
+/* Panduan peserta (gaya mesej) */
+.pg-sec { padding:10px 0; border-top:1px solid var(--line, #e5e7eb); }
+.pg .section-title + .pg-sec { border-top:0; padding-top:2px; }
+.pg-h { display:flex; align-items:center; gap:8px; font-weight:800; font-size:15px; margin-bottom:4px; }
+.pg-ic { font-size:20px; line-height:1; }
+.pg-sec p { margin:2px 0; font-size:14px; line-height:1.5; }
+.pg-stat { display:grid; gap:5px; margin-top:8px; font-size:13.5px; }
+.pg-stat > div { display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:10px; background: color-mix(in srgb, var(--line, #e5e7eb) 35%, transparent); }
+.pg-dot { width:11px; height:11px; border-radius:50%; flex:none; }
+.pg-steps, .g-list { counter-reset: st; list-style:none; padding-left:0; margin:6px 0 0; }
+.pg-steps li, .g-list li { counter-increment: st; position:relative; padding-left:30px; margin:6px 0; font-size:14px; line-height:1.45; }
+.pg-steps li::before, .g-list li::before { content: counter(st); position:absolute; left:0; top:0; width:21px; height:21px; border-radius:50%; background: var(--brand, #1f4aa8); color:#fff; font-size:11.5px; font-weight:800; display:flex; align-items:center; justify-content:center; }

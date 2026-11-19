@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.21.5';
+const VERSION = '3.22.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -323,7 +323,8 @@ function renderHead(t, page) {
   const pw = UNIT(t) === 'Pemain' ? 'Pemain' : UNIT(t);
   const tabs = [['tetapan', '⚙️', 'Tetapan'], ['pemain', '👥', UNIT(t)], ['langsung', '🟢', 'Langsung'], ['jadual', '📋', 'Jadual'],
     ['kumpulan', '📊', E.isMixer(t) ? 'Individu' : t.format === 'rr' ? 'Liga' : 'Kumpulan'], ['keputusan', '📝', 'Keputusan']];
-  if (t.format !== 'rr') tabs.push(['kalahmati', '⚔️', 'Knockout'], ['pool', '🥉', 'Pool']);
+  if (t.format !== 'rr') tabs.push(['kalahmati', '⚔️', 'Knockout']);
+  if (t.format === 'group_ko' && t.pool && t.pool !== '0') tabs.push(['pool', '🥉', 'Pool']);
   tabs.push(['laporan', '🖨️', 'Laporan']);
   const alias = { m: (t.matches.find(x => x.id === location.hash.split('/')[4]) || {}).stage === 'group' ? 'keputusan' : 'kalahmati', ranking: 'kalahmati', peraturan: 'pemain' };
   const cur = alias[page] || page;
@@ -569,13 +570,7 @@ function settingsFormAll(t, locked) {
       ${E.HC_SCHEMES[t.hcMode] ? `<label>Tahap dibenarkan</label><div class="lv-allow">${E.HC_SCHEMES[t.hcMode].levels.map(l => `<label class="check"><input type="checkbox" name="regLv" value="${l[0]}" ${!(t.regLevels || []).length || t.regLevels.includes(l[0]) ? 'checked' : ''}> ${esc(l[1])}</label>`).join('')}</div><p class="muted small" style="margin-top:0">Tanda semua = terbuka kepada semua tahap.</p>` : ''}
     </div>
 
-    <div class="section-title">Laporan skor</div>
-    <label class="check"><input type="checkbox" name="waEnabled" ${t.waEnabled ? 'checked' : ''}> Benarkan lapor melalui WhatsApp (sandaran kepada PIN)</label>
-    <div class="grid2" data-show="wa">
-      <div><label>Laporan dihantar ke</label><select name="waMode">${opt({ G: 'Group (peserta pilih group)', N: 'Nombor penganjur' }, t.waMode)}</select></div>
-      <div data-show="waG"><label>Nama group</label><input name="waGroup" value="${esc(t.waGroup)}" placeholder="cth. KSAS Rimau - Laporan Skor"></div>
-      <div data-show="waN"><label>No. WhatsApp</label><input name="waNumber" type="tel" value="${esc(t.waNumber)}" placeholder="cth. 60123456789"></div>
-    </div>`;
+`;
 }
 
 function wireForm(form) {
@@ -594,15 +589,12 @@ function wireForm(form) {
       if (own && !form.club.value) form.club.value = (cloud.state.user && !cloud.state.user.anon && (cloud.state.user.name || '').split(' ')[0]) || ls.get('pingpong:myname') || ''; }
     show('tieRule', (form.entryMode.value === 'team' && form.tieFormat.value === 'SSD' && Number(form.teamSize.value) >= 4) || (form.entryMode.value !== 'team' && form.groupFormat.value === 'F2'));
     show('clubLogo', ['lain', 'kroni', 'sendiri'].includes(form.clubId.value));
-    show('wa', form.waEnabled.checked);
     show('reg', form.regOpen.checked);
-    show('waG', form.waMode.value === 'G'); show('waN', form.waMode.value === 'N');
     form.querySelector('[data-label="gf"]').textContent = mx ? 'Format setiap perlawanan' : f === 'rr' ? 'Format liga' : f === 'ko' ? 'Format (tidak digunakan)' : 'Format kumpulan';
     const c = CLUBS[form.clubId.value];
     form.querySelector('#clubPrev').innerHTML = c ? `${c.logos.map(src => `<span class="logo-badge"><img src="${src}" alt=""></span>`).join('')}<span class="muted small">${esc(c.name)}</span>` : '';
   };
   form.addEventListener('change', e => {
-    if (e.target.name === 'clubId' && CLUBS[e.target.value] && !form.waGroup.value) form.waGroup.value = CLUBS[e.target.value].waGroup;
     sync();
   });
   sync();
@@ -620,11 +612,10 @@ function readSettings(form, t) {
   t.groupFormat = v('groupFormat'); t.koFormat = v('koFormat'); if (form.liveAuto) t.liveAuto = form.liveAuto.checked;
   t.koMode = v('koMode'); t.pool = v('pool'); t.poolMode = v('poolMode');
   t.venue = v('venue'); t.numTables = Number(v('numTables')) || 0; t.venueName = v('venueName').trim();
-  t.waEnabled = form.waEnabled.checked;
+  t.waEnabled = false;   // lapor skor melalui WhatsApp tidak lagi digunakan (PIN + jaga skor)
   t.regOpen = form.regOpen.checked; t.regNote = v('regNote').trim(); t.regCond = String(v('regCond') || '').trim();
   { const S = E.HC_SCHEMES[t.hcMode], ch = [...form.querySelectorAll('input[name=regLv]')]; if (S && ch.length) { const sel = ch.filter(x => x.checked).map(x => x.value); t.regLevels = sel.length === ch.length ? [] : sel; } }
   t.regFee = v('regFee').trim(); t.regMaxText = String(v('regMax') || '').trim(); t.regMax = Number((t.regMaxText.match(/\d+/) || [0])[0]) || 0; t.prizes = v('prizes').trim();
-  t.waMode = v('waMode'); t.waGroup = v('waGroup').trim(); t.waNumber = v('waNumber').replace(/\D/g, '');
   if (!form.entryMode.disabled) {
     t.entryMode = v('entryMode'); t.teamSize = Number(v('teamSize')) || 3; t.format = v('format');
     if (t.entryMode === 'mixer') { t.format = 'rr'; t.mixRounds = Math.max(0, Math.min(40, Number(v('mixRounds')) || 0)); t.mixLv = v('mixLv') || ''; if (form.mixFast) t.mixFast = form.mixFast.checked; if (!['3', '5'].includes(t.groupFormat)) t.groupFormat = '3'; E.relevel(t); }
@@ -1063,7 +1054,7 @@ function viewResults(t) {
     </div>
     ${canEdit(t) && store.isCloud(t.id) ? `<div class="card noprint" id="pendBox"><div class="section-title" style="margin-top:0">🔔 Menunggu pengesahan (${pendingFor(t.id).length})</div>
       ${pendingFor(t.id).map(sub => pendingCard(t, sub)).join('') || '<p class="muted small" style="margin:6px 0 0">Tiada skor menunggu. Skor yang dihantar pengadil/peserta akan muncul di sini secara langsung.</p>'}</div>` : ''}
-    ${t.waEnabled && canEdit(t) ? `<details class="card fold noprint" ${ls.get('pingpong:pasteOpen') === '1' ? 'open' : ''} id="pasteBox"><summary>Tampal laporan WhatsApp (penganjur)</summary>
+    ${false ? `<details class="card fold noprint" ${ls.get('pingpong:pasteOpen') === '1' ? 'open' : ''} id="pasteBox"><summary>Tampal laporan WhatsApp (penganjur)</summary>
       <p class="muted small">Salin satu atau beberapa mesej LAPOR KEPUTUSAN dari WhatsApp, tampal di bawah dan tekan Proses.</p>
       <textarea id="lp" rows="5" placeholder="Tampal mesej laporan di sini">${esc(ls.get('pingpong:paste') || '')}</textarea>
       <div id="lpr"></div>
@@ -1149,7 +1140,7 @@ function viewMatch(t, mid) {
       <div id="dmsg">${m.status === 'done' ? '<span class="ok-badge">✅ Disahkan penganjur</span>' : draft ? '<span class="draft">✏️ Draf skor disimpan di telefon ini</span>' : ''}</div>
       ${edit ? `<div class="btn-stack" style="margin-top:12px">
         <button class="pill-btn brand" id="save"><span class="dot"></span>Simpan markah</button>
-        ${t.waEnabled && m.status !== 'done' ? `<button class="pill-btn" id="wa" style="background:#25d366"><span class="dot" style="background:#fff"></span>📲 Lapor via WhatsApp</button>` : ''}
+        ${false ? `<button class="pill-btn" id="wa" style="background:#25d366"><span class="dot" style="background:#fff"></span>📲 Lapor via WhatsApp</button>` : ''}
         ${m.status !== 'done' ? `<a class="pill-btn light small" href="#/t/${t.id}/ls/${m.id}">🎯 Skor langsung (tekan mata)</a>` : ''}
         ${m.status !== 'done' ? `<button class="pill-btn light small" id="tgh">↩️ Tangguh${m.lt ? ` (keluarkan dari Meja ${m.lt})` : ''}</button>` : ''}
         <button class="pill-btn light small" id="clear">Kosongkan</button>
@@ -1162,7 +1153,7 @@ function viewMatch(t, mid) {
       </div>
       <div class="btn-stack" style="margin-top:12px">
         <button class="pill-btn orange" id="send"><span class="dot"></span>📤 Hantar skor</button>
-        ${t.waEnabled ? `<button class="pill-btn" id="wa" style="background:#25d366"><span class="dot" style="background:#fff"></span>📲 Lapor via WhatsApp</button>` : ''}
+        ${false ? `<button class="pill-btn" id="wa" style="background:#25d366"><span class="dot" style="background:#fff"></span>📲 Lapor via WhatsApp</button>` : ''}
       </div>
       <p class="muted small">Skor akan dipaparkan sebagai rasmi selepas disahkan penganjur. Boleh dihantar semasa perlawanan berjalan (contoh selepas setiap game) dan dihantar semula bila tamat.</p>`}
       ${ls.get('pingpong:sent:' + m.id) && m.status !== 'done' ? '<p class="draft">⏳ Skor anda sudah dihantar dan menunggu pengesahan.</p>' : ''}
@@ -1546,15 +1537,30 @@ function rulesOf(t) {
   rules.push('Jika kaedah di atas gagal, penganjur berhak menggunakan kaedah yang difikirkan perlu dan munasabah. Keputusan penganjur adalah muktamad.');
   return rules;
 }
+// Panduan peserta (gaya sama seperti mesej WhatsApp PIN): bahagian bertajuk + langkah ringkas
+function guideHtml(t) {
+  const team = E.isTeam(t), sec = (ic, title, body) => `<div class="pg-sec"><div class="pg-h"><span class="pg-ic">${ic}</span>${title}</div>${body}</div>`;
+  const steps = a => `<ol class="pg-steps">${a.map(x => `<li>${x}</li>`).join('')}</ol>`;
+  const reporter = E.isMixer(t) ? 'pemain yang tidak bermain dalam sesi itu' : t.format === 'ko' ? 'salah seorang pemain' : 'rakan sekumpulan yang tidak bermain (kalah mati &amp; pool: salah seorang pemain)';
+  return `<div class="card pg"><div class="section-title" style="margin-top:0">📖 Panduan peserta</div>
+    ${sec('👤', 'Kenal pasti diri anda', `<p>Buka tab 🟢 <b>Langsung</b> → tekan <b>👤 Saya</b> → pilih nama anda. Telefon akan ingat pilihan ini. Jika anda mendaftar melalui portal, nama dikesan sendiri.</p>
+      <div class="pg-stat"><div><span class="pg-dot" style="background:#b3261e"></span><span><b>Bermain sekarang</b>: terus ke meja yang dinyatakan</span></div>
+        <div><span class="pg-dot" style="background:#6a1b9a"></span><span><b>Pengadil</b>: pergi ke meja itu dan jaga skor</span></div>
+        <div><span class="pg-dot" style="background:#f4b400"></span><span><b>Bersedia</b>: anda seterusnya selepas perlawanan semasa</span></div>
+        <div><span class="pg-dot" style="background:#94a3b8"></span><span><b>Menunggu / rehat</b>: dipaparkan berapa perlawanan lagi</span></div></div>`)}
+    ${sec('🔔', 'Hidupkan notifikasi', '<p>Tekan 🔔 selepas pilih nama. Telefon akan berbunyi bila anda perlu bermain atau menjadi pengadil, beserta nombor meja.</p>')}
+    ${sec('🎯', 'Jika anda pengadil', `<p class="muted small" style="margin:0 0 4px">Pengadil: ${reporter}.</p>${steps(['Tab 🟢 Langsung → tekan <b>🎯 Jaga skor</b> pada meja anda', 'Masukkan nama anda dan <b>PIN acara</b> dari penganjur (sekali sahaja)',
+      ...(team && t.handicap ? ['Pilih pemain bagi setiap perlawanan <b>sebelum</b> mula, supaya handicap dikira'] : []),
+      'Tekan nama pemain untuk <b>+1 mata</b>. Set tamat sendiri pada 11 (beza 2)', 'Bila perlawanan tamat, skor <b>dihantar automatik</b> kepada penganjur'])}`)}
+    ${sec('📝', 'Tiada penjaga skor di meja?', steps(['Tab 📝 <b>Keputusan</b> → ketik perlawanan bertanda 🟢', 'Isi skor setiap set (disimpan sebagai draf di telefon)', 'Masukkan <b>PIN acara</b> → tekan <b>📤 Hantar skor</b>']))}
+    ${sec('✅', 'Keputusan rasmi', '<p>Skor menjadi rasmi selepas disahkan penganjur atau pengesah. Kedudukan, bracket dan tab Langsung dikemas kini secara automatik.</p>')}
+    ${sec('📌', 'Meja tidak tetap', '<p>Jika meja lain kosong lebih awal, perlawanan anda mungkin dipindah. Sentiasa semak tab Langsung.</p>')}
+  </div>`;
+}
 function rulesHtml(t) {
   const rules = rulesOf(t);
   return `<div class="card"><ol class="rules">${rules.map(r => `<li>${esc(r)}</li>`).join('')}</ol></div>
-    <div class="card"><div class="section-title" style="margin-top:0">📖 Panduan peserta</div>
-      <p><b>1️⃣ Pilih nama anda</b> di tab 🟢 <b>Langsung</b> (👤 Saya). Telefon akan ingat pilihan ini. Status anda:<br>🔴 <b>Bermain sekarang</b>: terus ke meja yang dinyatakan.<br>🟡 <b>Sila bersedia</b>: anda bermain selepas perlawanan semasa di meja itu.<br>🟣 <b>Pengadil</b>: pergi ke meja itu dan catat skor.<br>⏳ <b>Menunggu</b>: dipaparkan berapa perlawanan lagi sebelum giliran anda.<br>📌 Meja tidak tetap. Jika meja lain kosong lebih awal, perlawanan anda mungkin dipindahkan. Bila anda perlu ke meja, jalur berwarna juga dipaparkan di atas tab lain.</p>
-      <p><b>2️⃣ Melapor skor.</b> ${E.isMixer(t) ? 'Pengadil (pemain yang tidak bermain dalam sesi itu) melapor.' : 'Peringkat kumpulan: pengadil (rakan sekumpulan yang tidak bermain) melapor.'} Kalah mati &amp; pool: salah seorang pemain melapor. Buka tab 📝 <b>Keputusan</b>, ketik perlawanan bertanda 🟢, isi skor setiap game (disimpan sebagai draf di telefon), masukkan <b>PIN acara</b> dari penganjur dan tekan <b>📤 Hantar skor</b>.</p>
-      ${t.waEnabled ? `<p><b>Sandaran:</b> jika tidak dapat menghantar, tekan <b>📲 Lapor via WhatsApp</b> dan hantar ke ${t.waMode === 'N' ? 'nombor penganjur' : `group <b>${esc(t.waGroup || 'laporan skor')}</b>`}.</p>` : ''}
-      <p><b>3️⃣ Keputusan rasmi.</b> Skor menjadi rasmi selepas penganjur menekan ✓ Sahkan (🔔 di tab Keputusan). Kedudukan, bracket dan tab Langsung dikemas kini secara automatik.</p>
-    </div>
+    ${guideHtml(t)}
     <div class="card small"><b>Meja:</b> ${E.tablesOf(t).map(esc).join(', ')}<br>${t.date ? `<b>Tarikh:</b> ${esc(t.date)} · ` : ''}<b>Mula:</b> ${esc(E.sessionTime(t, 1))} · <b>Sesi:</b> ${t.sessionMin} minit</div>`;
 }
 function viewRules(t) { $app.innerHTML = section('Pertandingan', 'Peraturan') + rulesHtml(t); }
