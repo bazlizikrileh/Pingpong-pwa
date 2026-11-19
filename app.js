@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.28.0';
+const VERSION = '3.29.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2949,25 +2949,35 @@ function recapData(t) {
 function recapCard(t) {
   if (!t.matches.some(m => m.status === 'done')) return '';
   return `<div class="card noprint"><b>🎬 Video ringkasan</b><p class="muted small" style="margin:4px 0 8px">Video menegak (~40 saat) berserta muzik: angka, kedudukan, detik menarik, kalah mati dan podium. Dijana dalam telefon ini.</p>
-    <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center"><select id="rcSty" style="max-width:190px"><option value="">🎲 Muzik rawak</option></select>
+    <div class="grid2"><div><label style="margin-top:0">🎨 Gaya pembukaan</label><select id="rcOpen"><option value="">🎲 Rawak</option></select></div>
+      <div><label style="margin-top:0">🎵 Muzik</label><select id="rcSty"><option value="">🎲 Rawak</option></select></div></div>
+    <label class="check" style="margin:8px 0"><input type="checkbox" id="rcAw" ${ls.get('pingpong:rcAw') === '0' ? '' : 'checked'}> <span>Sertakan <b>detik menarik</b> <small class="muted">(jika tidak, matriks kumpulan dipapar lebih lama)</small></span></label>
+    <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
     <button type="button" class="pill-btn brand small" id="rcGo"><span class="dot"></span>🎬 Jana video</button></div>
     <p class="small" id="rcMsg" style="margin:8px 0 0"></p><div id="rcOut"></div></div>`;
 }
 function wireRecap(t) {
   const go = document.getElementById('rcGo'); if (!go) return;
   const sel = document.getElementById('rcSty'), msg = document.getElementById('rcMsg'), out = document.getElementById('rcOut');
+  const op = document.getElementById('rcOpen'), awc = document.getElementById('rcAw');
+  import('./recap-video.js').then(R => { op.insertAdjacentHTML('beforeend', R.OPEN_NAMES.map((n, i) => `<option value="${i}">${i + 1}. ${esc(n)}</option>`).join('')); op.value = ls.get('pingpong:rcOpen') || ''; });
+  op.onchange = () => ls.set('pingpong:rcOpen', op.value || null);
+  awc.onchange = () => ls.set('pingpong:rcAw', awc.checked ? null : '0');
   import('./sound.js').then(S => { sel.insertAdjacentHTML('beforeend', S.RECAP.map(([i, x]) => `<option value="${i}">🎵 ${esc(x.name)} · ${x.kind === 2 ? 'Arena' : 'Bertenaga'}</option>`).join('')); try { sel.value = ls.get('pingpong:rcSty') || ''; } catch {} });
   sel.onchange = () => ls.set('pingpong:rcSty', sel.value || null);
   go.onclick = async () => {
     go.disabled = true; out.innerHTML = ''; msg.textContent = 'Menyediakan video dalam telefon ini. Jangan tutup skrin…';
     try {
       const [{ buildRecap }, V, S] = await Promise.all([import('./recap-video.js'), import('./draw-video.js'), import('./sound.js')]);
-      const R = buildRecap(recapData(t)), style = sel.value !== '' ? +sel.value : S.RECAP[Math.floor(Math.random() * S.RECAP.length)][0];
+      const RD = recapData(t), tpl = op.value !== '' ? +op.value : Math.floor(Math.random() * 10);
+      RD.style = tpl; RD.noAwards = !awc.checked;
+      const R = buildRecap(RD), style = sel.value !== '' ? +sel.value : S.RECAP[Math.floor(Math.random() * S.RECAP.length)][0];
       const made = await V.prepareDrawVideo({ custom: R, logos: recapData(t).logos, music: true, musicStyle: style, title: `Ringkasan ${t.name}`, subtitle: '' }, (p, mode) => {
         go.textContent = mode === 'audio' ? '🎵 Menyediakan muzik…' : mode === 'shrink' ? `🗜️ Mengecilkan saiz… ${Math.round(p * 100)}%` : `⏳ ${mode === 'rec' ? 'Merakam' : 'Menyediakan'} video… ${Math.round(p * 100)}%`;
       });
       const url = URL.createObjectURL(made.blob);
-      msg.innerHTML = `✅ Video siap (${(made.file.size / 1048576).toFixed(1)} MB · muzik: ${esc(S.STYLES[style].name)})`;
+      const { OPEN_NAMES } = await import('./recap-video.js');
+      msg.innerHTML = `✅ Video siap (${(made.file.size / 1048576).toFixed(1)} MB · gaya: ${esc(OPEN_NAMES[tpl])} · muzik: ${esc(S.STYLES[style].name)})`;
       out.innerHTML = `<video src="${url}" controls playsinline style="width:100%;max-width:300px;border-radius:14px;margin-top:8px;display:block"></video>
         <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap"><button type="button" class="pill-btn small" style="background:#25d366;color:#fff" id="rcShare">📤 Kongsi ke WhatsApp</button><button type="button" class="pill-btn light small" id="rcDl">⬇️ Simpan ke telefon</button></div>`;
       document.getElementById('rcShare').onclick = async () => { const r = await made.share(); msg.textContent = r.shared ? '✅ Video dikongsi.' : r.cancelled ? 'Dibatalkan.' : '⬇️ Video dimuat turun. Hantar dari galeri / Fail ke WhatsApp.'; };

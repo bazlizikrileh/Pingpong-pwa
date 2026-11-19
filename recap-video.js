@@ -33,9 +33,10 @@ export function buildRecap(d) {
   // matriks: 2 kumpulan sebaris jika kecil
   const G = d.groups || [];
   const big = G.some(g => g.rows.length > 6);
-  for (let i = 0; i < G.length; i += big ? 1 : 2) S.push({ k: 'matrix', gs: G.slice(i, i + (big ? 1 : 2)), dur: 1.1 + Math.max(...G.slice(i, i + (big ? 1 : 2)).map(g => g.rows.length)) * 0.22 + 2.2, chap: i === 0 ? (d.isLiga ? 'KEPUTUSAN LIGA' : 'PERINGKAT KUMPULAN') : '' });
+  const st = d.noAwards ? 0.3 : 0.22, hold = d.noAwards ? 3.4 : 2.2;   // tanpa detik menarik → matriks dipapar lebih lama
+  for (let i = 0; i < G.length; i += big ? 1 : 2) S.push({ k: 'matrix', st, gs: G.slice(i, i + (big ? 1 : 2)), dur: 1.1 + Math.max(...G.slice(i, i + (big ? 1 : 2)).map(g => g.rows.length)) * st + hold, chap: i === 0 ? (d.isLiga ? 'KEPUTUSAN LIGA' : 'PERINGKAT KUMPULAN') : '' });
   if (d.table && d.table.rows.length) S.push({ k: 'table', dur: 1.4 + Math.min(d.table.rows.length, 10) * 0.28 + 2, chap: d.table.title });
-  const aw = (d.awards || []).slice(0, 3);
+  const aw = d.noAwards ? [] : (d.awards || []).slice(0, 3);
   if (aw.length) S.push({ k: 'awards', dur: 0.9 + aw.length * 2.3, chap: 'DETIK MENARIK' });
   const brk = (b, chap) => { if (!b || !b.rounds.length) return; const vis = b.rounds.slice(-4); S.push({ k: 'bracket', b, vis, dur: 1.1 + vis.length * 1.45 + 2, chap }); };
   brk(d.ko, 'KALAH MATI'); brk(d.pool, 'POOL KALAH');
@@ -50,7 +51,7 @@ export function buildRecap(d) {
     ev.push({ t: x.t0, kind: 'scene' });
     if (x.k === 'intro') [0.55, 1.1, 1.65, 2.2].forEach((t, i) => ev.push({ t: x.t0 + t, kind: 'tick', i }));
     if (x.k === 'stats') for (let i = 0; i < 4; i++) ev.push({ t: x.t0 + 0.9 + i * 0.4, kind: 'card', i: i * 2 });
-    if (x.k === 'matrix') { const n = Math.max(...x.gs.map(g => g.rows.length)); for (let i = 0; i < n; i++) ev.push({ t: x.t0 + 0.9 + i * 0.22, kind: 'tick', i }); }
+    if (x.k === 'matrix') { const n = Math.max(...x.gs.map(g => g.rows.length)); for (let i = 0; i < n; i++) ev.push({ t: x.t0 + 0.9 + i * x.st, kind: 'tick', i }); }
     if (x.k === 'table') x.k && d.table.rows.slice(0, 10).forEach((_, i) => ev.push({ t: x.t0 + 1.1 + i * 0.28, kind: 'tick', i }));
     if (x.k === 'awards') aw.forEach((_, i) => ev.push({ t: x.t0 + 0.8 + i * 2.3, kind: 'card', i: 3 + i * 3 }));
     if (x.k === 'bracket') x.vis.forEach((_, i) => ev.push({ t: x.t0 + 1.1 + i * 1.45 + 0.7, kind: i === x.vis.length - 1 ? 'done' : 'card', i: 5 + i }));
@@ -125,7 +126,7 @@ export function buildRecap(d) {
     };
 
     const SC = {
-      intro(t) {
+      intro0(t) {
         // meja pingpong perspektif
         const ty = 700, tH = 420, topW = 380, botW = 660, p = ease(t / 0.9);
         c.save(); c.globalAlpha = p; c.translate(0, (1 - p) * 120);
@@ -166,7 +167,7 @@ export function buildRecap(d) {
         c.fillStyle = 'rgba(255,255,255,.8)'; if (d.where) c.fillText(fit(c, '📍 ' + d.where, W - 120, 22, 600), W / 2, y + 66);
         c.globalAlpha = 1; c.textAlign = 'left';
       },
-      stats(t, x) {
+      stats0(t, x) {
         const items = d.stats;
         items.forEach((it, i) => {
           const q = ease((t - 0.85 - i * 0.4) / 0.5); if (q <= 0) return;
@@ -196,7 +197,7 @@ export function buildRecap(d) {
           c.fillStyle = GOLD; c.fillText(fit(c, 'MATA', ptsW, fs, 900), x0 + nameW + cw * n + ptsW / 2, y0 + 64); c.textAlign = 'left';
           c.globalAlpha = 1;
           g.rows.forEach((r, i) => {
-            const q = ease((t - 0.95 - i * 0.22) / 0.35); if (q <= 0) return;
+            const q = ease((t - 0.95 - i * x.st) / 0.35); if (q <= 0) return;
             const y = y0 + 76 + i * rh;
             c.save(); c.globalAlpha = q; c.translate((1 - q) * 60, 0);
             c.fillStyle = i % 2 ? 'rgba(255,255,255,.05)' : 'rgba(255,255,255,.1)'; rr(c, x0, y, tw, rh - 5, 10); c.fill();
@@ -204,7 +205,7 @@ export function buildRecap(d) {
             c.fillStyle = r.q ? WHITE : 'rgba(255,255,255,.75)';
             c.fillText(fit(c, `${i + 1}. ${r.name}`, nameW - 16, Math.min(22, rh * 0.36), r.q ? 900 : 700), x0 + 14, y + rh / 2 + 5);
             for (let j = 0; j < n; j++) {
-              const cell = g.cells[i][j], cx = x0 + nameW + cw * j, cq = cl((t - 1.05 - i * 0.22 - j * 0.04) / 0.2);
+              const cell = g.cells[i][j], cx = x0 + nameW + cw * j, cq = cl((t - 1.05 - i * x.st - j * 0.04) / 0.2);
               if (cell === 'x') { c.fillStyle = 'rgba(255,255,255,.07)'; rr(c, cx + 3, y + 4, cw - 6, rh - 13, 6); c.fill(); continue; }
               if (!cell || cq <= 0) { c.fillStyle = 'rgba(255,255,255,.35)'; c.textAlign = 'center'; c.fillText('·', cx + cw / 2, y + rh / 2 + 5); c.textAlign = 'left'; continue; }
               c.save(); c.translate(cx + cw / 2, y + rh / 2 - 2); c.scale(back(cq), back(cq));
@@ -354,6 +355,10 @@ export function buildRecap(d) {
         c.textAlign = 'left';
       },
     };
+    Object.assign(SC, OPEN(c, d, { L, logosAt, ball, pill, wrap, fit, confetti, medal, ACC, rr }));
+    const TPL = Math.max(0, Math.min(9, d.style | 0));
+    SC.intro = TPL ? (t, x) => SC['i' + TPL](t, x) : SC.intro0;
+    SC.stats = TPL ? (t, x) => SC['s' + TPL](t, x) : SC.stats0;
     S.forEach(s => { s.hud = s.chap || (s.k === 'matrix' ? (d.isLiga ? 'KEPUTUSAN LIGA' : 'PERINGKAT KUMPULAN') : ''); });
     const draw = tt => {
       c.setTransform(sc, 0, 0, sc, 0, 0);
@@ -368,4 +373,267 @@ export function buildRecap(d) {
     return { cv, draw };
   };
   return { dur, events: ev, make, scenes: S };
+}
+
+// ---------- 10 templat pembukaan & angka (0 = Meja, lalai di atas; 1–9 di bawah) ----------
+export const OPEN_NAMES = ['Meja Pingpong', 'Papan Skor', 'Raket', 'Neon', 'Tiket', 'Poster', 'Gelanggang', 'Kiraan Detik', 'Hujan Bola', 'Emas'];
+function OPEN(c, d, h) {
+  const { logosAt, ball, pill, wrap, fit, confetti, ACC, rr, L } = h;
+  const T = d.title, U = s => String(s || '').toUpperCase(), ST = d.stats || [];
+  const num = (it, t, k, dly = 0) => Math.round(it.n * ease((t - dly) / k));
+  const center = () => { c.textAlign = 'center'; };
+  const left = () => { c.textAlign = 'left'; };
+  const titleLines = (size, maxW = W - 100, it = true) => wrap(c, U(T), maxW, size, 900, 3, it);
+  const info = (y, a = 1, col = 'rgba(255,255,255,.85)') => { c.save(); c.globalAlpha *= a; center(); if (d.when) pill(W / 2, y, '📅 ' + d.when, 24, WHITE, 'rgba(255,255,255,.14)'); c.fillStyle = col; if (d.where) c.fillText(fit(c, '📍 ' + d.where, W - 120, 22, 600), W / 2, y + 52); c.restore(); left(); };
+  const glow = (col, b) => { c.shadowColor = col; c.shadowBlur = b; };
+  const noGlow = () => { c.shadowBlur = 0; };
+  const digits = (n, t, settle, seed) => String(n).split('').map((ch, i) => (t < settle + i * 0.08 && /\d/.test(ch) ? String(Math.floor(Math.abs(Math.sin((t * 37 + i * 11 + seed) * 3.1)) * 10)) : ch)).join('');
+  return {
+    // 1 · Papan skor LED: huruf disusun macam papan skor, angka "flap"
+    i1(t) {
+      const x0 = 50, y0 = 250, w = W - 100, hh = 640, p = ease(t / 0.6);
+      c.save(); c.globalAlpha = p;
+      c.fillStyle = '#0d0d0f'; rr(c, x0, y0, w, hh, 26); c.fill(); c.strokeStyle = '#3a3a40'; c.lineWidth = 10; c.stroke();
+      c.fillStyle = 'rgba(255,255,255,.04)'; for (let yy = y0 + 20; yy < y0 + hh - 10; yy += 12) for (let xx = x0 + 20; xx < x0 + w - 10; xx += 12) c.fillRect(xx, yy, 3, 3);
+      center(); glow('#ffb300', 18); c.fillStyle = '#ffb300'; c.font = '900 28px ui-monospace, Menlo, monospace'; c.fillText('★ RINGKASAN PERTANDINGAN ★', W / 2, y0 + 70);
+      const ls = wrap(c, U(T), w - 60, 52, 900, 4); const shown = Math.floor(cl((t - 0.6) / 1.6) * U(T).length); let k = 0;
+      ls.forEach((ln, i) => { let s = ''; for (const ch of ln) { s += k < shown ? ch : k < shown + 3 && ch !== ' ' ? String.fromCharCode(65 + Math.floor(Math.random() * 26)) : ' '; k++; } k++;
+        c.font = '900 52px ui-monospace, Menlo, monospace'; glow('#ff3d00', 22); c.fillStyle = '#ff6a2a'; c.fillText(s, W / 2, y0 + 170 + i * 66); });
+      glow('#00e676', 16); c.fillStyle = '#5cff9d'; c.font = '800 30px ui-monospace, Menlo, monospace'; c.globalAlpha = p * cl((t - 2.4) / 0.4);
+      if (d.when) c.fillText(fit(c, U(d.when), w - 60, 30, 800), W / 2, y0 + hh - 100);
+      c.fillStyle = '#9fd8ff'; glow('#40c4ff', 12); if (d.where) c.fillText(fit(c, U(d.where), w - 60, 20, 700), W / 2, y0 + hh - 50);
+      noGlow(); c.restore(); left();
+      if (L.length) logosAt(W / 2, 110, 110, ease(t / 0.6));
+    },
+    s1(t) {
+      ST.forEach((it, i) => {
+        const y = 260 + i * 220, q = ease((t - 0.85 - i * 0.35) / 0.4); if (q <= 0) return;
+        c.save(); c.globalAlpha = q;
+        c.fillStyle = '#0d0d0f'; rr(c, 40, y, W - 80, 180, 18); c.fill(); c.strokeStyle = '#3a3a40'; c.lineWidth = 6; c.stroke();
+        c.fillStyle = '#ffb300'; c.font = '900 24px ui-monospace, Menlo, monospace'; c.fillText(fit(c, U(it.label), 260, 24, 900), 70, y + 52);
+        c.font = '48px system-ui'; c.fillText(it.ic, 70, y + 140);
+        const s = digits(num(it, t, 1.4, 1.0 + i * 0.35), t, 1.2 + i * 0.35 + 1.0, i), dw = 62, x1 = W - 70 - s.length * (dw + 6);
+        s.split('').forEach((ch, j) => { const xx = x1 + j * (dw + 6);
+          c.fillStyle = '#26262b'; rr(c, xx, y + 30, dw, 120, 8); c.fill(); c.fillStyle = '#000'; c.fillRect(xx, y + 89, dw, 3);
+          glow('#ffffff', 6); c.fillStyle = '#f5f5f5'; c.textAlign = 'center'; c.font = '900 80px ui-monospace, Menlo, monospace'; c.fillText(ch, xx + dw / 2, y + 120); noGlow(); });
+        left(); c.restore();
+      });
+    },
+    // 2 · Raket: dua raket bersilang di belakang tajuk
+    i2(t) {
+      const pad = (x, y, rot, col) => { c.save(); c.translate(x, y); c.rotate(rot);
+        c.fillStyle = '#c69c6d'; rr(c, -24, 120, 48, 170, 14); c.fill(); c.fillStyle = '#8b5e34'; rr(c, -24, 200, 48, 90, 14); c.fill();
+        c.fillStyle = col; c.beginPath(); c.ellipse(0, 0, 150, 165, 0, 0, 7); c.fill(); c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = 8; c.stroke(); c.restore(); };
+      const p = back(t / 0.9);
+      pad(W / 2 - 170 + (1 - cl(p)) * -500, 700, -0.45 * Math.min(1, p), '#d32f2f');
+      pad(W / 2 + 170 + (1 - cl(p)) * 500, 700, 0.45 * Math.min(1, p), '#212121');
+      const bq = cl((t - 0.9) / 1.2); if (bq > 0) ball(W / 2, 560 - Math.sin(bq * Math.PI) * 180, 18);
+      if (L.length) logosAt(W / 2, 100, 110, ease(t / 0.6));
+      center(); c.globalAlpha = cl((t - 0.5) / 0.4); pill(W / 2, 262, 'RINGKASAN PERTANDINGAN', 22, INK, GOLD); c.globalAlpha = 1;
+      titleLines(58).forEach((ln, i) => { const q = cl((t - 1.0 - i * 0.15) / 0.3); c.globalAlpha = q; c.font = F(900, 58, true); c.fillStyle = 'rgba(0,0,0,.5)'; c.fillText(ln, W / 2 + 4, 352 + i * 66); c.fillStyle = WHITE; c.fillText(ln, W / 2, 348 + i * 66); });
+      c.globalAlpha = 1; left(); info(1010, cl((t - 1.8) / 0.4));
+    },
+    s2(t) {
+      ST.forEach((it, i) => {
+        const cx = i % 2 ? W * 0.73 : W * 0.27, cy = 400 + Math.floor(i / 2) * 420, q = back((t - 0.85 - i * 0.3) / 0.6); if (q <= 0) return;
+        c.save(); c.translate(cx, cy); c.rotate((i % 2 ? 0.12 : -0.12) * (1 - cl(q))); c.scale(q, q);
+        c.fillStyle = '#c69c6d'; rr(c, -20, 110, 40, 120, 12); c.fill();
+        c.fillStyle = i % 2 ? '#212121' : '#d32f2f'; c.beginPath(); c.ellipse(0, 0, 130, 140, 0, 0, 7); c.fill();
+        center(); c.fillStyle = WHITE; c.fillText(fit(c, num(it, t, 1.2, 1 + i * 0.3).toLocaleString('ms-MY'), 220, 72, 900, true), 0, 22);
+        c.font = '40px system-ui'; c.fillText(it.ic, 0, -60);
+        c.fillStyle = GOLD; c.fillText(fit(c, U(it.label), 240, 22, 900), 0, 268); c.restore(); left();
+      });
+    },
+    // 3 · Neon: tiub neon berkelip menyala
+    i3(t) {
+      const fl = k => (t < 0.4 + k * 0.3 ? (Math.sin(t * 90 + k) > 0.3 ? 0.25 : 0.05) : 1);
+      c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(0, 0, W, H);
+      center();
+      c.globalAlpha = fl(0); glow('#00e5ff', 24); c.strokeStyle = '#00e5ff'; c.lineWidth = 6; rr(c, 50, 230, W - 100, 640, 40); c.stroke();
+      c.globalAlpha = fl(1); glow('#ff2fd1', 20); c.fillStyle = '#ff7be6'; c.fillText(fit(c, 'RINGKASAN PERTANDINGAN', W - 160, 28, 900), W / 2, 310);
+      c.globalAlpha = fl(2); glow('#ffea00', 28); c.fillStyle = '#fff7a6';
+      titleLines(56, W - 160, false).forEach((ln, i) => { c.font = F(900, 56); c.fillText(ln, W / 2, 420 + i * 70); });
+      c.globalAlpha = fl(3); glow('#00e5ff', 18); c.fillStyle = '#b8f7ff';
+      if (d.when) c.fillText(fit(c, d.when, W - 160, 30, 800), W / 2, 760); if (d.where) c.fillText(fit(c, d.where, W - 160, 20, 600), W / 2, 810);
+      noGlow(); c.globalAlpha = 1; left();
+      if (L.length) logosAt(W / 2, 90, 110, fl(1));
+    },
+    s3(t) {
+      const cols = ['#00e5ff', '#ff2fd1', '#ffea00', '#76ff03'];
+      ST.forEach((it, i) => {
+        const y = 250 + i * 225, on = t > 0.9 + i * 0.35, fl = t < 1.15 + i * 0.35 ? (Math.sin(t * 80 + i) > 0 ? 0.3 : 0.1) : 1; if (!on) return;
+        c.save(); c.globalAlpha = fl; glow(cols[i], 22); c.strokeStyle = cols[i]; c.lineWidth = 5; rr(c, 50, y, W - 100, 185, 30); c.stroke();
+        c.fillStyle = cols[i]; c.fillText(fit(c, num(it, t, 1.2, 1 + i * 0.35).toLocaleString('ms-MY'), 380, 100, 900), 90, y + 128);
+        c.textAlign = 'right'; c.fillStyle = WHITE; c.fillText(fit(c, U(it.label), 220, 24, 800), W - 90, y + 85); c.font = '46px system-ui'; c.fillText(it.ic, W - 90, y + 148);
+        noGlow(); c.restore(); left();
+      });
+    },
+    // 4 · Tiket: tiket acara dengan cop "TAMAT"
+    i4(t) {
+      const q = back((t - 0.2) / 0.8), y0 = 230 + (1 - cl(q)) * 900, x0 = 60, w = W - 120, hh = 760;
+      c.save(); c.fillStyle = '#fff6e5'; rr(c, x0, y0, w, hh, 26); c.fill();
+      c.fillStyle = INK; c.beginPath(); c.arc(x0, y0 + 560, 26, 0, 7); c.arc(x0 + w, y0 + 560, 26, 0, 7); c.fill();
+      c.strokeStyle = '#c9b48a'; c.setLineDash([12, 10]); c.lineWidth = 3; c.beginPath(); c.moveTo(x0 + 34, y0 + 560); c.lineTo(x0 + w - 34, y0 + 560); c.stroke(); c.setLineDash([]);
+      c.fillStyle = HOT; rr(c, x0, y0, w, 90, 26); c.fill(); c.fillRect(x0, y0 + 50, w, 40);
+      center(); c.fillStyle = WHITE; c.fillText(fit(c, '🎟️ TIKET · RINGKASAN PERTANDINGAN', w - 40, 26, 900), W / 2, y0 + 58);
+      c.fillStyle = INK; wrap(c, U(T), w - 70, 50, 900, 3, true).forEach((ln, i) => { c.font = F(900, 50, true); c.fillText(ln, W / 2, y0 + 180 + i * 60); });
+      c.fillStyle = '#6b5a3a'; if (d.when) c.fillText(fit(c, '📅 ' + d.when, w - 60, 26, 800), W / 2, y0 + 410); if (d.where) c.fillText(fit(c, '📍 ' + d.where, w - 60, 20, 600), W / 2, y0 + 460);
+      for (let i = 0; i < 46; i++) { const bw = (i * 7) % 3 + 2; c.fillStyle = INK; c.fillRect(x0 + 90 + i * 10.5, y0 + 610, bw, 100); }
+      c.restore(); left();
+      const sq = back((t - 2.4) / 0.4);
+      if (sq > 0) { c.save(); c.translate(W - 190, y0 + 330); c.rotate(-0.3); c.scale(2.2 - 1.2 * Math.min(1, sq), 2.2 - 1.2 * Math.min(1, sq)); c.globalAlpha = cl(sq) * 0.85;
+        c.strokeStyle = '#d32f2f'; c.lineWidth = 7; rr(c, -110, -48, 220, 96, 14); c.stroke(); center(); c.fillStyle = '#d32f2f'; c.font = F(900, 52); c.fillText('TAMAT', 0, 18); c.restore(); left(); }
+      if (L.length) logosAt(W / 2, 80, 110, ease(t / 0.5));
+    },
+    s4(t) {
+      const x0 = 80, w = W - 160, q = ease((t - 0.8) / 1.0), hh = 120 + ST.length * 150, y0 = 230;
+      c.save(); c.beginPath(); c.rect(0, y0, W, hh * q + 30); c.clip();
+      c.fillStyle = '#fbfbf7'; c.fillRect(x0, y0, w, hh);
+      c.fillStyle = '#fbfbf7'; c.beginPath(); for (let i = 0; i <= 20; i++) c.lineTo(x0 + i * w / 20, y0 + hh + (i % 2 ? 18 : 0)); c.lineTo(x0 + w, y0 + hh); c.fill();
+      c.fillStyle = INK; center(); c.font = '900 30px ui-monospace, Menlo, monospace'; c.fillText('*** RESIT KEPUTUSAN ***', W / 2, y0 + 64); left();
+      ST.forEach((it, i) => { const y = y0 + 150 + i * 150;
+        c.fillStyle = '#555'; c.font = '700 24px ui-monospace, Menlo, monospace'; c.fillText(`${it.ic} ${U(it.label)}`, x0 + 30, y);
+        c.fillStyle = '#bbb'; c.fillText('.'.repeat(40), x0 + 30, y + 44);
+        c.textAlign = 'right'; c.fillStyle = INK; c.font = '900 64px ui-monospace, Menlo, monospace'; c.fillText(num(it, t, 1.2, 1.1 + i * 0.3).toLocaleString('ms-MY'), x0 + w - 30, y + 60); left();
+        c.strokeStyle = '#ddd'; c.setLineDash([6, 6]); c.beginPath(); c.moveTo(x0 + 20, y + 92); c.lineTo(x0 + w - 20, y + 92); c.stroke(); c.setLineDash([]); });
+      c.restore();
+    },
+    // 5 · Poster: belah pepenjuru, perkataan tajuk besar bersilih ganti
+    i5(t) {
+      const p = ease(t / 0.7);
+      c.fillStyle = ACC; c.beginPath(); c.moveTo(0, 0); c.lineTo(W * p, 0); c.lineTo(W * p - 300, H); c.lineTo(0, H); c.fill();
+      c.fillStyle = HOT; c.beginPath(); c.moveTo(W, H * 0.62); c.lineTo(W, H); c.lineTo(W - W * 0.9 * p, H); c.fill();
+      const words = U(T).split(/\s+/).slice(0, 6), cols = [WHITE, GOLD, WHITE, INK, GOLD, WHITE];
+      words.forEach((w, i) => { const q = back((t - 0.5 - i * 0.18) / 0.4); if (q <= 0) return; const fromL = i % 2 === 0;
+        c.save(); c.translate(fromL ? 50 - (1 - Math.min(1, q)) * 600 : W - 50 + (1 - Math.min(1, q)) * 600, 300 + i * 100); c.textAlign = fromL ? 'left' : 'right';
+        c.fillStyle = cols[i % cols.length]; c.fillText(fit(c, w, W - 100, 96, 900, true), 0, 0); c.restore(); });
+      const y = Math.min(1000, 300 + words.length * 100 + 10);
+      c.globalAlpha = cl((t - 1.9) / 0.4); c.fillStyle = INK; c.fillRect(0, y, W, 110);
+      c.fillStyle = GOLD; center(); if (d.when) c.fillText(fit(c, U(d.when), W - 80, 32, 900, true), W / 2, y + 50); c.fillStyle = WHITE; if (d.where) c.fillText(fit(c, d.where, W - 80, 20, 600), W / 2, y + 88);
+      c.globalAlpha = 1; left();
+      if (L.length) logosAt(W / 2, 110, 100, p);
+    },
+    s5(t) {
+      ST.forEach((it, i) => {
+        const y = 230 + i * 235, q = ease((t - 0.85 - i * 0.35) / 0.45); if (q <= 0) return; const r = i % 2;
+        c.save(); c.translate((r ? 1 : -1) * (1 - q) * W, 0);
+        c.fillStyle = [ACC, HOT, GOLD, WHITE][i]; c.fillRect(r ? W * 0.35 : 0, y, W * 0.65, 200);
+        c.textAlign = r ? 'right' : 'left'; const fg = i >= 2 ? INK : WHITE;
+        c.fillStyle = fg; c.fillText(fit(c, num(it, t, 1.2, 1 + i * 0.35).toLocaleString('ms-MY'), W * 0.6, 130, 900, true), r ? W - 40 : 40, y + 140);
+        c.fillStyle = fg; c.fillText(fit(c, `${it.ic} ${U(it.label)}`, W * 0.6, 24, 900), r ? W - 40 : 40, y + 184);
+        c.restore(); left();
+      });
+    },
+    // 6 · Gelanggang: garisan meja dari atas, zum keluar ke tajuk
+    i6(t) {
+      const z = 3 - 2 * ease(t / 1.4), cx = W / 2, cy = 640;
+      c.save(); c.translate(cx, cy); c.scale(z, z);
+      c.fillStyle = '#0d47a1'; rr(c, -230, -400, 460, 800, 10); c.fill(); c.strokeStyle = WHITE; c.lineWidth = 6 / z; c.strokeRect(-230, -400, 460, 800);
+      c.beginPath(); c.moveTo(0, -400); c.lineTo(0, 400); c.stroke(); c.lineWidth = 10 / z; c.beginPath(); c.moveTo(-250, 0); c.lineTo(250, 0); c.stroke();
+      c.restore();
+      const r = 210 + Math.sin(t * 3) * 6; c.fillStyle = 'rgba(10,15,29,.9)'; c.beginPath(); c.arc(cx, cy, r, 0, 7); c.fill();
+      c.strokeStyle = GOLD; c.lineWidth = 5; c.beginPath(); c.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * ease((t - 0.6) / 1.2)); c.stroke();
+      center(); c.globalAlpha = cl((t - 1.2) / 0.4);
+      const ls = wrap(c, U(T), 360, 40, 900, 4, true); ls.forEach((ln, i) => { c.font = F(900, 40, true); c.fillStyle = WHITE; c.fillText(ln, cx, cy - (ls.length - 1) * 24 + i * 48 + 12); });
+      c.globalAlpha = 1; left(); info(960, cl((t - 1.8) / 0.4));
+      if (L.length) logosAt(W / 2, 110, 110, cl((t - 1) / 0.5));
+    },
+    s6(t) {
+      ST.forEach((it, i) => {
+        const cx = i % 2 ? W * 0.72 : W * 0.28, cy = 420 + Math.floor(i / 2) * 430, q = ease((t - 0.85 - i * 0.3) / 1.0); if (q <= 0) return;
+        c.lineWidth = 16; c.strokeStyle = 'rgba(255,255,255,.12)'; c.beginPath(); c.arc(cx, cy, 130, 0, 7); c.stroke();
+        c.strokeStyle = [GOLD, HOT, '#35d07f', '#60a5fa'][i]; c.lineCap = 'round'; c.beginPath(); c.arc(cx, cy, 130, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * q); c.stroke(); c.lineCap = 'butt';
+        center(); c.fillStyle = WHITE; c.fillText(fit(c, num(it, t, 1.0, 0.85 + i * 0.3).toLocaleString('ms-MY'), 210, 64, 900, true), cx, cy + 20);
+        c.font = '34px system-ui'; c.fillText(it.ic, cx, cy - 50); c.fillStyle = GOLD; c.fillText(fit(c, U(it.label), 250, 22, 900), cx, cy + 190); left();
+      });
+    },
+    // 7 · Kiraan detik 3-2-1 kemudian tajuk meletup masuk
+    i7(t) {
+      center();
+      if (t < 1.5) { const k = Math.floor(t / 0.5), u = (t % 0.5) / 0.5, n = 3 - k;
+        c.strokeStyle = GOLD; c.lineWidth = 10; c.beginPath(); c.arc(W / 2, 620, 220 * (1 - u * 0.3), -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - u)); c.stroke();
+        c.save(); c.translate(W / 2, 680); c.scale(1.4 - 0.4 * u, 1.4 - 0.4 * u); c.globalAlpha = 1 - u * 0.6; c.fillStyle = WHITE; c.font = F(900, 220, true); c.fillText(String(n), 0, 0); c.restore();
+      } else {
+        const u = t - 1.5;
+        if (u < 0.2) { c.fillStyle = `rgba(255,255,255,${1 - u / 0.2})`; c.fillRect(0, 0, W, H); }
+        for (let i = 0; i < 28; i++) { const a = i / 28 * Math.PI * 2, rr2 = 120 + ease(u / 0.8) * 520; c.fillStyle = [GOLD, HOT, WHITE][i % 3]; c.globalAlpha = 1 - cl(u / 1.2); c.beginPath(); c.arc(W / 2 + Math.cos(a) * rr2, 600 + Math.sin(a) * rr2, 8, 0, 7); c.fill(); }
+        c.globalAlpha = 1;
+        titleLines(60).forEach((ln, i) => { const q = back((u - 0.05 - i * 0.12) / 0.4); if (q <= 0) return; c.save(); c.translate(W / 2, 480 + i * 70); c.scale(q, q); c.font = F(900, 60, true); c.fillStyle = HOT; c.fillText(ln, 4, 4); c.fillStyle = WHITE; c.fillText(ln, 0, 0); c.restore(); });
+        info(820, cl((u - 0.6) / 0.4));
+        if (L.length) logosAt(W / 2, 140, 120, cl(u / 0.5));
+      }
+      left();
+    },
+    s7(t) {
+      ST.forEach((it, i) => {
+        const y = 250 + i * 225, q = ease((t - 0.85 - i * 0.3) / 0.4); if (q <= 0) return;
+        c.save(); c.globalAlpha = q;
+        c.fillStyle = 'rgba(255,255,255,.07)'; rr(c, 40, y, W - 80, 190, 20); c.fill();
+        c.fillStyle = WHITE; c.fillText(fit(c, `${it.ic}  ${U(it.label)}`, W - 140, 24, 900), 70, y + 46);
+        const s = it.n.toLocaleString('ms-MY'), dw = 58, rp = ease((t - 0.95 - i * 0.3) / 1.4);
+        c.save(); c.beginPath(); c.rect(60, y + 64, W - 120, 110); c.clip();
+        let xx = 70;
+        s.split('').forEach((ch, j) => {
+          if (!/\d/.test(ch)) { c.fillStyle = GOLD; c.font = F(900, 90); c.fillText(ch, xx, y + 156); xx += 26; return; }
+          xx += dw;
+          const tgt = +ch + 10 * (2 + j), pos = tgt * rp;
+          for (let k = Math.floor(pos) - 1; k <= Math.floor(pos) + 1; k++) { const off = (k - pos) * 100; c.fillStyle = GOLD; c.font = F(900, 90); c.fillText(String(((k % 10) + 10) % 10), xx - dw, y + 156 + off); }
+        });
+        c.restore(); c.restore();
+      });
+    },
+    // 8 · Hujan bola: bola pingpong jatuh & melantun
+    i8(t) {
+      for (let i = 0; i < 46; i++) {
+        const x = 30 + (i * 151.7) % (W - 60), st = (i % 12) * 0.08, g = 2400, floor = H - 70 - (i % 5) * 26, tt = Math.max(0, t - st);
+        const fall = Math.sqrt(2 * (floor + 40) / g); let y;
+        if (tt < fall) y = -40 + 0.5 * g * tt * tt; else { const u = tt - fall, v = g * fall * 0.45, b = Math.max(0, v * u - 0.5 * g * u * u); y = floor - b; }
+        ball(x, y, 12 + (i % 3) * 3);
+      }
+      c.fillStyle = 'rgba(10,15,29,.82)'; c.fillRect(0, 230, W, 560);
+      center(); c.globalAlpha = cl((t - 0.8) / 0.4); pill(W / 2, 300, 'RINGKASAN PERTANDINGAN', 22, INK, GOLD);
+      titleLines(58).forEach((ln, i) => { c.font = F(900, 58, true); c.fillStyle = WHITE; c.fillText(ln, W / 2, 400 + i * 66); });
+      c.globalAlpha = 1; left(); info(640, cl((t - 1.4) / 0.4));
+      if (L.length) logosAt(W / 2, 90, 110, cl(t / 0.5));
+    },
+    s8(t) {
+      ST.forEach((it, i) => {
+        const cx = i % 2 ? W * 0.7 : W * 0.3, fy = 430 + Math.floor(i / 2) * 420, st = 0.85 + i * 0.3, u = t - st; if (u <= 0) return;
+        const g = 3000, fall = 0.42, y = u < fall ? fy - 700 + 0.5 * g * u * u * (700 / (0.5 * g * fall * fall)) : fy - Math.abs(Math.sin((u - fall) * 9)) * 60 * Math.exp(-(u - fall) * 4);
+        const r = 150, gr = c.createRadialGradient(cx - 40, y - 50, 10, cx, y, r); gr.addColorStop(0, '#fff'); gr.addColorStop(1, i % 2 ? '#ff9f1c' : '#f5f5f5');
+        c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(cx, fy + r + 14, r * 0.8, 14, 0, 0, 7); c.fill();
+        c.fillStyle = gr; c.beginPath(); c.arc(cx, y, r, 0, 7); c.fill();
+        center(); c.fillStyle = INK; c.fillText(fit(c, num(it, t, 1.0, st + 0.3).toLocaleString('ms-MY'), 240, 70, 900, true), cx, y + 24);
+        c.font = '36px system-ui'; c.fillText(it.ic, cx, y - 54); c.fillStyle = WHITE; c.fillText(fit(c, U(it.label), 260, 22, 900), cx, fy + r + 60); left();
+      });
+    },
+    // 9 · Emas: bingkai emas dilukis, tajuk serif anggun
+    i9(t) {
+      c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(0, 0, W, H);
+      const per = 2 * (W - 120 + H - 320), q = ease(t / 1.6);
+      c.strokeStyle = GOLD; c.lineWidth = 3; c.setLineDash([per * q, per]); c.strokeRect(60, 160, W - 120, H - 320); c.setLineDash([]);
+      c.strokeStyle = 'rgba(255,197,61,.5)'; c.lineWidth = 1; c.strokeRect(74, 174, W - 148, H - 348);
+      center(); c.globalAlpha = cl((t - 0.8) / 0.6);
+      c.fillStyle = GOLD; c.font = '600 22px Georgia, "Times New Roman", serif'; c.fillText('—  R I N G K A S A N   P E R T A N D I N G A N  —', W / 2, 420);
+      const ls = (() => { c.font = '700 54px Georgia, serif'; return wrap(c, T, W - 200, 54, 700, 3); })();
+      ls.forEach((ln, i) => { c.font = '700 54px Georgia, "Times New Roman", serif'; c.fillStyle = WHITE; c.fillText(ln, W / 2, 520 + i * 66 + (1 - cl((t - 1 - i * 0.15) / 0.6)) * 30); });
+      const y = 540 + ls.length * 66;
+      c.fillStyle = GOLD; c.fillRect(W / 2 - 80 * cl((t - 1.6) / 0.5), y, 160 * cl((t - 1.6) / 0.5), 2);
+      c.globalAlpha = cl((t - 1.9) / 0.5); c.fillStyle = 'rgba(255,255,255,.9)'; c.font = 'italic 400 28px Georgia, serif';
+      if (d.when) c.fillText(d.when, W / 2, y + 60); c.font = '400 20px Georgia, serif'; if (d.where) c.fillText(fit(c, d.where, W - 200, 20, 400), W / 2, y + 100);
+      c.globalAlpha = 1; left();
+      if (L.length) logosAt(W / 2, 230, 110, cl((t - 0.4) / 0.6));
+    },
+    s9(t) {
+      c.fillStyle = 'rgba(0,0,0,.45)'; c.fillRect(0, 0, W, H);
+      ST.forEach((it, i) => {
+        const y = 290 + i * 215, q = ease((t - 0.85 - i * 0.35) / 0.6); if (q <= 0) return;
+        c.globalAlpha = q; center();
+        c.fillStyle = GOLD; c.font = '700 96px Georgia, "Times New Roman", serif'; c.fillText(num(it, t, 1.3, 1 + i * 0.35).toLocaleString('ms-MY'), W / 2, y + 80);
+        c.fillStyle = 'rgba(255,255,255,.85)'; c.font = '400 22px Georgia, serif'; c.fillText(U(it.label).split('').join(' '), W / 2, y + 122);
+        c.fillStyle = 'rgba(255,197,61,.6)'; c.fillRect(W / 2 - 140 * q, y + 160, 280 * q, 1);
+        c.globalAlpha = 1; left();
+      });
+    },
+  };
 }
