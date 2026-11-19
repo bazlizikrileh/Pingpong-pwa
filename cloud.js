@@ -226,7 +226,7 @@ export const myUid = () => (auth && auth.currentUser ? auth.currentUser.uid : ''
 // Utama: Firebase Realtime Database (rtdb) — skor sampai serta-merta, tidak dikira setiap bacaan (hanya data dimuat turun).
 //   live/{tid}/{id perlawanan}/{uid penjaga} = { rs, cur, ri, by, tb, sw, at }   · live/{tid}/{id}/_clr = masa dilepaskan
 //   Sambungan dibuka hanya semasa halaman Langsung / Keputusan / Jaga skor / TV dipaparkan (had percuma 100 serentak).
-// Sandaran: dokumen ringkasan Firestore livesum/{tid} dibaca setiap 30 saat jika rtdb tidak dapat disambung.
+// Sandaran: dokumen ringkasan Firestore livesum/{tid} dibaca setiap 10 saat jika rtdb tidak dapat disambung.
 let rdb = null, rdbOff = false;
 const _poll = {}, _rt = {};
 const LIVE_PAGE = tid => new RegExp(`^#/(t/${tid}/(langsung|keputusan|ls|m)(/|$)|tv/${tid})`);
@@ -277,7 +277,7 @@ function startPoll(tid, ms) {
   _poll[tid] = { ms, sig: p ? p.sig : '', timer: setInterval(() => pollLive(tid), ms) };
   pollLive(tid, true);
 }
-export function watchLive(tid, ms = 30000) {
+export function watchLive(tid, ms = 10000) {
   if (!F) return;
   const r = rtdb();
   if (!r) return startPoll(tid, ms);
@@ -306,7 +306,7 @@ export async function claimScorer(tid, pin) {
   await F.setDoc(F.doc(db, 'tournaments', tid, 'scorers', u.uid), { pin: String(pin), at: F.serverTimestamp() });
 }
 // Penjaga skor: kunci perlawanan (Firestore live/{mid}; seorang penjaga sahaja) ditulis bila mula dan setiap 60 saat.
-// Setiap mata ditulis ke rtdb (penonton nampak serta-merta); ringkasan Firestore (sandaran) paling kerap setiap 30 saat.
+// Setiap mata ditulis ke rtdb (penonton nampak serta-merta); ringkasan Firestore (sandaran) paling kerap setiap 15 saat.
 const _lockAt = {}, _sumAt = {}, _sumT = {};
 let _scoring = 0;
 export async function setLive(tid, mid, { rs, cur, ri, by, tb, sw }) {
@@ -320,10 +320,10 @@ export async function setLive(tid, mid, { rs, cur, ri, by, tb, sw }) {
   _scoring = Date.now();
   const r = rtdb();
   if (r) { try { F.dbOnline(r); } catch {} F.dbSet(F.dbRef(r, `live/${tid}/${mid}/${u.uid}`), { rs: e.rs, cur: e.cur, ri: e.ri, by: e.by, tb: e.tb, sw: e.sw, at: F.dbNow() }).catch(err => console.warn('rtdb set', err)); }
-  // ringkasan Firestore (sandaran) — paling kerap setiap 30 saat; tulisan terakhir sentiasa dihantar
+  // ringkasan Firestore (sandaran) — paling kerap setiap 15 saat; tulisan terakhir sentiasa dihantar
   const writeSum = () => { _sumAt[k] = Date.now(); return F.setDoc(F.doc(db, 'livesum', tid), { m: { [mid]: { ...e, at: F.serverTimestamp() } }, at: F.serverTimestamp() }, { merge: true }).catch(err => console.warn('livesum', err)); };
   clearTimeout(_sumT[k]);
-  const wait = 30e3 - (Date.now() - (_sumAt[k] || 0));
+  const wait = 15e3 - (Date.now() - (_sumAt[k] || 0));
   if (wait <= 0) await writeSum(); else _sumT[k] = setTimeout(writeSum, wait);
   state.live[tid] = { ...(state.live[tid] || {}), [mid]: { ...e, rs, cur, at: Date.now() } };
 }
