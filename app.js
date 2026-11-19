@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.26.0';
+const VERSION = '3.26.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2905,18 +2905,9 @@ function resultsMessage(t) {
   if (E.isMixer(t)) pod = E.mixStandings(t).filter(r => r.p).slice(0, 3).map((r, i) => [i + 1, [nm(r.id)]]);
   else pod = E.finalRanking(t).filter(x => x.place <= 3).map(x => [x.place, x.ids.map(nm)]);
   const lab = { 1: '🥇 *Johan:*', 2: '🥈 *Naib johan:*', 3: '🥉 *Tempat ketiga:*' };
-  const aw = [];
-  try {
-    const html = E.isMixer(t) ? mixAwards(t, E.mixStandings(t)) : unitAwards(t, played);
-    new DOMParser().parseFromString(html || '', 'text/html').querySelectorAll('.aw').forEach(a => {
-      const g = c => ((a.querySelector(c) || {}).textContent || '').replace(/\s+/g, ' ').trim();
-      aw.push(`${g('.aw-ic')} ${g('.aw-t').replace(/^./, c => c.toUpperCase()).toLowerCase().replace(/^./, c => c.toUpperCase())}: *${g('.aw-w')}*${g('.aw-n') ? ` _(${g('.aw-n')})_` : ''}`);
-    });
-  } catch {}
   let sets = 0, pts = 0; played.forEach(m => { const r = E.evaluateMatch(t, m); sets += r.sa + r.sb; pts += r.pa + r.pb; });
   return [`🏆 *KEPUTUSAN ${allDone ? '' : 'SEMENTARA '}· ${t.name}*`, [d && !isNaN(d) ? `📅 ${HARI[d.getDay()]}, ${fmtDate(t.date)}` : '', where ? '📍 ' + where : ''].filter(Boolean).join(' · '), '',
     ...(pod.length ? [allDone ? '*Pemenang*' : '*Kedudukan semasa*', ...pod.map(([p, n]) => `${lab[p] || p + '.'} ${n.join(', ')}`), ''] : []),
-    ...(aw.length ? ['🏅 *Anugerah & statistik*', ...aw, ''] : []),
     `📊 ${played.length} perlawanan · ${sets} set · ${pts} mata dimainkan`, '',
     `📄 Laporan penuh: ${appUrl(`t/${t.id}/laporan`)}`, '',
     allDone ? 'Tahniah kepada semua pemenang, dan terima kasih kepada semua peserta, pengadil & AJK! 🙏🏓' : '_Keputusan belum muktamad._'].join('\n').replace(/\n{3,}/g, '\n\n');
@@ -2950,7 +2941,7 @@ function viewReport(t) {
   $app.innerHTML = `${section('Laporan', 'Laporan Pertandingan')}
     <div class="card noprint"><p class="muted small" style="margin-top:0">Laporan lengkap: maklumat, kedudukan, keputusan semua perlawanan${t.rounds.ko ? ', kalah mati' : ''}${t.stage === 'done' ? ' dan ranking' : ''}. Tekan butang di bawah dan pilih <b>Simpan sebagai PDF</b>.</p>
       <button class="pill-btn brand" id="prt"><span class="dot"></span>🖨️ Cetak / Simpan PDF</button></div>
-    ${t.matches.some(m => m.status === 'done') ? `<div class="card noprint"><b>💬 Ringkasan keputusan untuk WhatsApp</b><p class="muted small" style="margin:4px 0 8px">Johan, naib johan, tempat ketiga, anugerah dan pautan laporan, sedia untuk dikongsi ke group.</p>
+    ${t.matches.some(m => m.status === 'done') ? `<div class="card noprint"><b>💬 Ringkasan keputusan untuk WhatsApp</b><p class="muted small" style="margin:4px 0 8px">Johan, naib johan, tempat ketiga, statistik dan pautan laporan, sedia untuk dikongsi ke group.</p>
       <div class="row" style="gap:6px;flex-wrap:wrap"><button type="button" class="pill-btn small" style="background:#25d366;color:#fff" id="resWa">💬 Kongsi ke WhatsApp</button><button type="button" class="pill-btn light small" id="resCp">📋 Salin</button><button type="button" class="pill-btn light small" id="resPv">👁️ Lihat mesej</button></div></div>` : ''}
     <div class="card report">${body}</div>`;
   const rw = document.getElementById('resWa');
