@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.21.3';
+const VERSION = '3.21.4';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -757,7 +757,9 @@ function viewSetupCore(t, part = 'tetapan') {
       <p class="muted small">Kongsi dengan peserta. Skor yang dihantar perlu disahkan penganjur.</p>
       <div class="row"><input id="pin" inputmode="numeric" maxlength="8" placeholder="cth. 2468" style="max-width:160px;font-family:var(--mono);font-size:18px">
       <button class="pill-btn brand small" id="savePin">Simpan PIN</button><button class="pill-btn light small" id="genPin">Jana rawak</button></div>
-      <p class="muted small" id="pinMsg"></p></div>
+      <p class="muted small" id="pinMsg"></p>
+      <div class="row" style="gap:6px;flex-wrap:wrap"><button type="button" class="pill-btn orange small" id="pinWa"><span class="dot"></span>💬 Kongsi ke group WhatsApp</button><button type="button" class="pill-btn light small" id="pinCopy">📋 Salin mesej</button></div>
+      <p class="muted small" style="margin:6px 0 0">Mesej mengandungi pautan portal, cara pilih 👤 Saya untuk tahu status (bermain / pengadil / bersedia), notifikasi dan cara jaga skor dengan PIN.</p></div>
       <div class="card"><label class="test-chk" style="margin:0"><input type="checkbox" id="hideChk" ${isHidden(t) ? 'checked' : ''}> <span>🙈 <b>Sembunyikan dari senarai awam</b><br><small class="muted">Peserta tidak nampak di laman utama, tetapi pautan terus masih boleh dibuka.</small></span></label></div>`
       : `<div class="notice">📱 Pertandingan ini disimpan dalam peranti ini sahaja. ${cloud.isAdmin() ? '<button class="pill-btn small brand" id="upNow">☁️ Pindah ke awan</button>' : 'Log masuk sebagai admin untuk memindahkannya ke awan supaya semua orang boleh melihat dan menghantar skor.'}</div><br>`}
     ${canAdmin(t) ? `<div class="card owner-card"><div class="section-title" style="margin-top:0">👤 Rekod pentadbir</div>
@@ -793,7 +795,13 @@ function viewSetupCore(t, part = 'tetapan') {
   const pinIn = document.getElementById('pin');
   if (pinIn) {
     cloud.getPin(t.id).then(p => { if (document.activeElement !== pinIn) pinIn.value = p || ''; document.getElementById('pinMsg').textContent = p ? `PIN semasa: ${p}` : 'Belum ada PIN — pengadil belum boleh menghantar skor.'; }).catch(() => {});
-    document.getElementById('genPin').onclick = () => { pinIn.value = String(Math.floor(1000 + Math.random() * 9000)); };
+    document.getElementById('genPin').onclick = () => { pinIn.value = String(Math.floor(1000 + Math.random() * 9000)); toast('Tekan "Simpan PIN" untuk guna PIN ini'); };
+    const pinNow = async () => { const v = pinIn.value.trim(), cur = await cloud.getPin(t.id).catch(() => '');
+      if (!/^\d{4,8}$/.test(v)) { toast('Jana atau isi PIN dahulu'); return ''; }
+      if (v !== cur) { if (!confirm(`PIN ${v} belum disimpan. Simpan sekarang dan kongsi?`)) return ''; await cloud.setPin(t.id, v); document.getElementById('pinMsg').textContent = `✅ PIN disimpan: ${v}`; }
+      return v; };
+    document.getElementById('pinWa').onclick = async () => { const p = await pinNow(); if (p) window.open(waLink(pinMessage(t, p)), '_blank'); };
+    document.getElementById('pinCopy').onclick = async () => { const p = await pinNow(); if (!p) return; try { await navigator.clipboard.writeText(pinMessage(t, p)); toast('Mesej disalin. Tampal di group WhatsApp.'); } catch { prompt('Salin mesej ini:', pinMessage(t, p)); } };
     document.getElementById('savePin').onclick = async () => {
       const v = pinIn.value.trim();
       if (!/^\d{4,8}$/.test(v)) return toast('PIN mesti 4–8 digit');
@@ -1578,6 +1586,23 @@ const regLive = t => regOn(t) && !regFull(t);
 // wa.me di komputer merosakkan emoji (jadi �); guna WhatsApp Web terus
 const waLink = (text, num = '') => (/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) ? `https://wa.me/${num}?text=` : `https://web.whatsapp.com/send?${num ? 'phone=' + num + '&' : ''}text=`) + encodeURIComponent(text);
 const shareUrl = t => `${location.origin}${location.pathname}#/${regLive(t) ? 'daftar/' + t.id : 't/' + t.id + '/pemain'}`;
+// Mesej WhatsApp untuk group peserta: pautan, 👤 Saya, notifikasi, cara jaga skor + PIN
+function pinMessage(t, pin) {
+  const d = t.date ? new Date(t.date + 'T00:00') : null, team = E.isTeam(t);
+  const when = [d && !isNaN(d) ? `${HARI[d.getDay()]}, ${fmtDate(t.date)}` : '', t.startTime ? E.sessionTime(t, 1) : ''].filter(Boolean).join(' · ');
+  const where = t.venue === 'X' ? t.venueName || '' : E.VENUES[t.venue] || '';
+  const url = `${location.origin}${location.pathname}#/t/${t.id}/langsung`;
+  return [`🏓 *${t.name}*`, [when && '📅 ' + when, where && '📍 ' + where].filter(Boolean).join('\n'), '',
+    `🔗 *Portal pertandingan:*\n${url}`, '_Tip: tambah ke skrin utama (menu ⋮ → Add to Home screen) supaya mudah dibuka._', '',
+    '👤 *1. Kenal pasti diri anda*', 'Buka tab 🟢 *Langsung* → tekan *👤 Saya* → pilih nama anda. Telefon akan ingat pilihan ini (jika anda mendaftar melalui portal, nama dikesan sendiri).',
+    'Status anda akan dipaparkan di atas skrin:', '🔴 *Bermain sekarang*: terus ke meja yang dinyatakan', '🟣 *Pengadil*: pergi ke meja itu dan jaga skor', '🟡 *Bersedia*: anda seterusnya selepas perlawanan semasa', '⏳ *Menunggu / rehat*: dipaparkan berapa perlawanan lagi', '',
+    '🔔 *2. Hidupkan notifikasi*', 'Tekan 🔔 selepas pilih nama. Telefon akan berbunyi bila anda perlu bermain atau menjadi pengadil, beserta nombor meja.', '',
+    '🎯 *3. Jika anda pengadil*', '• Tab Langsung → tekan *🎯 Jaga skor* pada meja anda', `• Masukkan nama anda dan *PIN acara: ${pin}*`,
+    ...(team && t.handicap ? ['• Pilih pemain bagi setiap perlawanan *sebelum* mula (supaya handicap dikira)'] : []),
+    '• Tekan nama pemain untuk +1 mata. Set tamat sendiri.', '• Bila perlawanan tamat, skor dihantar automatik kepada penganjur.', '',
+    '📌 Meja tidak tetap. Jika meja lain kosong lebih awal, perlawanan anda mungkin dipindah. Sentiasa semak tab Langsung.',
+    '⚠️ PIN untuk peserta pertandingan ini sahaja. Jangan kongsi di luar group.'].join('\n').replace(/\n{3,}/g, '\n\n');
+}
 // Mesej WhatsApp pendaftaran: butiran acara + senarai peserta bernombor + pautan daftar
 const HARI = ['Ahad', 'Isnin', 'Selasa', 'Rabu', 'Khamis', 'Jumaat', 'Sabtu'];
 function waText(t) {
