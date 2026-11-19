@@ -43,8 +43,10 @@ export function liveState(t) {
   const cand = t.matches.filter(m => !onT(m) && !isDone(m) && real(m.a) && real(m.b)).sort(ocmp);
   return { live, occ, xr, busy, cand };
 }
+// Semak kehadiran (pilihan penganjur): hanya perlawanan yang semua pemainnya sudah hadir diagih ke meja
+const here = (t, m) => !t.checkin || pl2(m).every(p => (t.present || {})[p]);
 function pick(t, k, cand, busy, used) {
-  const fr = m => !used.has(m) && pl2(m).every(p => !busy.has(p));
+  const fr = m => !used.has(m) && pl2(m).every(p => !busy.has(p)) && here(t, m);
   if (t.entryMode === 'mixer') {
     // Meja kosong diisi segera: utamakan pemain yang paling sedikit bermain (supaya ada rehat), kemudian susunan sesi
     const pc = {}; t.matches.forEach(m => { if (m.px && (m.status === 'done' || m.lt)) m.px.forEach(id => (pc[id] = (pc[id] || 0) + 1)); });

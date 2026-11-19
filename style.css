@@ -737,3 +737,32 @@ table.rp-mx td.sets span { white-space:nowrap; display:inline-block; margin-righ
 .pg-steps, .g-list { counter-reset: st; list-style:none; padding-left:0; margin:6px 0 0; }
 .pg-steps li, .g-list li { counter-increment: st; position:relative; padding-left:30px; margin:6px 0; font-size:14px; line-height:1.45; }
 .pg-steps li::before, .g-list li::before { content: counter(st); position:absolute; left:0; top:0; width:21px; height:21px; border-radius:50%; background: var(--brand, #1f4aa8); color:#fff; font-size:11.5px; font-weight:800; display:flex; align-items:center; justify-content:center; }
+/* Helaian kod QR */
+.qr-doc { display:grid; gap:14px; }
+.qr-pg { background:#fff; color:#111; border-radius:16px; padding:22px; box-shadow: var(--sh); }
+.qr-main { text-align:center; }
+.qr-logos { display:flex; justify-content:center; gap:12px; } .qr-logos img { height:64px; }
+.qr-main h1 { font-size:26px; margin:10px 0 2px; } .qr-sub { color:#555; font-size:14px; }
+.qr-big { width:min(78%, 360px); margin:18px auto 6px; } .qr-big svg, .qr-sm svg { width:100%; height:auto; display:block; }
+.qr-main h2 { font-size:22px; margin:8px 0; }
+.qr-steps { text-align:left; max-width:420px; margin:8px auto 0; font-size:15px; line-height:1.6; }
+.qr-tables { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.qr-card { border:2px dashed #999; border-radius:14px; padding:14px; text-align:center; break-inside:avoid; }
+.qr-meja { font-size:30px; font-weight:900; letter-spacing:.04em; } .qr-hall { color:#666; font-size:12px; }
+.qr-sm { width:72%; margin:8px auto; } .qr-who { font-size:14px; } .qr-note { font-size:11.5px; color:#666; margin-top:2px; }
+@media print {
+  .qr-pg { box-shadow:none; border-radius:0; padding:0; }
+  .qr-main { break-after: page; min-height: 92vh; display:flex; flex-direction:column; justify-content:center; }
+  .qr-big { width: 62%; }
+  .qr-tables { grid-template-columns:1fr 1fr; gap:10mm; }
+  .qr-card { height: 108mm; display:flex; flex-direction:column; justify-content:center; }
+  .qr-doc ~ *, #toast, .toast { display:none !important; }
+}
+/* Status penganjur */
+.st-bar { height:10px; border-radius:6px; background: var(--line, #e5e7eb); overflow:hidden; margin-top:8px; } .st-bar i { display:block; height:100%; background: var(--brand, #1f4aa8); }
+.st-act { display:block; padding:9px 10px; border-radius:10px; margin:6px 0; background: color-mix(in srgb, var(--line, #e5e7eb) 40%, transparent); font-size:14px; color:inherit; text-decoration:none; }
+.st-act.warn { background:#fff4d6; color:#5a4100; }
+.st-act .pill-btn { margin-left:6px; }
+.st-tbs { padding:4px 12px; } .st-tb { display:grid; grid-template-columns:42px 1fr auto; gap:8px; align-items:center; padding:8px 0; border-bottom:1px solid var(--line, #e5e7eb); font-size:13.5px; } .st-tb:last-child { border-bottom:0; }
+.st-tb.free b { color: var(--muted, #64748b); } .st-sc { text-align:right; font-size:15px; }
+.ck-list { display:flex; flex-wrap:wrap; gap:6px; } .ck { border:1.5px solid var(--line, #e5e7eb); background:#fff; border-radius:999px; padding:6px 11px; font-size:13px; } .ck.on { background:#e7f7ec; border-color:#3aa55d; }
