@@ -46,7 +46,14 @@ export function playDeal(o) {
   const snd = (k, i) => { try { S && S.sfx(k, i); } catch {} };
   document.body.style.overflow = 'hidden';
 
-  let k = 0, tm = null, busy = false;
+  let k = 0, tm = null, busy = false, pend = null;
+  // jadual langkah seterusnya — dijeda bila aplikasi ditutup / bertukar ke aplikasi lain
+  const sched = (fn, ms) => { pend = { fn, at: Date.now() + ms }; return setTimeout(() => { pend = null; fn(); }, ms); };
+  const onVis = () => {
+    if (document.hidden) { if (pend && !busy) { clearTimeout(tm); pend.left = Math.max(0, pend.at - Date.now()); pend.paused = true; } }
+    else if (pend && pend.paused) { const p = pend; tm = sched(p.fn, Math.max(600, p.left)); }
+  };
+  document.addEventListener('visibilitychange', onVis);
   const stat = ov.querySelector('#drs');
   const fill = (s, hl) => {
     const box = ov.querySelector('#drb' + s.box);
@@ -68,7 +75,7 @@ export function playDeal(o) {
       snd('done');
       stat.innerHTML = `<b style="font-size:18px">✅ ${esc(o.doneText || 'Cabutan selesai')}</b>${o.next ? `<div style="margin-top:8px"><button class="btn" data-next style="background:#ff7a1a;color:#fff">${esc(o.next.label)}</button></div>` : ''}`;
       const nb = stat.querySelector('[data-next]'); if (nb) nb.onclick = () => { close(); o.next.fn(); };
-      if (o.auto && o.next && !busy) tm = setTimeout(() => { if (!busy) { close(); o.next.fn(); } }, o.autoMs ?? 1600);
+      if (o.auto && o.next && !busy) tm = sched(() => { if (!busy) { close(); o.next.fn(); } }, o.autoMs ?? 1600);
       return;
     }
     const s = o.seq[k++];
@@ -76,9 +83,9 @@ export function playDeal(o) {
       <div class="drw-now">🎴 ${esc(s.name)}${o.hideTo ? '' : ` <span class="drw-to">→ ${esc(o.boxes[s.box].label)}</span>`}</div>
       <small>${o.seq.length - k} kad lagi</small>`;
     fill(s, true); snd('card', k);
-    tm = setTimeout(step, o.speed || 1300);
+    tm = sched(step, o.speed || 1300);
   };
-  const close = () => { clearTimeout(tm); ov.remove(); document.body.style.overflow = ''; if (S && o.music) S.musicOff(700); };
+  const close = () => { clearTimeout(tm); pend = null; document.removeEventListener('visibilitychange', onVis); ov.remove(); document.body.style.overflow = ''; if (S && o.music) S.musicOff(700); };
   ov.querySelector('[data-x]').onclick = close;
   ov.querySelectorAll('[data-chip]').forEach(b => (b.onclick = () => { const x = o.chips[+b.dataset.chip]; if (x && x.fn) { close(); x.fn(); } }));
   ov.querySelectorAll('[data-nav]').forEach(b => (b.onclick = () => { const n = o.nav[+b.dataset.nav]; if (!n || !n.fn) return; close(); n.fn(); }));
@@ -92,7 +99,7 @@ export function playDeal(o) {
     busy = true; if (k >= o.seq.length) clearTimeout(tm);
     if (made) {
       const r = await made.share();
-      busy = false; if (o.auto && o.next && k >= o.seq.length) tm = setTimeout(() => { if (!busy) { close(); o.next.fn(); } }, 4000);
+      busy = false; if (o.auto && o.next && k >= o.seq.length) tm = sched(() => { if (!busy) { close(); o.next.fn(); } }, 4000);
       vm.textContent = r.shared ? '✅ Video dikongsi.' : r.cancelled ? 'Perkongsian dibatalkan. Tekan sekali lagi untuk berkongsi.' : '⬇️ Telefon ini tidak membenarkan kongsi terus, jadi video dimuat turun. Hantar dari galeri / Fail ke WhatsApp.';
       return;
     }
@@ -117,8 +124,8 @@ export function playDeal(o) {
     while (k < o.seq.length) fill(o.seq[k++], false);
     step();
   };
-  tm = setTimeout(() => {
+  tm = sched(() => {
     stat.innerHTML = `<b style="font-size:18px">🔀 ${esc(o.prep || 'Mengocok dek…')}</b>`; snd('shuffle');
-    tm = setTimeout(step, o.shufMs ?? 1500);
+    tm = sched(step, o.shufMs ?? 1500);
   }, o.introMs ?? 1800);
 }

@@ -164,7 +164,7 @@ export async function musicOn(style = 0) {
   if (loopSrc || muted()) return;
   const loopBuf = loopBufs[style];
   const comp = c.createDynamicsCompressor(); comp.threshold.value = -18; comp.ratio.value = 4; comp.connect(c.destination);
-  loopGain = c.createGain(); loopGain.gain.value = isTrack(style) ? 0.7 : 1.25; loopGain.connect(comp);
+  loopGain = c.createGain(); loopGain.gain.value = isTrack(style) ? 0.42 : 0.85; loopGain.connect(comp);
   loopSrc = c.createBufferSource(); loopSrc.buffer = loopBuf; loopSrc.loop = true;
   if (isTrack(style)) { loopSrc.loopStart = 0; loopSrc.loopEnd = loopBuf.duration; } else { loopSrc.loopStart = 0.3; loopSrc.loopEnd = 0.3 + loopLen(style); }
   playing = style;
@@ -224,3 +224,23 @@ async function buildFromTrack(dur, events, sr, style) {
   const buf = new AudioBuffer({ length: N, numberOfChannels: 1, sampleRate: sr }); buf.copyToChannel(out, 0);
   return buf;
 }
+
+// Hentikan semua bunyi bila aplikasi ditutup / bertukar ke aplikasi lain; sambung semula bila kembali
+if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => {
+  if (!AC) return;
+  if (document.hidden) AC.suspend().catch(() => {}); else AC.resume().catch(() => {});
+});
+// Pratonton muzik (video ringkasan): mainkan lagu pilihan dengan pudar masuk; pulangkan fungsi henti
+let _pv = null;
+export async function previewMusic(style) {
+  stopPreview();
+  const c = ac(); if (!c) return () => {};
+  let buf = null;
+  try { buf = isTrack(style) ? await trackBuffer(style, c.sampleRate) : await renderSoundtrack(loopLen(style) + 0.6, [], c.sampleRate, true, false, style); } catch { return () => {}; }
+  const g = c.createGain(), src = c.createBufferSource();
+  g.gain.setValueAtTime(0.0001, c.currentTime); g.gain.exponentialRampToValueAtTime(isTrack(style) ? 0.5 : 0.9, c.currentTime + 0.4);
+  src.buffer = buf; src.loop = true; src.connect(g); g.connect(c.destination); src.start();
+  const stop = (ms = 400) => { try { g.gain.cancelScheduledValues(c.currentTime); g.gain.setValueAtTime(g.gain.value, c.currentTime); g.gain.linearRampToValueAtTime(0.0001, c.currentTime + ms / 1000); src.stop(c.currentTime + ms / 1000 + 0.05); } catch {} if (_pv === stop) _pv = null; };
+  _pv = stop; return stop;
+}
+export function stopPreview(ms) { if (_pv) _pv(ms); }

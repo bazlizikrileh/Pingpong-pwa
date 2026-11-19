@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.30.2';
+const VERSION = '3.31.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -83,6 +83,7 @@ const isHidden = t => t.hidden ?? !!t.test;
 // Pertandingan ujian: ditanda ujian, salinan di telefon ini, atau nama mengandungi ujian/test/testing/cubaan/demo/latihan.
 // Penganjur boleh tetapkan sendiri di Tetapan (t.kind = 'test' / 'real') — pilihan itu sentiasa diutamakan.
 const TEST_RE = /\b(ujian|uji|test|testing|tester|cubaan|percubaan|cuba|demo|latihan|trial|dummy|contoh|sample)\b/i;
+if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (document.hidden) document.querySelectorAll('video').forEach(v => { try { v.pause(); } catch {} }); });
 const isTestT = t => t.kind === 'test' || (t.kind !== 'real' && (!!t.test || store.isLocal(t.id) || TEST_RE.test(t.name || '')));
 const ls = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} } };
 
@@ -173,7 +174,7 @@ cloud.onChange(what => {
 const notifOn = () => 'Notification' in window && Notification.permission === 'granted' && ls.get('pingpong:notif') !== '0';
 async function notify(title, body, tag, url) {
   if (!notifOn()) return;
-  const opts = { body, tag, renotify: true, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', vibrate: [200, 100, 200], data: { url } };
+  const opts = { body, tag, renotify: true, icon: 'icons/pp-192.png', badge: 'icons/pp-192.png', vibrate: [200, 100, 200], data: { url } };
   try { const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration(); if (reg) await reg.showNotification(title, opts); else new Notification(title, opts); } catch {}
 }
 async function askNotif() {
@@ -2953,6 +2954,7 @@ function recapCard(t) {
       <div><label style="margin-top:0">🎵 Muzik</label><select id="rcSty"><option value="">🎲 Rawak</option></select></div></div>
     <label class="check" style="margin:8px 0"><input type="checkbox" id="rcAw" ${ls.get('pingpong:rcAw') === '0' ? '' : 'checked'}> <span>Sertakan <b>detik menarik</b> <small class="muted">(jika tidak, matriks kumpulan dipapar lebih lama)</small></span></label>
     <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
+    <button type="button" class="pill-btn light small" id="rcPv">👁️ Pratonton</button>
     <button type="button" class="pill-btn brand small" id="rcGo"><span class="dot"></span>🎬 Jana video</button></div>
     <p class="small" id="rcMsg" style="margin:8px 0 0"></p><div id="rcOut"></div></div>`;
 }
@@ -2965,6 +2967,40 @@ function wireRecap(t) {
   awc.onchange = () => ls.set('pingpong:rcAw', awc.checked ? null : '0');
   import('./sound.js').then(S => { sel.insertAdjacentHTML('beforeend', S.RECAP.map(([i, x]) => `<option value="${i}">🎵 ${esc(x.name)}</option>`).join('')); try { sel.value = ls.get('pingpong:rcSty') || ''; } catch {} });
   sel.onchange = () => ls.set('pingpong:rcSty', sel.value || null);
+  // 👁️ Pratonton: main babak pembukaan + angka secara langsung di skrin dengan muzik pilihan (tanpa menjana video)
+  document.getElementById('rcPv').onclick = async () => {
+    const [{ buildRecap, OPEN_NAMES }, V, S] = await Promise.all([import('./recap-video.js'), import('./draw-video.js'), import('./sound.js')]);
+    let tpl = op.value !== '' ? +op.value : Math.floor(Math.random() * 10), sty = sel.value !== '' ? +sel.value : S.RECAP[Math.floor(Math.random() * S.RECAP.length)][0];
+    const RD = recapData(t); RD.style = tpl;
+    const logos = await Promise.all((RD.logos || []).map(src => new Promise(r => { const im = new Image(); im.onload = () => r(im); im.onerror = () => r(null); im.src = src; })));
+    const md = document.getElementById('modal');
+    md.innerHTML = `<div class="sheet" style="text-align:center"><div class="row" style="justify-content:space-between"><b id="pvT"></b><button class="pill-btn light small" id="mx">✕</button></div>
+      <canvas id="pvC" style="width:min(270px,70vw);aspect-ratio:9/16;border-radius:14px;margin-top:8px;background:#0a0f1d"></canvas>
+      <div class="row" style="gap:6px;justify-content:center;margin-top:8px;flex-wrap:wrap"><button class="pill-btn light small" id="pvO">🎨 Gaya lain</button><button class="pill-btn light small" id="pvM">🎵 Lagu lain</button><button class="pill-btn brand small" id="pvU">✅ Guna ini</button></div>
+      <p class="muted small" style="margin:6px 0 0">Pratonton pembukaan & angka sahaja. Babak lain sama untuk semua gaya.</p></div>`;
+    md.hidden = false;
+    const cvs = document.getElementById('pvC'); cvs.width = 360; cvs.height = 640;
+    const g = cvs.getContext('2d');
+    let raf = 0, stopM = () => {}, D = null, R = null, t0 = 0, last = 0, el = 0, end = 0;
+    const start = async () => {
+      cancelAnimationFrame(raf); stopM(0);
+      RD.style = tpl; R = buildRecap(RD); D = R.make(logos, 0.5); end = R.scenes[1].t0 + R.scenes[1].dur;
+      document.getElementById('pvT').textContent = `${OPEN_NAMES[tpl]} · 🎵 ${S.STYLES[sty].name}`;
+      stopM = await S.previewMusic(sty); el = 0; last = performance.now();
+      const loop = now => {
+        el += Math.min(0.1, (now - last) / 1000); last = now;   // langkau masa ketika aplikasi di latar belakang
+        if (el > end + 0.8) { el = 0; }
+        D.draw(el); g.drawImage(D.cv, 0, 0, 360, 640); raf = requestAnimationFrame(loop);
+      };
+      raf = requestAnimationFrame(loop);
+    };
+    const shut = () => { cancelAnimationFrame(raf); stopM(); md.hidden = true; };
+    md.onclick = e => { if (e.target === md || e.target.id === 'mx') shut(); };
+    document.getElementById('pvO').onclick = () => { tpl = (tpl + 1) % 10; start(); };
+    document.getElementById('pvM').onclick = () => { const L = S.RECAP.map(x => x[0]), i = L.indexOf(sty); sty = L[(i + 1) % L.length]; start(); };
+    document.getElementById('pvU').onclick = () => { op.value = String(tpl); sel.value = String(sty); op.onchange(); sel.onchange(); shut(); toast(`Dipilih: ${OPEN_NAMES[tpl]} · ${S.STYLES[sty].name}`); };
+    start();
+  };
   go.onclick = async () => {
     go.disabled = true; out.innerHTML = ''; msg.textContent = 'Menyediakan video dalam telefon ini. Jangan tutup skrin…';
     try {
@@ -3313,7 +3349,7 @@ if ('serviceWorker' in navigator) {
   });
   window.addEventListener('hashchange', () => { if (pendingReload) doReload(); });
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg && reg.update().catch(() => {}); });
   }).catch(() => {}));
 }
 let deferredPrompt = null;
