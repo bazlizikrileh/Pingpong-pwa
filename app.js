@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.20.1';
+const VERSION = '3.21.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -158,7 +158,7 @@ cloud.onChange(what => {
   try { checkNotify(); } catch (e) { console.warn(e); }
   if (what === 'role' || what === 'tournaments' || what === 'auth') pushSync();
   updateTop();
-  if (_cur && cloud.isVerifier()) cloud.watchSubmissions(_cur);
+  if (_cur && store.isCloud(_cur) && store.canEdit(_cur)) cloud.watchSubmissions(_cur);
   if (['pending', 'tournaments', 'role', 'auth', 'error', 'regs', 'poster'].includes(what)) softRender();
   else if (what === 'live' && /^#\/tv\//.test(location.hash)) tvLiveRefresh();
   else if (what === 'live' && /^#\/t\/[^/]+\/ls\//.test(location.hash)) { if (_lsOnLive) _lsOnLive(); }
@@ -188,7 +188,7 @@ document.addEventListener('click', e => { if (e.target.closest('[data-notif]')) 
 const _seen = { pend: {}, reg: {}, me: {}, myReg: {} };
 function checkNotify() {
   // a) skor menunggu pengesahan (penganjur / pengesah)
-  if (cloud.isVerifier()) for (const [tid, list] of Object.entries(cloud.state.pending)) {
+  if (cloud.isVerifier()) for (const [tid, list] of Object.entries(cloud.state.pending).filter(([tid]) => store.canEdit(tid))) {
     const seen = _seen.pend[tid], t = seen && load(tid);
     if (seen) list.filter(x => !seen.has(x.id)).forEach(x => {
       const m = t && t.matches.find(mm => mm.id === x.matchId);
@@ -267,7 +267,7 @@ function render(keep = false) {
       if (!cloud.state.tournaments && !cloud.state.failed) { $app.innerHTML = '<div class="empty">Memuatkan data…</div>'; return; }
       location.hash = '#/'; return;
     }
-    if (cloud.isVerifier() && store.isCloud(t.id)) cloud.watchSubmissions(t.id);
+    if (store.isCloud(t.id) && canEdit(t)) cloud.watchSubmissions(t.id);
     _cur = t.id;
     applyTheme(t);
     const page = parts[2] || defaultPage(t);
@@ -278,6 +278,7 @@ function render(keep = false) {
     if (page === 'm') viewMatch(t, parts[3]); else if (page === 'ls') viewLiveScore(t, parts[3]); else if (page === 'kadskor') viewKadSkor(t); else if (views[page]) views[page](t); else { location.hash = '#/'; return; }
     if (page === 'kumpulan' && t.format === 'rr' && t.stage === 'done') { $app.insertAdjacentHTML('beforeend', '<div class="row" style="margin:12px 0"><button class="pill-btn orange" id="posterBtn"><span class="dot"></span>🏆 Kongsi poster juara</button></div>'); wirePoster(t); }
     guideCard(t, page);
+    if (store.isCloud(t.id)) cloud.loadOwner(t.id);
     autoMe(t);
     if (page !== 'langsung') myStrip(t);
     statusAlert(t);
@@ -436,7 +437,8 @@ function viewHome() {
       t.regCond ? `<span class="tg">${esc(condShort(t.regCond))}</span>` : '',
       store.isCloud(t.id) && isHidden(t) ? '<span class="tg mute">🙈 Tersembunyi</span>' : '',
       store.isLocal(t.id) ? '<span class="tg mute">📱 Peranti ini</span>' : '',
-      cloud.isAdmin() ? `<span class="tg mute">👤 ${esc(t.createdBy ? t.createdBy.name : 'pencipta tidak direkod')}</span>` : '',
+      cloud.isAdmin() ? `<span class="tg mute">👤 ${esc((cloud.managerOf(t.id) || {}).name || (t.createdBy ? t.createdBy.name : 'pencipta tidak direkod'))}</span>` : '',
+      cloud.isAdmin() && store.isCloud(t.id) && !canAdmin(t) ? '<span class="tg mute">👁️ Lihat sahaja</span>' : '',
     ].join('');
     return `<div class="hc">
       <a class="hc-thumb" href="#/t/${t.id}">${own ? `<img src="${own}" alt="">` : `<span class="hc-logo">${c.thumb || c.logos[0] ? `<img src="${esc(c.thumb || c.logos[0])}" alt="">` : '🏓'}</span>`}</a>
@@ -761,14 +763,25 @@ function viewSetupCore(t, part = 'tetapan') {
     ${canAdmin(t) ? `<div class="card owner-card"><div class="section-title" style="margin-top:0">👤 Rekod pentadbir</div>
       <p class="small" style="margin:0">Dicipta oleh: <b>${esc(t.createdBy ? t.createdBy.name : 'tidak direkod')}</b>${t.createdBy && t.createdBy.at ? ` · ${esc(new Date(t.createdBy.at).toLocaleString('ms-MY', { dateStyle: 'medium', timeStyle: 'short' }))}` : ''}</p>
       ${t.lastEdit ? `<p class="small" style="margin:4px 0 0">Kemas kini terakhir: <b>${esc(t.lastEdit.name)}</b> · ${esc(new Date(t.lastEdit.at).toLocaleString('ms-MY', { dateStyle: 'medium', timeStyle: 'short' }))}</p>` : ''}
-      ${!t.createdBy ? '<p class="muted small" style="margin:4px 0 0">Pertandingan ini dicipta sebelum rekod pencipta wujud.</p>' : ''}</div>` : ''}
+      ${!t.createdBy ? '<p class="muted small" style="margin:4px 0 0">Pertandingan ini dicipta sebelum rekod pencipta wujud.</p>' : ''}
+      ${store.isCloud(t.id) ? `<p class="small" style="margin:8px 0 0">Diurus oleh: <b>${esc((cloud.managerOf(t.id) || {}).name || (cloud.managerOf(t.id) ? cloud.managerOf(t.id).email.split('@')[0] : 'Pemilik sahaja'))}</b></p>` : ''}
+      ${store.isCloud(t.id) && cloud.state.role === 'owner' ? `<label style="margin-top:8px">Serahkan pengurusan kepada admin</label><select id="mgrSel"><option value="">— memuatkan senarai admin… —</option></select>
+        <p class="muted small" style="margin:4px 0 0">Hanya admin yang mengurus (dan anda sebagai pemilik) boleh mengubah pertandingan ini. Admin lain boleh melihat sahaja.</p>` : ''}</div>` : ''}
+    ${store.isCloud(t.id) && cloud.isMainManager(t.id) ? coAdminCard(t) : store.isCloud(t.id) && canAdmin(t) && !cloud.isAdmin() ? '<div class="notice small">👥 Anda <b>admin bersama</b> untuk pertandingan ini.</div>' : ''}
+    ${store.isCloud(t.id) && cloud.isAdmin() && !canAdmin(t) ? `<div class="notice">👁️ <b>Lihat sahaja.</b> Pertandingan ini diurus oleh ${esc((cloud.managerOf(t.id) || {}).name || 'admin lain')}. Hanya pengurusnya dan pemilik boleh membuat perubahan.</div>` : ''}
     ${extrasCard(t)}
     ${testTools(t)}
     <div class="card noprint"><button class="pill-btn danger small" id="del">Padam pertandingan</button></div>`;
   $app.querySelectorAll('details[data-fold]').forEach(d => (d.ontoggle = () => ls.set('pingpong:fold:' + t.id + ':' + d.dataset.fold, d.open ? '1' : '0')));
+  const mgrSel = document.getElementById('mgrSel');
+  if (mgrSel) { const un = cloud.watchRoles(list => { un && un();
+    const cur = (cloud.managerOf(t.id) || {}).email || '';
+    mgrSel.innerHTML = `<option value="">— Pemilik sahaja —</option>` + list.filter(r => r.role === 'admin').map(r => `<option value="${esc(r.email)}" ${r.email === cur ? 'selected' : ''}>${esc(r.name || r.email.split('@')[0])}</option>`).join('');
+    mgrSel.onchange = async () => { const e = mgrSel.value, r = list.find(x => x.email === e); try { await cloud.setManager(t.id, e || cloud.ownerEmail(), e ? (r && r.name) || e.split('@')[0] : 'Pemilik'); toast(e ? `Diserahkan kepada ${(r && r.name) || e}` : 'Diurus oleh pemilik sahaja'); } catch (err) { toast('Gagal: ' + (err.code || err.message), 4000); } };
+  }); }
 
   const f = document.getElementById('f');
-  wireExtras(t);
+  wireExtras(t); wireCoAdmin(t);
   const hc = document.getElementById('hideChk');
   if (hc) hc.onchange = () => { t.hidden = hc.checked; save(t); toast(hc.checked ? '🙈 Disembunyikan dari senarai awam' : '👁 Dipaparkan dalam senarai awam'); };
   if (f) wireForm(f);
@@ -1030,7 +1043,7 @@ function viewResults(t) {
         `<button class="pill-btn small ${jst === k ? 'brand' : 'light'}" data-f="${k}">${l}</button>`).join('')}</div>
       <p class="muted small" style="margin-bottom:0">${done}/${playable.length} selesai · ${E.numTablesOf(t)} meja · anggaran tamat sekitar <b>${E.sessionTime(t, last + 1)}</b> (${t.sessionMin} min setiap sesi)</p>
     </div>
-    ${cloud.isVerifier() && store.isCloud(t.id) ? `<div class="card noprint" id="pendBox"><div class="section-title" style="margin-top:0">🔔 Menunggu pengesahan (${pendingFor(t.id).length})</div>
+    ${canEdit(t) && store.isCloud(t.id) ? `<div class="card noprint" id="pendBox"><div class="section-title" style="margin-top:0">🔔 Menunggu pengesahan (${pendingFor(t.id).length})</div>
       ${pendingFor(t.id).map(sub => pendingCard(t, sub)).join('') || '<p class="muted small" style="margin:6px 0 0">Tiada skor menunggu. Skor yang dihantar pengadil/peserta akan muncul di sini secara langsung.</p>'}</div>` : ''}
     ${t.waEnabled && canEdit(t) ? `<details class="card fold noprint" ${ls.get('pingpong:pasteOpen') === '1' ? 'open' : ''} id="pasteBox"><summary>Tampal laporan WhatsApp (penganjur)</summary>
       <p class="muted small">Salin satu atau beberapa mesej LAPOR KEPUTUSAN dari WhatsApp, tampal di bawah dan tekan Proses.</p>
@@ -1136,7 +1149,7 @@ function viewMatch(t, mid) {
       <p class="muted small">Skor akan dipaparkan sebagai rasmi selepas disahkan penganjur. Boleh dihantar semasa perlawanan berjalan (contoh selepas setiap game) dan dihantar semula bila tamat.</p>`}
       ${ls.get('pingpong:sent:' + m.id) && m.status !== 'done' ? '<p class="draft">⏳ Skor anda sudah dihantar dan menunggu pengesahan.</p>' : ''}
     </div>
-    ${cloud.isVerifier() && pendingFor(t.id).some(x => x.matchId === m.id) ? `<div class="card"><div class="section-title" style="margin-top:0">🔔 Skor dihantar untuk perlawanan ini</div>${pendingFor(t.id).filter(x => x.matchId === m.id).map(sub => pendingCard(t, sub)).join('')}</div>` : ''}`;
+    ${canEdit(t) && store.isCloud(t.id) && pendingFor(t.id).some(x => x.matchId === m.id) ? `<div class="card"><div class="section-title" style="margin-top:0">🔔 Skor dihantar untuk perlawanan ini</div>${pendingFor(t.id).filter(x => x.matchId === m.id).map(sub => pendingCard(t, sub)).join('')}</div>` : ''}`;
   wirePending(t);
   const read = () => m.rubbers.map((_, i) => Array.from({ length: f.bo }, (_, k) =>
     [0, 1].map(s => $app.querySelector(`[data-r="${i}"][data-i="${k}"][data-s="${s}"]`).value.trim())));
@@ -2779,13 +2792,22 @@ function showAccount() {
     <div class="row" style="justify-content:space-between"><h2 style="margin:0">Akaun</h2><button class="pill-btn light small" id="mx">✕</button></div>
     ${cloud.state.failed ? '<p class="notice bad small">Tidak dapat menyambung ke awan. Semak internet dan cuba lagi.</p>' : ''}
     ${'Notification' in window ? `<div class="row" style="justify-content:space-between;margin:6px 0 10px"><span class="small">🔔 Notifikasi telefon: <b>${notifOn() ? 'Hidup' : 'Mati'}</b></span><button type="button" class="pill-btn light small" id="ntf">${notifOn() ? 'Matikan' : 'Hidupkan'}</button></div>` : ''}
+    ${signed && cloud.state.user && cloud.state.user.pass && !cloud.state.user.verified ? `<div class="notice small">✉️ <b>Sahkan e-mel anda.</b> Kami telah menghantar pautan pengesahan ke <b>${esc(u.email)}</b> (semak juga folder Spam). Klik pautan itu, kemudian tekan butang di bawah.
+      <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap"><button class="pill-btn brand small" id="eChk">✅ Saya sudah sahkan</button><button class="pill-btn light small" id="eRe">Hantar semula</button></div></div>` : ''}
     ${signed ? `<p>Log masuk sebagai <b>${esc(u.email)}</b><br><span class="role-chip">${ROLE[cloud.state.role] || 'Penonton'}</span></p>
       ${!cloud.state.role ? '<p class="muted small">Akaun ini belum diberi peranan. Minta admin utama menambah e-mel anda di halaman Pentadbir.</p>' : ''}
       <div class="btn-stack">${cloud.state.role === 'owner' ? '<a class="pill-btn brand" href="#/pentadbir" id="goAdm"><span class="dot"></span>Pentadbir &amp; peranan</a>' : ''}
       <button class="pill-btn light" id="out">Log keluar</button></div>`
     : `<p class="muted">Penonton dan pemain tidak perlu log masuk. Pengadil menghantar skor dengan PIN acara pada kad perlawanan.</p>
-      <p><b>Penganjur / pengesah skor:</b> log masuk dengan akaun Google yang telah didaftarkan oleh admin utama.</p>
-      <button class="pill-btn brand" id="gin"><span class="dot"></span>Log masuk dengan Google</button>`}
+      <p><b>Penganjur / pengesah skor:</b> log masuk dengan e-mel yang telah didaftarkan oleh admin utama.</p>
+      <button class="pill-btn brand" id="gin"><span class="dot"></span>Log masuk dengan Google</button>
+      <details class="fold" style="margin-top:12px"><summary>✉️ Guna e-mel lain (Yahoo, Outlook, e-mel pejabat…)</summary>
+        <label>E-mel</label><input id="eEm" type="email" autocomplete="email" placeholder="nama@yahoo.com">
+        <label>Kata laluan <small class="muted">(sekurang-kurangnya 6 aksara)</small></label><input id="ePw" type="password" autocomplete="current-password">
+        <label>Nama <small class="muted">(untuk akaun baharu sahaja)</small></label><input id="eNm" maxlength="40" placeholder="cth. Hatta">
+        <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap"><button class="pill-btn brand small" id="eIn">Log masuk</button><button class="pill-btn light small" id="eUp">Cipta akaun baharu</button><button class="pill-btn light small" id="eRs">Lupa kata laluan</button></div>
+        <p class="muted small" style="margin:6px 0 0">Akaun baharu akan menerima e-mel pengesahan. Klik pautan dalam e-mel itu sebelum boleh mengurus pertandingan.</p>
+      </details>`}
   </div>`;
   md.hidden = false;
   md.onclick = e => { if (e.target === md || e.target.id === 'mx' || e.target.id === 'goAdm') md.hidden = true; };
@@ -2799,14 +2821,52 @@ function showAccount() {
   };
   const out = document.getElementById('out');
   if (out) out.onclick = async () => { await cloud.signOutAll(); md.hidden = true; toast('Log keluar'); render(); };
+  const v = id => (document.getElementById(id) || {}).value || '';
+  const AERR = { 'auth/invalid-credential': 'E-mel atau kata laluan salah', 'auth/wrong-password': 'Kata laluan salah', 'auth/user-not-found': 'Akaun tidak wujud — tekan "Cipta akaun baharu"', 'auth/email-already-in-use': 'E-mel ini sudah ada akaun — tekan "Log masuk"', 'auth/weak-password': 'Kata laluan terlalu pendek (min. 6 aksara)', 'auth/invalid-email': 'E-mel tidak sah', 'auth/operation-not-allowed': 'Log masuk e-mel belum dihidupkan dalam Firebase', 'auth/too-many-requests': 'Terlalu banyak cubaan. Cuba sebentar lagi' };
+  const aerr = e => toast(AERR[e.code] || 'Gagal: ' + (e.code || e.message), 4500);
+  const on = (id, fn) => { const b = document.getElementById(id); if (b) b.onclick = async () => { b.disabled = true; try { await fn(); } catch (e) { aerr(e); } b.disabled = false; }; };
+  on('eIn', async () => { const u = await cloud.signInEmail(v('eEm'), v('ePw')); toast(u.emailVerified ? 'Berjaya log masuk' : 'Log masuk — sila sahkan e-mel anda'); showAccount(); });
+  on('eUp', async () => { await cloud.signUpEmail(v('eEm'), v('ePw'), v('eNm').trim()); toast('Akaun dicipta. Semak e-mel untuk pautan pengesahan.', 4500); showAccount(); });
+  on('eRs', async () => { if (!v('eEm')) return toast('Isi e-mel dahulu'); await cloud.resetPass(v('eEm')); toast('Pautan tukar kata laluan dihantar ke e-mel anda', 4000); });
+  on('eRe', async () => { await cloud.resendVerify(); toast('E-mel pengesahan dihantar semula'); });
+  on('eChk', async () => { const ok = await cloud.refreshUser(); toast(ok ? '✅ E-mel disahkan' : 'Belum disahkan — klik pautan dalam e-mel dahulu', 4000); showAccount(); render(); });
 }
 
+// Admin bersama untuk satu pertandingan (dijemput oleh pengurus utama)
+function coAdminCard(t) {
+  const o = cloud.managerOf(t.id) || {}, co = o.co || [], nm = o.coNames || [];
+  return `<div class="card"><div class="section-title" style="margin-top:0">👥 Admin bersama pertandingan ini</div>
+    <p class="muted small" style="margin-top:0">Mereka boleh mengurus pertandingan ini sahaja (jana jadual, skor, pendaftaran). Pertandingan lain kekal lihat sahaja. Boleh guna e-mel Google atau e-mel lain.</p>
+    ${co.length ? co.map((e, i) => `<div class="list-item"><span><b>${esc(nm[i] || e.split('@')[0])}</b><br><span class="muted small">${esc(e)}</span></span><button class="pill-btn no small" data-corm="${esc(e)}">Buang</button></div>`).join('') : '<p class="muted small">Belum ada.</p>'}
+    <div class="grid2" style="margin-top:8px"><div><label>E-mel</label><input id="coEm" type="email" placeholder="nama@gmail.com / nama@yahoo.com"></div><div><label>Nama</label><input id="coNm" maxlength="40" placeholder="cth. Radzi"></div></div>
+    <button class="pill-btn brand small" id="coAdd" style="margin-top:8px"><span class="dot"></span>Tambah admin bersama</button>
+    <p class="muted small" style="margin:6px 0 0">Beritahu mereka untuk log masuk (👤 di atas) dengan e-mel yang sama. Pertandingan ini akan terus boleh diurus.</p></div>`;
+}
+function wireCoAdmin(t) {
+  const add = document.getElementById('coAdd'); if (!add) return;
+  const cur = () => cloud.managerOf(t.id) || {};
+  add.onclick = async () => {
+    const e = (document.getElementById('coEm').value || '').trim().toLowerCase(), n = (document.getElementById('coNm').value || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return toast('E-mel tidak sah');
+    const co = [...(cur().co || [])], nm = [...(cur().coNames || [])];
+    if (co.includes(e)) return toast('Sudah ditambah');
+    if (co.length >= 10) return toast('Maksimum 10 admin bersama');
+    co.push(e); nm.push(n || e.split('@')[0]);
+    try { await cloud.setCoAdmins(t.id, co, nm); toast(`${n || e} ditambah sebagai admin bersama`); render(); } catch (err) { toast('Gagal: ' + (err.code || err.message) + ' (peraturan Firestore terkini sudah dipublish?)', 5000); }
+  };
+  $app.querySelectorAll('[data-corm]').forEach(b => (b.onclick = async () => {
+    const e = b.dataset.corm, co = [...(cur().co || [])], nm = [...(cur().coNames || [])], i = co.indexOf(e);
+    if (i < 0 || !confirm(`Buang ${nm[i] || e} daripada admin pertandingan ini?`)) return;
+    co.splice(i, 1); nm.splice(i, 1);
+    try { await cloud.setCoAdmins(t.id, co, nm); toast('Dibuang'); render(); } catch (err) { toast('Gagal: ' + (err.code || err.message), 4000); }
+  }));
+}
 let _rolesUnsub = null;
 function viewAdmin() {
   if (cloud.state.role !== 'owner') { $app.innerHTML = `${section('Pentadbir', 'Peranan')}<div class="card"><p class="muted">Hanya admin utama (${esc(cloud.ownerEmail())}) boleh membuka halaman ini.</p></div>`; return; }
   $app.innerHTML = `${section('Pentadbir', 'Peranan')}
     <div class="card"><p class="muted small"><b>Admin pertandingan:</b> cipta dan urus pertandingan, jana jadual, simpan dan sahkan skor.<br><b>Pengesah skor:</b> sahkan atau tolak skor yang dihantar dan betulkan markah. Sesuai untuk AJK di setiap dewan.</p>
-      <div class="grid2"><div><label>E-mel Google</label><input id="rEmail" type="email" placeholder="nama@gmail.com"></div>
+      <div class="grid2"><div><label>E-mel <small class="muted">(Google, Yahoo, Outlook…)</small></label><input id="rEmail" type="email" placeholder="nama@gmail.com / nama@yahoo.com"></div>
       <div><label>Nama</label><input id="rName" placeholder="cth. Hatta"></div>
       <div><label>Peranan</label><select id="rRole">${opt({ verifier: 'Pengesah skor', admin: 'Admin pertandingan' }, 'verifier')}</select></div></div>
       <button class="pill-btn brand" id="rAdd" style="margin-top:12px"><span class="dot"></span>Tambah / kemas kini</button></div>

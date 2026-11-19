@@ -26,6 +26,29 @@ const emit = what => listeners.forEach(f => { try { f(what); } catch (e) { conso
 export const onChange = f => { listeners.add(f); return () => listeners.delete(f); };
 
 export const isAdmin = () => state.role === 'owner' || state.role === 'admin';
+// Siapa urus pertandingan: pemilik (semua), atau admin yang mencipta / diserahkan pertandingan itu (koleksi 'owners', tidak dibaca umum)
+state.owners = {};
+const myEmail = () => (auth && auth.currentUser && auth.currentUser.email ? auth.currentUser.email.toLowerCase() : '');
+// Pengurus: pemilik; admin yang mencipta / diserahkan; atau admin bersama (co) yang dijemput untuk pertandingan ini
+export const manages = tid => state.role === 'owner' || (state.role === 'admin' && (state.owners[tid] || {}).email === myEmail())
+  || (!!myEmail() && ((state.owners[tid] || {}).co || []).includes(myEmail()));
+export const isMainManager = tid => state.role === 'owner' || (state.role === 'admin' && (state.owners[tid] || {}).email === myEmail());
+// Bukan admin umum: semak sama ada saya admin bersama untuk pertandingan ini (dokumen boleh dibaca jika e-mel saya tersenarai)
+const _ownTried = {};
+export async function loadOwner(tid) {
+  if (!myEmail() || isAdmin() || _ownTried[tid]) return; _ownTried[tid] = 1;
+  try { const d = await F.getDoc(F.doc(db, 'owners', tid)); if (d.exists()) { state.owners[tid] = d.data(); emit('role'); } } catch {}
+}
+export async function setCoAdmins(tid, co, coNames) { await init(); await F.setDoc(F.doc(db, 'owners', tid), { co, coNames }, { merge: true }); state.owners[tid] = { ...(state.owners[tid] || {}), co, coNames }; emit('role'); }
+export const managerOf = tid => state.owners[tid] || null;
+let unsubOwners = null;
+function watchOwners() {
+  if (unsubOwners) { unsubOwners(); unsubOwners = null; }
+  state.owners = {}; for (const k in _ownTried) delete _ownTried[k];
+  if (!isAdmin()) return;
+  unsubOwners = F.onSnapshot(F.collection(db, 'owners'), snap => { const o = {}; snap.forEach(d => (o[d.id] = d.data())); state.owners = o; emit('role'); }, () => {});
+}
+export async function setManager(tid, email, name = '') { await init(); await F.setDoc(F.doc(db, 'owners', tid), { email: String(email).toLowerCase(), name: String(name || '').slice(0, 60) }); }
 export const isVerifier = () => isAdmin() || state.role === 'verifier';
 
 let unsubT = null, unsubRole = null;
@@ -42,7 +65,7 @@ export async function init() {
     catch { db = F.initializeFirestore(app, {}); }
     try { await F.getRedirectResult(auth); } catch (e) { console.warn('redirect', e); }
     F.onAuthStateChanged(auth, u => {
-      state.user = u ? { uid: u.uid, email: u.email || '', name: u.displayName || '', anon: u.isAnonymous } : null;
+      state.user = u ? { uid: u.uid, email: u.email || '', name: u.displayName || '', anon: u.isAnonymous, verified: !!u.emailVerified, pass: (u.providerData || []).some(p => p.providerId === 'password') } : null;
       watchRole();
       emit('auth');
     });
@@ -67,10 +90,12 @@ async function watchRole() {
   Object.values(unsubSub).forEach(u => u()); for (const k in unsubSub) delete unsubSub[k];
   state.pending = {};
   const u = auth.currentUser;
-  if (!u || u.isAnonymous || !u.email) { state.role = ''; emit('role'); return; }
-  if (await sha256(u.email.toLowerCase()) === OWNER_HASH) { state.role = 'owner'; emit('role'); return; }
+  // e-mel mesti disahkan (akaun e-mel/kata laluan perlu klik pautan pengesahan dahulu)
+  if (!u || u.isAnonymous || !u.email || !u.emailVerified) { state.role = ''; watchOwners(); emit('role'); return; }
+  if (await sha256(u.email.toLowerCase()) === OWNER_HASH) { state.role = 'owner'; watchOwners(); emit('role'); return; }
   unsubRole = F.onSnapshot(F.doc(db, 'roles', u.email.toLowerCase()), d => {
     state.role = d.exists() ? (d.data().role || '') : '';
+    watchOwners();
     emit('role');
   }, () => { state.role = ''; emit('role'); });
 }
@@ -86,6 +111,24 @@ export async function signInGoogle() {
     throw e;
   }
 }
+// Log masuk dengan e-mel lain (Yahoo, Outlook, e-mel pejabat…): kata laluan + pautan pengesahan e-mel
+export async function signInEmail(email, pass) { await init(); const c = await F.signInWithEmailAndPassword(auth, email.trim(), pass); return c.user; }
+export async function signUpEmail(email, pass, name) {
+  await init();
+  const c = await F.createUserWithEmailAndPassword(auth, email.trim(), pass);
+  if (name) try { await F.updateProfile(c.user, { displayName: name }); } catch {}
+  await F.sendEmailVerification(c.user, { url: location.origin + location.pathname });
+  return c.user;
+}
+export async function resendVerify() { await init(); if (auth.currentUser) await F.sendEmailVerification(auth.currentUser, { url: location.origin + location.pathname }); }
+export async function resetPass(email) { await init(); await F.sendPasswordResetEmail(auth, email.trim(), { url: location.origin + location.pathname }); }
+// selepas klik pautan pengesahan: muat semula status akaun
+export async function refreshUser() {
+  await init(); const u = auth.currentUser; if (!u) return false;
+  await F.reload(u); await u.getIdToken(true);
+  state.user = { ...state.user, verified: !!u.emailVerified, name: u.displayName || state.user?.name || '' };
+  await watchRole(); emit('auth'); return !!u.emailVerified;
+}
 export async function ensureAnon() {
   await init();
   if (!auth.currentUser) await F.signInAnonymously(auth);
@@ -99,6 +142,10 @@ export async function saveTournament(t, opts = {}) {
   // Siapa cipta / kemas kini (nama sahaja; e-mel tidak disimpan kerana data pertandingan boleh dibaca umum)
   const who = state.user && !state.user.anon ? (state.user.name || (state.user.email || '').split('@')[0] || 'Admin') : '';
   if (who) { if (opts.created && !t.createdBy) t.createdBy = { name: who, at: Date.now() }; t.lastEdit = { name: who, at: Date.now() }; }
+  // pertandingan baharu: rekod pengurus (e-mel disimpan dalam koleksi peribadi 'owners', bukan dalam data awam)
+  if (opts.created && myEmail() && !state.owners[t.id]) {
+    try { await F.setDoc(F.doc(db, 'owners', t.id), { email: myEmail(), name: who }); state.owners[t.id] = { email: myEmail(), name: who }; } catch (e) { /* peraturan lama: abaikan */ }
+  }
   const meta = { name: t.name || '', clubId: t.clubId || '', stage: t.stage || '', date: t.date || '', regOpen: !!t.regOpen && t.stage === 'setup' && !(t.matches || []).length, updatedAt: F.serverTimestamp(), updatedBy: who };
   await F.setDoc(F.doc(db, 'tournaments', t.id), { ...meta, data: JSON.stringify(t) });
 }

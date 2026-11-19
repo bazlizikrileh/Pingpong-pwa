@@ -18,8 +18,8 @@ const inCloud = id => !!(cloud.state.tournaments && cloud.state.tournaments.has(
 export const store = {
   isLocal: id => !inCloud(id) && readLocal().tournaments.some(t => t.id === id),
   isCloud: inCloud,
-  canEdit(id) { return store.isLocal(id) || (inCloud(id) && cloud.isVerifier()); },
-  canAdmin(id) { return store.isLocal(id) || (inCloud(id) && cloud.isAdmin()); },
+  canEdit(id) { return store.isLocal(id) || (inCloud(id) && (cloud.manages(id) || cloud.state.role === 'verifier')); },
+  canAdmin(id) { return store.isLocal(id) || (inCloud(id) && cloud.manages(id)); },
   list() {
     const local = readLocal().tournaments;
     const c = cloud.state.tournaments ? [...cloud.state.tournaments.values()] : [];
@@ -34,9 +34,10 @@ export const store = {
   // Simpan: ke awan jika pertandingan itu di awan (atau baharu dan pengguna ialah admin), jika tidak ke peranti
   save(t, { forceCloud = false } = {}) {
     if (inCloud(t.id) || (forceCloud && cloud.isAdmin())) {
-      if (!cloud.isVerifier()) throw new Error('Hanya penganjur boleh mengubah pertandingan ini');
+      const created = !inCloud(t.id);
+      if (!created && !store.canEdit(t.id)) throw new Error('Hanya pengurus pertandingan ini boleh membuat perubahan');
       cloud.state.tournaments.set(t.id, clone(t));       // kemas kini serta-merta di skrin
-      return cloud.saveTournament(t).catch(e => { console.error(e); alert('Gagal simpan ke awan: ' + (e.code || e.message)); });
+      return cloud.saveTournament(t, { created }).catch(e => { console.error(e); alert('Gagal simpan ke awan: ' + (e.code || e.message)); });
     }
     const db = readLocal();
     const i = db.tournaments.findIndex(x => x.id === t.id);
