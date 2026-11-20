@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.37.0';
+const VERSION = '3.37.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -3133,7 +3133,7 @@ function viewReport(t) {
     ${E.isMixer(t) ? '' : unitAwards(t, played)}
     ${t.groups.length ? `<section class="rp-sec pb"><h3>Keputusan Peringkat ${t.format === 'rr' ? 'Liga' : 'Kumpulan'}</h3>${t.groups.map(g => { const ms = played.filter(m => m.stage === 'group' && m.group === g.name).sort((x, y) => x.gn - y.gn); return ms.length ? `<h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${resTable(ms)}` : ''; }).join('') || '<p class="muted small">Belum ada keputusan.</p>'}</section>` : ''}
     ${ko('ko')}${ko('pool')}
-    ${t.stage === 'done' && t.format !== 'rr' ? rankingHtml(t, true).replace(/<button[^>]*>Cetak<\/button>/, '') : ''}
+    ${t.stage === 'done' && t.format !== 'rr' ? `<section class="rp-sec pb rk-sec">${rankingHtml(t, true).replace(/<button[^>]*>Cetak<\/button>/, '')}</section>` : ''}
     <section class="rp-sec pb"><h3>Peraturan &amp; Penentuan Kedudukan</h3><ol class="rules small">${[...rulesOf(t), ...(t.stage === 'done' && t.format !== 'rr' && !E.isMixer(t) ? [RANK_RULE] : [])].map(r => `<li>${esc(r)}</li>`).join('')}</ol>
       <div class="rp-sign"><div><div class="ln"></div>Disediakan oleh<br><small>Nama: ${esc((t.createdBy && t.createdBy.name) || '')}</small></div><div><div class="ln"></div>Disahkan oleh<br><small>Penganjur / Pengurus pertandingan</small></div></div></section>
     <p class="muted small rp-foot">Dijana oleh Pingpong Portal · ${new Date().toLocaleString('ms-MY')}</p>`;
