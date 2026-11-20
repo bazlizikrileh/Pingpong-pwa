@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.31.2';
+const VERSION = '3.32.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1376,7 +1376,8 @@ async function standingsImages(t) {
   out.innerHTML = '';
   for (const [pi, pg] of pages.entries()) {
     const cols = pg.length > 1 ? 2 : 1, cw = (W - 60 - (cols - 1) * 20) / cols, rowH = 46;
-    const cardH = g => 84 + rowH * g.members.length + 16;
+    const mxH = g => 46 + 40 * g.members.length + 14;   // matriks keputusan di bawah kedudukan
+    const cardH = g => 84 + rowH * g.members.length + 16 + mxH(g);
     const lines = []; for (let i = 0; i < pg.length; i += cols) lines.push(pg.slice(i, i + cols));
     const H = 210 + lines.reduce((a, l) => a + Math.max(...l.map(cardH)) + 20, 0) + 70;
     const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
@@ -1414,10 +1415,30 @@ async function standingsImages(t) {
           [r.w, r.l, (r.sf - r.sa > 0 ? '+' : '') + (r.sf - r.sa), r.pts].forEach((v, k) => c.fillText(String(v), x + colX[k], ry + 30));
           c.textAlign = 'left';
         });
+        // ---- matriks keputusan (baris = pemain, lajur = lawan; ikut susunan kedudukan) ----
+        const M = E.matrix(t, g.name), n = M.ids.length, my = y + 84 + rowH * n + 16;
+        c.fillStyle = '#e6e8ee'; c.fillRect(x + 20, my - 6, cw - 40, 2);
+        c.fillStyle = '#0f1d3a'; c.font = `800 18px ${F}`; c.fillText('Matriks keputusan', x + 20, my + 22);
+        const lw = Math.min(200, cw * 0.36), cwid = Math.min(64, (cw - 40 - lw) / n), mx0 = x + 20 + lw, rh2 = 40;
+        c.font = `700 15px ${F}`; c.fillStyle = '#8a8f99'; c.textAlign = 'center';
+        for (let j = 0; j < n; j++) c.fillText(String(j + 1), mx0 + cwid * j + cwid / 2, my + 22);
+        c.textAlign = 'left';
+        M.rows.forEach((row, i) => {
+          const ry = my + 32 + i * rh2;
+          c.fillStyle = '#1b2236'; c.font = `600 16px ${F}`; c.fillText(fit(`${i + 1}. ${E.pname(t, M.ids[i])}`, lw - 10), x + 20, ry + 25);
+          row.forEach((cl, j) => {
+            const cx = mx0 + cwid * j + 2, w = cwid - 4;
+            if (cl === 'self') { c.fillStyle = '#e9ebf0'; rr(cx, ry + 4, w, rh2 - 8, 6); c.fill(); return; }
+            if (!cl) { c.fillStyle = '#b8bdc8'; c.textAlign = 'center'; c.font = `700 16px ${F}`; c.fillText('·', cx + w / 2, ry + 25); c.textAlign = 'left'; return; }
+            c.fillStyle = cl.draw ? '#fff1c2' : cl.win ? '#d5f2dc' : '#fde3e3'; rr(cx, ry + 4, w, rh2 - 8, 6); c.fill();
+            c.fillStyle = cl.draw ? '#7a5b00' : cl.win ? '#14632a' : '#a3262a'; c.textAlign = 'center'; c.font = `700 ${Math.min(16, w * 0.32)}px JetBrains Mono, monospace`;
+            c.fillText(`${cl.v[0]}-${cl.v[1]}`, cx + w / 2, ry + 25); c.textAlign = 'left';
+          });
+        });
       });
       y += Math.max(...l.map(cardH)) + 20;
     }
-    c.fillStyle = '#8a8f99'; c.font = `400 17px ${F}`; c.fillText('Lorek hijau = layak. Dijana oleh Pingpong Portal.', 30, H - 30);
+    c.fillStyle = '#8a8f99'; c.font = `400 17px ${F}`; c.fillText('Lorek hijau = layak. Matriks: baca ikut baris (hijau = menang). Dijana oleh Pingpong Portal.', 30, H - 30);
     const blob = await new Promise(ok => cv.toBlob(ok, 'image/png'));
     const file = new File([blob], `kedudukan-${pi + 1}.png`, { type: 'image/png' });
     files.push(file);
@@ -3042,6 +3063,15 @@ function resultsMessage(t) {
     allDone ? 'Tahniah kepada semua pemenang, dan terima kasih kepada semua peserta, pengadil & AJK! 🙏🏓' : '_Keputusan belum muktamad._'].join('\n').replace(/\n{3,}/g, '\n\n');
 }
 function viewReport(t) {
+  // peserta & penonton: laporan, video & ringkasan WhatsApp hanya selepas semua perlawanan tamat
+  const allDone = t.matches.length && t.matches.every(m => m.status === 'done' || m.status === 'bye');
+  if (!allDone && !canEdit(t)) {
+    $app.innerHTML = `${section('Laporan', t.name)}<div class="card" style="text-align:center"><div style="font-size:42px">🏓</div>
+      <p><b>Laporan penuh, video ringkasan dan ringkasan keputusan</b> tersedia selepas semua perlawanan tamat.</p>
+      ${t.groups.length ? `<p class="muted small">Untuk kongsi kedudukan semasa: tab <b>${t.format === 'rr' ? 'Liga' : 'Kumpulan'}</b> → <b>📷 Gambar kedudukan</b> (termasuk matriks keputusan).</p>
+      <a class="pill-btn orange" href="#/t/${t.id}/kumpulan"><span class="dot"></span>Ke ${t.format === 'rr' ? 'Liga' : 'Kumpulan'}</a>` : ''}</div>`;
+    return;
+  }
   const c = clubOf(t), f = E.SET_FORMATS;
   const played = t.matches.filter(m => m.status === 'done' && m.a !== 'BYE' && m.b !== 'BYE');
   const resRow = m => { const r = E.evaluateMatch(t, m), team = E.isTeam(t);
