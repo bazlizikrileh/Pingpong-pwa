@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.37.1';
+const VERSION = '3.37.2';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -3101,11 +3101,13 @@ function resultsMessage(t) {
     allDone ? 'Tahniah kepada semua pemenang, dan terima kasih kepada semua peserta, pengadil & AJK! 🙏🏓' : '_Keputusan belum muktamad._'].join('\n').replace(/\n{3,}/g, '\n\n');
 }
 function viewReport(t) {
-  // peserta & penonton: laporan, video & ringkasan WhatsApp hanya selepas semua perlawanan tamat
-  const allDone = t.matches.length && t.matches.every(m => m.status === 'done' || m.status === 'bye');
-  if (!allDone && !canEdit(t)) {
+  // semua pengguna (termasuk penganjur): laporan PDF, video ringkasan & ringkasan WhatsApp hanya selepas semua perlawanan tamat
+  const allDone = t.matches.length && t.matches.every(m => m.status === 'done' || m.status === 'bye') && (E.isMixer(t) || t.format === 'rr' || t.stage === 'done');
+  if (!allDone) {
+    const pl = t.matches.filter(m => m.status !== 'bye' && m.a !== 'BYE' && m.b !== 'BYE'), dn = pl.filter(m => m.status === 'done').length;
     $app.innerHTML = `${section('Laporan', t.name)}<div class="card" style="text-align:center"><div style="font-size:42px">🏓</div>
       <p><b>Laporan penuh, video ringkasan dan ringkasan keputusan</b> tersedia selepas semua perlawanan tamat.</p>
+      ${pl.length ? `<p class="muted small">${dn}/${pl.length} perlawanan selesai${t.format === 'group_ko' && t.stage !== 'done' && dn === pl.length ? ' · peringkat seterusnya belum dijana' : ''}.</p>` : ''}
       ${t.groups.length ? `<p class="muted small">Untuk kongsi kedudukan semasa: tab <b>${t.format === 'rr' ? 'Liga' : 'Kumpulan'}</b> → <b>📷 Gambar kedudukan</b> (termasuk matriks keputusan).</p>
       <a class="pill-btn orange" href="#/t/${t.id}/kumpulan"><span class="dot"></span>Ke ${t.format === 'rr' ? 'Liga' : 'Kumpulan'}</a>` : ''}</div>`;
     return;
