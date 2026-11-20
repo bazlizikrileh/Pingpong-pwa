@@ -324,3 +324,41 @@ export async function makeRealPoster(d, n = 1) {
   footer(c, n === 3 || n === 6 ? 'rgba(0,0,0,.4)' : 'rgba(255,255,255,.5)');
   return new Promise(res => cv.toBlob(b => res(b), 'image/png'));
 }
+
+// ---------- Latar banner: gambar sahaja (tiada teks/logo/QR), saiz lebar 1200×480 ----------
+// Objek diletak ke kanan supaya teks banner di kiri kekal jelas.
+const SW = 1200, SH = 480;
+const SCENE = [
+  (c, R) => { floor(c, 0, 0, SW, SH, 'wood', R); c.save(); c.translate(860, 240); c.rotate(-1.25); tableTop(c, -260, -330, 520, 660, R, { netH: false }); c.restore();
+    ball(c, 700, 150, 22); ball(c, 1010, 330, 22, true); paddle(c, 1080, 120, 95, 0.7, '#c8102e', true, R); paddle(c, 640, 380, 90, -2.4, '#1a1a1a', true, R); },
+  (c, R, T) => { const g = c.createLinearGradient(0, 0, SW, SH); g.addColorStop(0, T.hd2); g.addColorStop(1, T.hd1); c.fillStyle = g; c.fillRect(0, 0, SW, SH);
+    noise(c, 0, 0, SW, SH, 3000, 'rgba(255,255,255,.03)', R); c.save(); c.translate(1010, 200); c.rotate(0.32); tableTop(c, -230, -300, 420, 680, R, { netH: true }); c.restore();
+    ball(c, 760, 300, 22, true); paddle(c, 860, 140, 100, -0.4, '#c8102e', true, R); },
+  (c, R) => { c.fillStyle = '#f5ecd9'; c.fillRect(0, 0, SW, SH); noise(c, 0, 0, SW, SH, 6000, 'rgba(120,90,40,.05)', R);
+    c.save(); c.translate(900, 250); c.rotate(-0.12); tableTop(c, -230, -140, 460, 280, R, { netH: false }); c.restore();
+    ball(c, 1010, 200, 18, true); paddle(c, 640, 250, 75, -0.5, '#c8102e', true, R); [[1150, 50], [1150, 430], [560, 50], [560, 430]].forEach(([x, y], i) => ball(c, x, y, 18, i % 2 === 0, false)); },
+  (c, R) => { floor(c, 0, 0, SW, SH, 'dark', R);
+    const sp = c.createRadialGradient(850, 0, 20, 850, 160, 520); sp.addColorStop(0, 'rgba(255,255,255,.2)'); sp.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = sp; c.fillRect(0, 0, SW, SH);
+    tablePersp(c, 850, 170, 420, 760, 230, R); ball(c, 760, 230, 14, false, true, 1.6); ball(c, 930, 330, 18, true, true, 0.4); paddle(c, 1110, 360, 80, 2.5, '#c8102e', true, R); paddle(c, 560, 330, 70, -2.2, '#1a1a1a', true, R); },
+  (c, R) => { const off = document.createElement('canvas'); off.width = SW / 6; off.height = SH / 6; const o = off.getContext('2d'); o.scale(1 / 6, 1 / 6);
+    floor(o, 0, 0, SW, SH, 'dark', R); paddle(o, 980, 160, 220, 0.5, '#c8102e', true, R); paddle(o, 620, 380, 180, -2.6, '#1a1a1a', true, R); ball(o, 800, 420, 80); ball(o, 1140, 380, 55, true);
+    c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; c.drawImage(off, 0, 0, SW, SH); ball(c, 1000, 300, 48, true); paddle(c, 1100, 400, 110, -0.6, '#1a1a1a', true, R); },
+  (c, R, T, A) => { c.fillStyle = '#f6f1e7'; c.fillRect(0, 0, SW, SH); noise(c, 0, 0, SW, SH, 4000, 'rgba(0,0,0,.025)', R);
+    const cx = 930, cy = 240, cr = 190; c.save(); c.beginPath(); c.arc(cx, cy, cr, 0, 7); c.clip();
+    tableTop(c, cx - 380, cy - 300, 720, 580, R, { netH: false }); paddle(c, cx - 30, cy + 30, 150, 0.9, '#c8102e', true, R); ball(c, cx - 150, cy - 90, 34, true); ball(c, cx + 120, cy + 150, 28); c.restore();
+    c.strokeStyle = A; c.lineWidth = 12; c.beginPath(); c.arc(cx, cy, cr + 18, Math.PI * 0.55, Math.PI * 1.45); c.stroke(); },
+  (c, R, T, A) => { const g = c.createLinearGradient(0, 0, SW, SH); g.addColorStop(0, '#0b0f1a'); g.addColorStop(1, T.hd1); c.fillStyle = g; c.fillRect(0, 0, SW, SH);
+    c.fillStyle = A; c.beginPath(); c.moveTo(0, 400); c.lineTo(SW, 200); c.lineTo(SW, 290); c.lineTo(0, 490); c.fill();
+    for (let i = 14; i >= 1; i--) { c.fillStyle = `rgba(255,190,110,${0.05 + 0.03 * (14 - i) / 14})`; c.beginPath(); c.arc(900 - i * 30, 170 + i * 14, 26 - i * 1.1, 0, 7); c.fill(); }
+    paddle(c, 1070, 210, 130, 0.85, '#c8102e', true, R); ball(c, 910, 165, 28, true, false);
+    const fl = c.createRadialGradient(945, 175, 4, 945, 175, 110); fl.addColorStop(0, 'rgba(255,255,255,.55)'); fl.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = fl; c.fillRect(830, 60, 240, 240); },
+  (c, R) => { floor(c, 0, 0, SW, SH, 'dark', R); tablePersp(c, 820, 230, 900, 1500, 360, R, { net: true, legs: false });
+    ball(c, 720, 300, 24, true, true, 1.2); ball(c, 960, 380, 18, false, true, 0.6); paddle(c, 1110, 300, 90, -0.5, '#1a1a1a', true, R); },
+];
+export async function makeScene(n = 1) {
+  const cv = document.createElement('canvas'); cv.width = SW; cv.height = SH; const c = cv.getContext('2d');
+  const T = { hd1: css('--hd1') || '#0b1a3f', hd2: css('--hd2') || '#1d3f8c', or: css('--or') || '#ff7a1a' };
+  const A = lum(T.or) > 0.25 ? T.or : '#ff7a1a', R = rnd(97 + n * 131);
+  SCENE[(n - 1) % SCENE.length](c, R, T, A);
+  return cv;
+}

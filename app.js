@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.36.0';
+const VERSION = '3.36.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -319,30 +319,17 @@ function cdText(t) {
   return d ? `${d}<em>h</em> ${p(h)}<em>j</em> ${p(mi)}<em>m</em>` : `${p(h)}:${p(mi)}<em>:${p(s)}</em>`;
 }
 let _cdTimer = null;
-// Latar banner: poster sendiri (jika dimuat naik), jika tiada poster automatik (gaya dikunci, atau gaya realistik tetap ikut id)
+// Latar banner: gambar poster realistik sahaja (tiada teks), saiz lebar. Gaya = gaya poster yang dikunci, jika tiada ikut id pertandingan.
 const _hbg = {};
 function headBg(t) {
-  const el = $head, set = url => { if (el.dataset.tid !== t.id) return; if (url) { el.style.setProperty('--hbg', `url("${url}")`); el.classList.add('has-bg'); } else { el.style.removeProperty('--hbg'); el.classList.remove('has-bg'); } };
-  el.dataset.tid = t.id;
-  const own = posterOf(t); if (own) return set(own);
+  const el = $head; el.dataset.tid = t.id;
   const locked = ls.get('pingpong:posterLock:' + t.id);
-  const combo = locked || 'R' + (1 + [...t.id].reduce((a, ch) => a + ch.charCodeAt(0), 0) % 8);
-  const sig = [t.name, t.date, t.startTime, t.venue, t.venueName, t.clubId, combo].join('|');
-  let h = 0; for (const ch of sig) h = (h * 31 + ch.charCodeAt(0)) | 0;
-  const key = `pingpong:hbg:${t.id}`, mem = _hbg[key];
-  if (mem && mem.h === h) return set(mem.url);
-  const saved = ls.get(key); if (saved && saved.startsWith(h + '|')) { _hbg[key] = { h, url: saved.slice(String(h).length + 1) }; return set(_hbg[key].url); }
-  set(mem ? mem.url : '');
-  if (mem && mem.busy === h) return; _hbg[key] = { ...(mem || {}), busy: h };
-  (async () => {
-    try {
-      const blob = combo[0] === 'R' ? await (await import('./poster-real.js')).makeRealPoster(regPosterData(t), +combo.slice(1)) : await (await import('./poster-kit.js')).makeKitPoster(regPosterData(t), combo);
-      const im = await createImageBitmap(blob), w = 540, cv = document.createElement('canvas');
-      cv.width = w; cv.height = Math.round(im.height * w / im.width); cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
-      const url = cv.toDataURL('image/jpeg', 0.62);
-      _hbg[key] = { h, url }; ls.set(key, h + '|' + url); set(url);
-    } catch { _hbg[key] = { h, url: '' }; }
-  })();
+  const n = locked && locked[0] === 'R' ? +locked.slice(1) : 1 + [...t.id].reduce((a, ch) => a + ch.charCodeAt(0), 0) % 8;
+  const key = `${n}|${getComputedStyle(document.documentElement).getPropertyValue('--hd1').trim()}`;
+  const set = url => { if (el.dataset.tid !== t.id) return; el.style.setProperty('--hbg', `url("${url}")`); el.classList.add('has-bg'); };
+  if (_hbg[key]) return set(_hbg[key]);
+  el.style.removeProperty('--hbg'); el.classList.remove('has-bg');
+  import('./poster-real.js').then(m => m.makeScene(n)).then(cv => { _hbg[key] = cv.toDataURL('image/jpeg', 0.7); set(_hbg[key]); }).catch(() => {});
 }
 function renderHead(t, page) {
   clearInterval(_cdTimer);

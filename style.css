@@ -782,8 +782,8 @@ table.rp-mx td.sets span { white-space:nowrap; display:inline-block; margin-righ
 
 /* banner pertandingan dengan poster sebagai latar */
 .t-head.has-bg { background:
-  linear-gradient(160deg, color-mix(in srgb, var(--hd2, var(--tb)) 78%, transparent) 0%, color-mix(in srgb, var(--hd1, var(--tb2)) 88%, transparent) 70%),
-  var(--hbg) center 35% / cover no-repeat, var(--hd1, var(--tb2)); }
+  linear-gradient(90deg, color-mix(in srgb, var(--hd1, var(--tb2)) 92%, transparent) 0%, color-mix(in srgb, var(--hd1, var(--tb2)) 70%, transparent) 42%, color-mix(in srgb, var(--hd1, var(--tb2)) 18%, transparent) 100%),
+  var(--hbg) right center / cover no-repeat, var(--hd1, var(--tb2)); }
 /* matriks laporan: 2 lajur seperti laporan carrom */
 .report .mx-grid.two { display:grid; grid-template-columns:1fr 1fr; gap:4px 18px; }
 @media (max-width:640px) { .report .mx-grid.two { grid-template-columns:1fr; } }
