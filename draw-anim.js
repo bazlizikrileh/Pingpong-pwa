@@ -12,6 +12,16 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
  *  nav: [{ label, fn }] butang navigasi (cth. sesi lepas / ulang / seterusnya)
  *  doneText, next: { label, fn } → butang selepas selesai (cth. sesi seterusnya)
  */
+// Kekalkan skrin menyala semasa undian / video disediakan (Screen Wake Lock API, jika disokong)
+let _wl = null, _wlWant = 0;
+export async function keepAwake(on) {
+  _wlWant = Math.max(0, _wlWant + (on ? 1 : -1));
+  try {
+    if (_wlWant && !_wl && 'wakeLock' in navigator && document.visibilityState === 'visible') { _wl = await navigator.wakeLock.request('screen'); _wl.addEventListener('release', () => { _wl = null; }); }
+    else if (!_wlWant && _wl) { const w = _wl; _wl = null; await w.release(); }
+  } catch {}
+}
+if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (_wlWant && document.visibilityState === 'visible') { _wlWant--; keepAwake(true); } });   // dilepaskan oleh telefon bila ditutup → minta semula
 export function playDeal(o) {
   document.getElementById('drw')?.remove();
   const ov = document.createElement('div');
@@ -36,6 +46,7 @@ export function playDeal(o) {
       <button class="btn" data-vid style="background:#25d366;color:#fff">${esc(o.videoLabel || '📤 Kongsi video (WhatsApp)')}</button></div>
     <p class="drw-vmsg" id="drv"></p>`;
   document.body.appendChild(ov);
+  keepAwake(true);
   // bunyi semasa undian (pilihan)
   let S = null;
   if (o.sound) import('./sound.js').then(m => { S = m; const sb = ov.querySelector('[data-snd]'); const upd = () => (sb.textContent = S.soundOn() ? '🔊' : '🔇'); upd();
@@ -76,6 +87,7 @@ export function playDeal(o) {
       stat.innerHTML = `<b style="font-size:18px">✅ ${esc(o.doneText || 'Cabutan selesai')}</b>${o.next ? `<div style="margin-top:8px"><button class="btn" data-next style="background:#ff7a1a;color:#fff">${esc(o.next.label)}</button></div>` : ''}`;
       const nb = stat.querySelector('[data-next]'); if (nb) nb.onclick = () => { close(); o.next.fn(); };
       if (o.auto && o.next && !busy) tm = sched(() => { if (!busy) { close(); o.next.fn(); } }, o.autoMs ?? 1600);
+      else if (S && o.music) S.musicOff(3500);   // undian tamat & tiada sesi seterusnya → muzik pudar
       return;
     }
     const s = o.seq[k++];
@@ -85,7 +97,8 @@ export function playDeal(o) {
     fill(s, true); snd('card', k);
     tm = sched(step, o.speed || 1300);
   };
-  const close = () => { clearTimeout(tm); pend = null; document.removeEventListener('visibilitychange', onVis); ov.remove(); document.body.style.overflow = ''; if (S && o.music) S.musicOff(700); };
+  let awake = true;
+  const close = () => { if (awake) { awake = false; keepAwake(false); } clearTimeout(tm); pend = null; document.removeEventListener('visibilitychange', onVis); ov.remove(); document.body.style.overflow = ''; if (S && o.music) S.musicOff(700); };
   ov.querySelector('[data-x]').onclick = close;
   ov.querySelectorAll('[data-chip]').forEach(b => (b.onclick = () => { const x = o.chips[+b.dataset.chip]; if (x && x.fn) { close(); x.fn(); } }));
   ov.querySelectorAll('[data-nav]').forEach(b => (b.onclick = () => { const n = o.nav[+b.dataset.nav]; if (!n || !n.fn) return; close(); n.fn(); }));

@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.31.1';
+const VERSION = '3.31.2';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2994,7 +2994,8 @@ function wireRecap(t) {
       };
       raf = requestAnimationFrame(loop);
     };
-    const shut = () => { cancelAnimationFrame(raf); stopM(); md.hidden = true; };
+    const DA = await import('./draw-anim.js'); DA.keepAwake(true);
+    const shut = () => { cancelAnimationFrame(raf); stopM(); md.hidden = true; DA.keepAwake(false); };
     md.onclick = e => { if (e.target === md || e.target.id === 'mx') shut(); };
     document.getElementById('pvO').onclick = () => { tpl = (tpl + 1) % 10; start(); };
     document.getElementById('pvM').onclick = () => { const L = S.RECAP.map(x => x[0]), i = L.indexOf(sty); sty = L[(i + 1) % L.length]; start(); };
@@ -3002,6 +3003,7 @@ function wireRecap(t) {
     start();
   };
   go.onclick = async () => {
+    const DA = await import('./draw-anim.js'); DA.keepAwake(true);
     go.disabled = true; out.innerHTML = ''; msg.textContent = 'Menyediakan video dalam telefon ini. Jangan tutup skrin…';
     try {
       const [{ buildRecap }, V, S] = await Promise.all([import('./recap-video.js'), import('./draw-video.js'), import('./sound.js')]);
@@ -3019,7 +3021,7 @@ function wireRecap(t) {
       document.getElementById('rcShare').onclick = async () => { const r = await made.share(); msg.textContent = r.shared ? '✅ Video dikongsi.' : r.cancelled ? 'Dibatalkan.' : '⬇️ Video dimuat turun. Hantar dari galeri / Fail ke WhatsApp.'; };
       document.getElementById('rcDl').onclick = () => { made.download(); msg.textContent = '⬇️ Video dimuat turun ke telefon.'; };
     } catch (e) { msg.textContent = 'Gagal menyediakan video: ' + (e && e.message || e); }
-    go.disabled = false; go.innerHTML = '<span class="dot"></span>🎬 Jana semula';
+    go.disabled = false; go.innerHTML = '<span class="dot"></span>🎬 Jana semula'; DA.keepAwake(false);
   };
 }
 // Ringkasan keputusan untuk group WhatsApp: podium, anugerah, statistik, pautan laporan
