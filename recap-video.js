@@ -37,9 +37,10 @@ export function buildRecap(d) {
   for (let i = 0; i < G.length; i += big ? 1 : 2) S.push({ k: 'matrix', st, gs: G.slice(i, i + (big ? 1 : 2)), dur: 1.1 + Math.max(...G.slice(i, i + (big ? 1 : 2)).map(g => g.rows.length)) * st + hold, chap: i === 0 ? (d.isLiga ? 'KEPUTUSAN LIGA' : 'PERINGKAT KUMPULAN') : '' });
   if (d.table && d.table.rows.length) S.push({ k: 'table', dur: 1.4 + Math.min(d.table.rows.length, 10) * 0.28 + 2, chap: d.table.title });
   const aw = d.noAwards ? [] : (d.awards || []).slice(0, 3);
-  if (aw.length) S.push({ k: 'awards', dur: 0.9 + aw.length * 2.3, chap: 'DETIK MENARIK' });
   const brk = (b, chap) => { if (!b || !b.rounds.length) return; const vis = b.rounds.slice(-4); S.push({ k: 'bracket', b, vis, dur: 1.1 + vis.length * 1.45 + 2, chap }); };
   brk(d.ko, 'KALAH MATI'); brk(d.pool, 'POOL KALAH');
+  // detik menarik selepas liga / bracket, sebelum podium
+  if (aw.length) S.push({ k: 'awards', dur: 0.9 + aw.length * 2.3, chap: 'DETIK MENARIK' });
   if (d.podium && d.podium.length) S.push({ k: 'podium', dur: 7, chap: 'PODIUM' });
   S.push({ k: 'end', dur: 4.6 });
   let acc = 0; S.forEach(x => { x.t0 = acc; acc += x.dur; });
