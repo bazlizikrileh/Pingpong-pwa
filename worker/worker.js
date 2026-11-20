@@ -12,6 +12,9 @@
 // Topik: adm:<tid> (penganjur), me:<tid>:<pid> (peserta pilih nama), reg:<tid>:<uid> (pendaftar)
 
 const ORIGINS = ['https://bazlizikrileh.github.io', 'http://localhost:8765'];
+// Alamat Cloudflare Pages (pingpong & carrom, termasuk pratonton): pingpong-portal.pages.dev, carrom-portal-xyz.pages.dev, abc123.pingpong-portal.pages.dev
+const PAGES_RE = /^https:\/\/([a-z0-9-]+\.)?(pingpong|carrom)-portal(-[a-z0-9]+)?\.pages\.dev$/;
+const okOrigin = o => ORIGINS.includes(o) || PAGES_RE.test(o);
 const TOPIC_RE = /^(adm|me|reg|club|t):[A-Za-z0-9_:-]{1,90}$/;
 const MAX_SUBS_PER_TOPIC = 60;
 
@@ -113,7 +116,7 @@ export default {
   },
   async fetch(req, env) {
     const url = new URL(req.url), origin = req.headers.get('Origin') || '';
-    const cors = { 'Access-Control-Allow-Origin': ORIGINS.includes(origin) ? origin : ORIGINS[0], 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', Vary: 'Origin' };
+    const cors = { 'Access-Control-Allow-Origin': okOrigin(origin) ? origin : ORIGINS[0], 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', Vary: 'Origin' };
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
     if (!env.PUSH) return json({ error: 'KV PUSH belum diikat pada Worker ini' }, cors, 500);
     try {
