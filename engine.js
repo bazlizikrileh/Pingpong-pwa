@@ -85,8 +85,8 @@ export function migrate(t) {
     if (m.stage === 'ko' && !m.bracket) m.bracket = 'ko';
   }
   if (t.entryMode === 'mixer') {
-    // Regu bertukar hanya terbaik 3 / 5 set (tiada seri). Betulkan data lama yang guna format lain.
-    if (!['3', '5'].includes(t.groupFormat)) {
+    // Regu bertukar: terbaik 3 / 5 set atau 3 set semua dimainkan (tiada seri). Betulkan data lama yang guna format lain.
+    if (!['3', '5', 'F3'].includes(t.groupFormat)) {
       t.groupFormat = '3';
       t.matches.forEach(m => { if (m.status !== 'done') return; const r = evaluateMatch(t, m);
         if (!r.complete || !r.winner) { m.winner = null; m.status = m.rubbers.some(x => x.sets.length) ? 'live' : 'pending'; } else m.winner = r.winner; });
