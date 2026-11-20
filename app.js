@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.33.2';
+const VERSION = '3.34.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1496,7 +1496,7 @@ function viewBrackets(t) {
     const mirror = t.koMode !== 'U' && E.canMirror(t);
     $app.innerHTML = `${section('Kalah mati', 'Carta Kalah Mati')}<div class="card">
       ${ready ? '<p>Semua perlawanan kumpulan selesai.</p>' : '<p class="muted">Masih ada perlawanan kumpulan belum selesai.</p>'}
-      <p class="muted small">${mirror ? 'Bracket cermin: A1 lwn naib johan kumpulan terakhir, B1 lwn kumpulan kedua terakhir, dan seterusnya.' : 'Undian: BYE kepada johan kumpulan terbaik; rakan sekumpulan diletak di separuh bracket berlainan.'}${t.pool !== '0' ? ' Pool kalah: ' + POOL[t.pool].toLowerCase() + '.' : ''}</p>
+      <p class="muted small">${mirror ? 'Bracket cermin: johan setiap kumpulan lwn naib johan kumpulan cermin (A1 lwn naib johan kumpulan terakhir, B1 lwn kedua terakhir…). Johan kumpulan A, C, E… di separuh atas, B, D, F… di separuh bawah, jadi A1 dan B1 hanya boleh bertemu di final.' : 'Undian: BYE kepada johan kumpulan terbaik; rakan sekumpulan diletak di separuh bracket berlainan.'}${t.pool !== '0' ? ' Pool kalah: ' + POOL[t.pool].toLowerCase() + '.' : ''}</p>
       <button class="pill-btn ${ready ? 'brand' : 'light'}" id="gen"><span class="dot"></span>${ready ? 'Jana kalah mati' : 'Jana sekarang (ikut kedudukan semasa)'}</button></div>`;
     document.getElementById('gen').onclick = () => {
       if (!ready && !confirm('Masih ada perlawanan kumpulan belum selesai. Teruskan?')) return;
@@ -1583,7 +1583,7 @@ function rulesOf(t) {
   else {
     rules.push(`Format perlawanan - peringkat kumpulan: ${gf}; kalah mati: ${kf}.`);
     rules.push(t.koMode !== 'U' && E.canMirror(t)
-      ? 'Kalah mati (bracket cermin): johan setiap kumpulan menentang naib johan kumpulan cermin (A1 lwn naib johan kumpulan terakhir, B1 lwn kumpulan kedua terakhir, dan seterusnya). Johan dan naib johan dari kumpulan yang sama sentiasa berada di separuh bracket berbeza.'
+      ? 'Kalah mati (bracket cermin): johan setiap kumpulan menentang naib johan kumpulan cermin (A1 lwn naib johan kumpulan terakhir, B1 lwn kumpulan kedua terakhir, dan seterusnya). Johan kumpulan berselang-seli: A, C, E… di separuh atas dan B, D, F… di separuh bawah, jadi A1 dan B1 hanya boleh bertemu di final. Johan dan naib johan dari kumpulan yang sama sentiasa berada di separuh bracket berbeza.'
       : `Kalah mati: BYE diberi kepada johan kumpulan terbaik (ikut mata, kemudian beza menang-kalah perlawanan, set dan mata permainan). Johan dan naib johan dari kumpulan yang sama diletakkan di separuh bracket berbeza.${t.bestThirds ? ` ${t.bestThirds} tempat ketiga terbaik turut layak.` : ''} Jika saiz kumpulan tidak sama, perbandingan antara kumpulan tidak mengambil kira keputusan menentang pemain tempat terakhir kumpulan yang lebih besar.`);
     if (t.pool !== '0') rules.push(`Pool kalah: ${t.pool === '34' ? 'peserta tempat ketiga yang tidak layak ke kalah mati utama dan semua peserta tempat keempat' : 'peserta tempat ketiga yang tidak layak ke kalah mati utama'} bermain kalah mati berasingan menggunakan format kalah mati yang sama. BYE (jika ada) diberi kepada peserta terbaik.`);
   }
