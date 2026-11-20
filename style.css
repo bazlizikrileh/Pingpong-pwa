@@ -779,3 +779,16 @@ table.rp-mx td.sets span { white-space:nowrap; display:inline-block; margin-righ
 .st-tbs { padding:4px 12px; } .st-tb { display:grid; grid-template-columns:42px 1fr auto; gap:8px; align-items:center; padding:8px 0; border-bottom:1px solid var(--line, #e5e7eb); font-size:13.5px; } .st-tb:last-child { border-bottom:0; }
 .st-tb.free b { color: var(--muted, #64748b); } .st-sc { text-align:right; font-size:15px; }
 .ck-list { display:flex; flex-wrap:wrap; gap:6px; } .ck { border:1.5px solid var(--line, #e5e7eb); background:#fff; border-radius:999px; padding:6px 11px; font-size:13px; } .ck.on { background:#e7f7ec; border-color:#3aa55d; }
+
+/* banner pertandingan dengan poster sebagai latar */
+.t-head.has-bg { background:
+  linear-gradient(160deg, color-mix(in srgb, var(--hd2, var(--tb)) 78%, transparent) 0%, color-mix(in srgb, var(--hd1, var(--tb2)) 88%, transparent) 70%),
+  var(--hbg) center 35% / cover no-repeat, var(--hd1, var(--tb2)); }
+/* matriks laporan: 2 lajur seperti laporan carrom */
+.report .mx-grid.two { display:grid; grid-template-columns:1fr 1fr; gap:4px 18px; }
+@media (max-width:640px) { .report .mx-grid.two { grid-template-columns:1fr; } }
+.report .mx-grid .mx-mat h4 { margin:8px 0 2px; }
+.report .mx-grid table.mx { width:100%; }
+.report .mx-grid .mx td.l { font-size:11px; padding:4px 6px; text-align:left; }
+.report .mx-grid .mx td, .report .mx-grid .mx th { padding:4px 3px; min-width:0; font-size:11px; }
+@media print { .report .mx-grid.two { grid-template-columns:1fr 1fr; } .t-head.has-bg { background: none; } }

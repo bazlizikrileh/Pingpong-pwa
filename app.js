@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.35.0';
+const VERSION = '3.36.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -319,12 +319,37 @@ function cdText(t) {
   return d ? `${d}<em>h</em> ${p(h)}<em>j</em> ${p(mi)}<em>m</em>` : `${p(h)}:${p(mi)}<em>:${p(s)}</em>`;
 }
 let _cdTimer = null;
+// Latar banner: poster sendiri (jika dimuat naik), jika tiada poster automatik (gaya dikunci, atau gaya realistik tetap ikut id)
+const _hbg = {};
+function headBg(t) {
+  const el = $head, set = url => { if (el.dataset.tid !== t.id) return; if (url) { el.style.setProperty('--hbg', `url("${url}")`); el.classList.add('has-bg'); } else { el.style.removeProperty('--hbg'); el.classList.remove('has-bg'); } };
+  el.dataset.tid = t.id;
+  const own = posterOf(t); if (own) return set(own);
+  const locked = ls.get('pingpong:posterLock:' + t.id);
+  const combo = locked || 'R' + (1 + [...t.id].reduce((a, ch) => a + ch.charCodeAt(0), 0) % 8);
+  const sig = [t.name, t.date, t.startTime, t.venue, t.venueName, t.clubId, combo].join('|');
+  let h = 0; for (const ch of sig) h = (h * 31 + ch.charCodeAt(0)) | 0;
+  const key = `pingpong:hbg:${t.id}`, mem = _hbg[key];
+  if (mem && mem.h === h) return set(mem.url);
+  const saved = ls.get(key); if (saved && saved.startsWith(h + '|')) { _hbg[key] = { h, url: saved.slice(String(h).length + 1) }; return set(_hbg[key].url); }
+  set(mem ? mem.url : '');
+  if (mem && mem.busy === h) return; _hbg[key] = { ...(mem || {}), busy: h };
+  (async () => {
+    try {
+      const blob = combo[0] === 'R' ? await (await import('./poster-real.js')).makeRealPoster(regPosterData(t), +combo.slice(1)) : await (await import('./poster-kit.js')).makeKitPoster(regPosterData(t), combo);
+      const im = await createImageBitmap(blob), w = 540, cv = document.createElement('canvas');
+      cv.width = w; cv.height = Math.round(im.height * w / im.width); cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+      const url = cv.toDataURL('image/jpeg', 0.62);
+      _hbg[key] = { h, url }; ls.set(key, h + '|' + url); set(url);
+    } catch { _hbg[key] = { h, url: '' }; }
+  })();
+}
 function renderHead(t, page) {
   clearInterval(_cdTimer);
   _cdTimer = setInterval(() => { const el = document.getElementById('cdown'); if (!el) return clearInterval(_cdTimer); if (startAt(t) <= Date.now()) { clearInterval(_cdTimer); renderHead(t, page); } else el.innerHTML = cdText(t); }, 1000);
   const c = clubOf(t);
   document.getElementById('brand-title').textContent = '← Semua pertandingan';
-  $head.hidden = false;
+  $head.hidden = false; headBg(t);
   const f = E.SET_FORMATS[t.groupFormat];
   const play = t.matches.filter(m => m.status !== 'bye' && m.a !== 'BYE' && m.b !== 'BYE');
   const done = play.filter(m => m.status === 'done').length, pct = play.length ? Math.round(done / play.length * 100) : 0;
@@ -1300,11 +1325,11 @@ function standingsTable(t, g) {
     <tbody>${s.map((r, i) => `<tr class="${i < q ? 'q' : i < q + poolN ? 'pq' : ''}"><td>${i + 1}</td><td class="l">${E.usesDraw(t) ? pnUnit(t, r.id) : pn(t, r.id)}</td>
       <td>${r.p}</td><td>${r.w}</td>${team ? `<td>${r.d}</td>` : ''}<td>${r.l}</td><td><b>${r.pts}</b></td><td>${sign(r.sf - r.sa)}</td><td>${sign(r.pf - r.pa)}</td></tr>`).join('')}</tbody></table></div>`;
 }
-function matrixHtml(t, g) {
+function matrixHtml(t, g, noCap) {
   const M = E.matrix(t, g.name), st = E.groupStandings(t, g.name);
   return `<div class="tw"><table class="mx"><thead><tr><th class="l">${UNIT(t)}</th>${M.ids.map((_, i) => `<th>${i + 1}</th>`).join('')}<th>Set ±</th></tr></thead><tbody>
     ${M.ids.map((id, i) => { const r = st.find(x => x.id === id); const d = r.sf - r.sa; return `<tr><td class="l">${i + 1}. ${esc(E.pname(t, id))}</td>${M.rows[i].map(c => c === 'self' ? '<td class="self"></td>' : c ? `<td class="${c.win ? 'win' : ''}">${c.v[0]}-${c.v[1]}</td>` : '<td>·</td>').join('')}<td>${d > 0 ? '+' : ''}${d}</td></tr>`; }).join('')}
-  </tbody></table></div><p class="muted small">Baca mengikut baris: skor set pemain di baris itu menentang pemain di lajur. Hijau = menang.</p>`;
+  </tbody></table></div>${noCap ? '' : '<p class="muted small">Baca mengikut baris: skor set pemain di baris itu menentang pemain di lajur. Hijau = menang.</p>'}`;
 }
 function mixPlanText(t) {
   const P = E.mixPlan(t);
@@ -3117,7 +3142,7 @@ function viewReport(t) {
     ${E.isMixer(t) ? mixReport(t, played, resTable) : ''}
     ${t.groups.length ? `<h3>${t.format === 'rr' ? 'Kedudukan Liga' : 'Kedudukan Kumpulan'}</h3>${t.groups.map(g => `<h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${standingsTable(t, g)}`).join('')}` : ''}
     ${E.isMixer(t) ? '' : unitAwards(t, played)}
-    ${!E.isMixer(t) && t.groups.length && played.some(m => m.stage === 'group') ? `<section class="rp-sec pb"><h3>Matriks Keputusan</h3>${t.groups.map(g => `<div class="mx-mat"><h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${matrixHtml(t, g)}</div>`).join('')}</section>` : ''}
+    ${!E.isMixer(t) && t.groups.length && played.some(m => m.stage === 'group') ? `<section class="rp-sec pb"><h3>Matriks Keputusan</h3><div class="mx-grid${t.groups.length > 1 && Math.max(...t.groups.map(g => g.members.length)) <= 6 ? ' two' : ''}">${t.groups.map(g => `<div class="mx-mat"><h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${matrixHtml(t, g, true)}</div>`).join('')}</div><p class="muted small">Baca mengikut baris: skor set ${UNIT(t).toLowerCase()} di baris itu menentang ${UNIT(t).toLowerCase()} di lajur. Hijau = menang.</p></section>` : ''}
     ${t.groups.length ? `<section class="rp-sec pb"><h3>Keputusan Peringkat ${t.format === 'rr' ? 'Liga' : 'Kumpulan'}</h3>${t.groups.map(g => { const ms = played.filter(m => m.stage === 'group' && m.group === g.name).sort((x, y) => x.gn - y.gn); return ms.length ? `<h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${resTable(ms)}` : ''; }).join('') || '<p class="muted small">Belum ada keputusan.</p>'}</section>` : ''}
     ${t.rounds.ko && played.some(m => m.bracket === 'ko') ? `<section class="rp-sec pb">${chart('ko')}${chart('pool')}</section>` : ''}
     ${ko('ko')}${ko('pool')}
