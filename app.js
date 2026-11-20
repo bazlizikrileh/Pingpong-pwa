@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.33.0';
+const VERSION = '3.33.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -83,6 +83,19 @@ const isHidden = t => t.hidden ?? !!t.test;
 // Pertandingan ujian: ditanda ujian, salinan di telefon ini, atau nama mengandungi ujian/test/testing/cubaan/demo/latihan.
 // Penganjur boleh tetapkan sendiri di Tetapan (t.kind = 'test' / 'real') — pilihan itu sentiasa diutamakan.
 const TEST_RE = /\b(ujian|uji|test|testing|tester|cubaan|percubaan|cuba|demo|latihan|trial|dummy|contoh|sample)\b/i;
+// Alamat lama (github.io): jalur kecil mengajak pengguna beralih ke alamat baharu (pautan kekal pada halaman yang sama)
+const NEW_HOME = 'https://pingpongsantai-portal.pages.dev/';
+function movedBanner() {
+  if (!/github\.io$/.test(location.hostname) || document.getElementById('movedBar')) return;
+  const snooze = +(ls.get('pingpong:movedSnooze') || 0); if (Date.now() < snooze) return;
+  const b = document.createElement('div'); b.id = 'movedBar';
+  b.style.cssText = 'position:sticky;top:0;z-index:50;background:#ff7a1a;color:#111;padding:9px 12px;font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center';
+  b.innerHTML = `<span>📢 <b>Portal sudah berpindah</b> ke alamat baharu.</span><a id="movedGo" style="background:#111;color:#fff;border-radius:999px;padding:5px 12px;text-decoration:none;font-weight:700" href="${NEW_HOME}">Buka &amp; install</a><button id="movedX" style="background:transparent;border:0;font-size:13px;text-decoration:underline;cursor:pointer">Nanti</button>`;
+  document.body.prepend(b);
+  document.getElementById('movedGo').onclick = e => { e.preventDefault(); location.href = NEW_HOME + location.hash; };
+  document.getElementById('movedX').onclick = () => { ls.set('pingpong:movedSnooze', String(Date.now() + 86400000)); b.remove(); };
+}
+if (typeof document !== 'undefined') (document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', movedBanner) : setTimeout(movedBanner, 0));
 if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (document.hidden) document.querySelectorAll('video').forEach(v => { try { v.pause(); } catch {} }); });
 const isTestT = t => t.kind === 'test' || (t.kind !== 'real' && (!!t.test || store.isLocal(t.id) || TEST_RE.test(t.name || '')));
 const ls = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} } };
