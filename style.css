@@ -806,3 +806,4 @@ table.rp-mx td.sets span { white-space:nowrap; display:inline-block; margin-righ
 .srv-row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:8px; } .srv-row > span { min-width:100px; font-size:12px; color:var(--muted); }
 .cs-srv { font-style:normal; }
 .info-fold summary { cursor:pointer; list-style:none; } .info-fold summary::-webkit-details-marker{display:none} .info-fold summary::after { content:' ▾'; color:var(--muted); }
+.prof-card { display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-top:8px; }

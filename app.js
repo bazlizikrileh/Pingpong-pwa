@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.40.0';
+const VERSION = '3.41.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -178,6 +178,7 @@ document.addEventListener('focusout', () => setTimeout(() => { if (_dirty && !bu
 cloud.onChange(what => {
   try { checkNotify(); } catch (e) { console.warn(e); }
   if (what === 'role' || what === 'tournaments' || what === 'auth') pushSync();
+  if (what === 'auth') syncProfile();
   updateTop();
   if (_cur && store.isCloud(_cur) && store.canEdit(_cur)) cloud.watchSubmissions(_cur);
   if (['pending', 'tournaments', 'role', 'auth', 'error', 'regs', 'poster'].includes(what)) softRender();
@@ -1920,7 +1921,7 @@ ${esc(t.regCond)}</div>` : ''}
   </div>`;
 }
 function wireReg(t) {
-  wireShare(t);
+  wireShare(t); wireProfileCard($app);
   const $ = id => document.getElementById(id);
   if ($('rgMoreBtn')) $('rgMoreBtn').onclick = () => { $('rgMore').hidden = false; $('rgMoreBtn').parentElement.hidden = true; const sv = $('rgSave'); if (sv) sv.lastChild.textContent = 'Daftar sekarang'; };
   if ($('rgLogin')) $('rgLogin').onclick = async () => { try { await cloud.signInGoogle(); toast('Berjaya log masuk'); render(); } catch (e) { toast('Log masuk gagal: ' + (e.code || e.message)); } };
@@ -1939,13 +1940,13 @@ function wireReg(t) {
       const firstReg = !(cloud.state.regs[t.id] || []).some(r => r.uid === cloud.myUid());
       const data = { name, full: $('rgFull') ? $('rgFull').value.trim() : '', unit: $('rgUnit').value.trim(), level: $('rgLv') ? $('rgLv').value : '', partner: $('rgPartner') ? $('rgPartner').value.trim() : '', note: $('rgNote').value.trim() };
       await cloud.register(t.id, data, editId);
-      if (firstReg || (editId && editId === cloud.myUid())) try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch {} ls.set('pingpong:profile', JSON.stringify({ name: data.name, full: data.full, unit: data.unit, level: data.level, partner: data.partner || profile().partner || '' }));
+      if (firstReg || (editId && editId === cloud.myUid())) setProfile({ name: data.name, full: data.full, unit: data.unit, level: data.level, partner: data.partner || profile().partner || '' });
       ls.set('pingpong:myRegs', JSON.stringify([...new Set([t.id, ...myRegTids()])].slice(0, 30)));
       try { const L = JSON.parse(ls.get('pingpong:regn:' + t.id) || '[]'); if (!L.includes(data.name)) L.push(data.name); ls.set('pingpong:regn:' + t.id, JSON.stringify(L.slice(-10))); } catch {}
       _rgEdit = null;
       if (isNew) PUSH.send(['adm:' + t.id], '🏓 Pendaftaran baharu', `${name} · ${t.name} · ${new Date().toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}`, `#/t/${t.id}/pemain`, 'reg-' + t.id + '-' + Date.now().toString(36));
       pushSync();
-      ls.set('pingpong:regd:' + t.id, '1'); toast('✅ Pendaftaran dihantar. Menunggu pengesahan penganjur.', 3500);
+      ls.set('pingpong:regd:' + t.id, '1'); toast('✅ Pendaftaran dihantar. Menunggu pengesahan penganjur.', 3500); render(true);
     } catch (e) { $('rgSave').disabled = false; toast(e.code === 'permission-denied' ? 'Pendaftaran sudah ditutup' : 'Gagal: ' + (e.code || e.message), 4000); }
   };
   $app.querySelectorAll('[data-rok],[data-rno]').forEach(b => (b.onclick = async () => {
@@ -1981,6 +1982,38 @@ function wireReg(t) {
 }
 // Profil mini (disimpan di telefon ini sahaja): isi borang secara automatik
 const profile = () => { try { return JSON.parse(ls.get('pingpong:profile') || '{}'); } catch { return {}; } };
+const googleUser = () => { const u = cloud.state.user; return u && !u.anon ? u : null; };
+function setProfile(p) {
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch {}
+  ls.set('pingpong:profile', JSON.stringify(p));
+  if (googleUser()) cloud.saveProfileCloud(p).catch(e => console.warn('profil', e));
+}
+// Selepas log masuk Google: pulihkan profil ke telefon baharu, atau simpan profil telefon ini ke akaun
+let _profUid = null;
+async function syncProfile() {
+  const u = googleUser(); if (!u || _profUid === u.uid) return; _profUid = u.uid;
+  try {
+    const c = await cloud.loadProfileCloud(), l = profile();
+    if (c && c.name && !l.name) { ls.set('pingpong:profile', JSON.stringify({ name: c.name, full: c.full || '', unit: c.unit || '', level: c.level || '', partner: c.partner || '' })); toast(`👤 Profil ${c.name} dipulihkan`); pushSync(); softRender(); }
+    else if (l.name && (!c || ['name', 'full', 'unit', 'level', 'partner'].some(k => (c[k] || '') !== (l[k] || '')))) await cloud.saveProfileCloud(l);
+  } catch (e) { console.warn('profil', e); }
+}
+// Kad profil peserta: simpan dengan Google supaya ikut ke telefon baharu
+function profileCard(compact) {
+  const P = profile(), g = googleUser();
+  if (!P.name && !g) return `<div class="notice small prof-card"><div>Pernah simpan profil dengan Google di telefon lain?</div><button type="button" class="pill-btn light small" data-gprof>🔄 Pulihkan profil</button></div>`;
+  if (g) return `<div class="notice small prof-card">✅ <b>Profil disimpan dengan Google</b>${P.name ? ` · ${esc(P.name)}` : ''}<br><span class="muted">${esc(g.email)} · log masuk akaun ini di telefon baharu untuk memulihkan profil & pendaftaran.</span></div>`;
+  return `<div class="notice small prof-card"><div>👤 Profil <b>${esc(P.name)}</b> diingati di telefon ini sahaja.${compact ? '' : '<br><span class="muted">Simpan dengan Google supaya profil dan pendaftaran anda ikut ke telefon baharu. Pilihan, percuma.</span>'}</div>
+    <button type="button" class="pill-btn light small" data-gprof>🔒 Simpan dengan Google</button></div>`;
+}
+function wireProfileCard(root = document) {
+  root.querySelectorAll('[data-gprof]').forEach(b => (b.onclick = async () => {
+    b.disabled = true;
+    const had = !!profile().name;
+    try { await cloud.linkGoogle(); _profUid = null; await syncProfile(); if (had) toast('✅ Profil disimpan dengan Google'); else if (!profile().name) toast('Tiada profil tersimpan untuk akaun ini. Daftar sekali dan ia akan disimpan.', 4000); pushSync(); softRender(); }
+    catch (e) { toast('Gagal: ' + (e.code === 'auth/popup-closed-by-user' ? 'dibatalkan' : e.code || e.message)); b.disabled = false; }
+  }));
+}
 const myRegTids = () => { try { return JSON.parse(ls.get('pingpong:myRegs') || '[]'); } catch { return []; } };
 let _rgEdit = null;
 function condTags(t) {
@@ -2004,6 +2037,7 @@ function viewDaftar(t) {
       ${!first && !r ? '<div class="section-title" style="margin-top:0">➕ Daftar orang lain</div>' : ''}
       ${quick ? `<div class="notice small quick-reg"><div>👤 <b>${esc(prof.name)}</b>${prof.full ? ` · ${esc(prof.full)}` : ''}${prof.unit ? `<br><span class="muted">${esc(prof.unit)}</span>` : ''}${S && prof.level ? ` <span class="muted">· ${esc(lvName(prof.level))}</span>` : ''}</div>
         <button type="button" class="pill-btn light small" id="rgMoreBtn">✏️ Ubah</button></div>` : ''}
+      ${first && !r && !prof.name && !googleUser() ? profileCard() : ''}
       <div id="rgMore" ${quick ? 'hidden' : ''}>
       <label>Nama penuh</label><input id="rgFull" maxlength="80" value="${esc(r ? r.full || '' : first ? prof.full || '' : '')}" placeholder="cth. Mohd Hazlan bin Mohd Haliman" autocomplete="${first ? 'name' : 'off'}">
       <label>Nama panggilan <small class="muted">(dipapar dalam jadual, undian & keputusan)</small></label><input id="rgName" maxlength="40" value="${esc(r ? r.name : first ? prof.name || '' : '')}" placeholder="cth. Hazlan">
@@ -2037,7 +2071,7 @@ function viewDaftar(t) {
       <div class="section-title" style="margin-top:0">📝 ${mineList.length ? 'Pendaftaran dari telefon ini' : 'Daftar penyertaan'}</div>
       ${mineList.length ? `<div class="my-regs">${mineList.map(x => `<div class="notice small my-reg"><div><b>${esc(x.name)}</b>${x.partner ? ` &amp; ${esc(x.partner)}` : ''}${x.level ? ` <span class="muted">(${esc(lvName(x.level))})</span>` : ''}<br>${REG_ST[x.status][0]} ${x.status === 'pending' ? 'Menunggu pengesahan penganjur' : REG_ST[x.status][1]}</div>
         ${regOn(t) ? `<div class="row" style="gap:6px"><button type="button" class="pill-btn light small" data-rgedit="${x.id}">Ubah</button><button type="button" class="pill-btn light small" data-rgcancel="${x.id}">Batal</button></div>` : ''}</div>`).join('')}
-        ${mineList.some(x => x.status === 'pending') ? notifBtn('🔔 Beritahu bila disahkan') : ''}</div>` : ''}
+        ${mineList.some(x => x.status === 'pending') ? notifBtn('🔔 Beritahu bila disahkan') : ''}${profileCard()}</div>` : ''}
       ${showForm ? form : full && !mineList.length ? '<p class="notice">Maaf, tempat sudah penuh.</p>' : !regOn(t) && !mineList.length ? '<p class="muted">Pendaftaran telah ditutup.</p>' : ''}
       ${regOn(t) && !full && mineList.length && !_rgEdit && mineList.length < 10 ? '<button type="button" class="pill-btn light" data-rgedit="new" style="margin-top:10px">➕ Daftar orang lain (keluarga / rakan)</button>' : ''}
     </div>
@@ -3305,8 +3339,9 @@ function showAccount() {
     ${notifOn() ? `<div class="row" style="gap:6px;margin:-4px 0 10px;flex-wrap:wrap"><button type="button" class="pill-btn light small" id="ntfTest">🧪 Uji notifikasi push</button><span class="small muted" id="ntfRes"></span></div>` : ''}` : ''}
     ${signed && cloud.state.user && cloud.state.user.pass && !cloud.state.user.verified ? `<div class="notice small">✉️ <b>Sahkan e-mel anda.</b> Kami telah menghantar pautan pengesahan ke <b>${esc(u.email)}</b> (semak juga folder Spam). Klik pautan itu, kemudian tekan butang di bawah.
       <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap"><button class="pill-btn brand small" id="eChk">✅ Saya sudah sahkan</button><button class="pill-btn light small" id="eRe">Hantar semula</button></div></div>` : ''}
-    ${signed ? `<p>Log masuk sebagai <b>${esc(u.email)}</b><br><span class="role-chip">${ROLE[cloud.state.role] || 'Penonton'}</span></p>
-      ${!cloud.state.role ? '<p class="muted small">Akaun ini belum diberi peranan. Minta admin utama menambah e-mel anda di halaman Pentadbir.</p>' : ''}
+    ${profileCard(true)}
+    ${signed ? `<p>Log masuk sebagai <b>${esc(u.email)}</b><br><span class="role-chip">${ROLE[cloud.state.role] || (profile().name ? 'Peserta' : 'Penonton')}</span></p>
+      ${!cloud.state.role ? (profile().name ? '' : '<p class="muted small">Akaun peserta. Penganjur: minta admin utama menambah e-mel anda di halaman Pentadbir.</p>') : ''}
       <div class="btn-stack">${cloud.state.role === 'owner' ? '<a class="pill-btn brand" href="#/pentadbir" id="goAdm"><span class="dot"></span>Pentadbir &amp; peranan</a>' : ''}
       <button class="pill-btn light" id="out">Log keluar</button></div>`
     : `<p class="muted">Penonton dan pemain tidak perlu log masuk. Pengadil menghantar skor dengan PIN acara pada kad perlawanan.</p>
@@ -3324,6 +3359,7 @@ function showAccount() {
   md.onclick = e => { if (e.target === md || e.target.id === 'mx' || e.target.id === 'goAdm') md.hidden = true; };
   const ntf = document.getElementById('ntf');
   if (ntf) ntf.onclick = async () => { await askNotif(); showAccount(); };
+  wireProfileCard(md);
   const nt = document.getElementById('ntfTest');
   if (nt) nt.onclick = async () => {
     const out = document.getElementById('ntfRes'), say = x => (out.innerHTML = x);

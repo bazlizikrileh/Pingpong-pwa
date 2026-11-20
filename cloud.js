@@ -111,6 +111,34 @@ export async function signInGoogle() {
     throw e;
   }
 }
+// Peserta: simpan profil dengan Google. Akaun tanpa nama dipautkan (uid kekal → pendaftaran lama tetap milik peserta);
+// jika akaun Google itu sudah wujud (telefon lain), log masuk terus ke akaun tersebut.
+export async function linkGoogle() {
+  await init();
+  const p = new F.GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' });
+  const u = auth.currentUser;
+  if (!u || !u.isAnonymous) return signInGoogle();
+  try { await F.linkWithPopup(u, p); }
+  catch (e) {
+    if (e.code === 'auth/credential-already-in-use' || e.code === 'auth/email-already-in-use') {
+      const cr = F.GoogleAuthProvider.credentialFromError(e);
+      if (cr) await F.signInWithCredential(auth, cr); else await F.signInWithPopup(auth, p);
+    } else if (['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment', 'auth/cancelled-popup-request'].includes(e.code)) return F.linkWithRedirect(u, p);
+    else throw e;
+  }
+  const v = auth.currentUser;   // pautan tidak mencetuskan onAuthStateChanged: kemas kini keadaan sendiri
+  state.user = { uid: v.uid, email: v.email || (v.providerData[0] || {}).email || '', name: v.displayName || (v.providerData[0] || {}).displayName || '', anon: v.isAnonymous, verified: !!v.emailVerified, pass: false };
+  watchRole(); emit('auth');
+}
+export async function saveProfileCloud(p) {
+  await init(); const u = auth.currentUser; if (!u || u.isAnonymous) return false;
+  const d = { name: String(p.name || '').slice(0, 50), full: String(p.full || '').slice(0, 80), unit: String(p.unit || '').slice(0, 40), level: String(p.level || '').slice(0, 10), partner: String(p.partner || '').slice(0, 40), at: F.serverTimestamp() };
+  await F.setDoc(F.doc(db, 'profiles', u.uid), d); return true;
+}
+export async function loadProfileCloud() {
+  await init(); const u = auth.currentUser; if (!u || u.isAnonymous) return null;
+  const s = await F.getDoc(F.doc(db, 'profiles', u.uid)); return s.exists() ? s.data() : null;
+}
 // Log masuk dengan e-mel lain (Yahoo, Outlook, e-mel pejabat…): kata laluan + pautan pengesahan e-mel
 export async function signInEmail(email, pass) { await init(); const c = await F.signInWithEmailAndPassword(auth, email.trim(), pass); return c.user; }
 export async function signUpEmail(email, pass, name) {
