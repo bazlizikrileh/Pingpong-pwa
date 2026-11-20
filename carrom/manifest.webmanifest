@@ -1,0 +1,17 @@
+{
+  "name": "Carrom Portal",
+  "short_name": "Carrom",
+  "description": "Portal pertandingan carrom: cabutan, jadual, skor dan kedudukan.",
+  "lang": "ms",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2a1608",
+  "theme_color": "#2a1608",
+  "icons": [
+    { "src": "icons/cr-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/cr-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/cr-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

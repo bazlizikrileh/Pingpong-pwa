@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Carrom Portal</title>
+  <meta name="description" content="Portal pertandingan carrom: cabutan, jadual, skor dan kedudukan.">
+  <meta name="theme-color" content="#5a2d0c">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/cr-192.png">
+  <link rel="apple-touch-icon" href="icons/cr-apple-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Carrom">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a href="#/" class="brand"><span id="brand-logos">⚪</span> <span id="brand-title">Carrom Portal</span></a>
+    <div class="top-actions">
+      <button id="bell" class="top-btn" hidden title="Menunggu pengesahan">🔔 <b id="bellN">0</b></button>
+      <button id="acct" class="top-btn">Log masuk</button>
+      <button id="install-btn" class="top-btn" hidden>Pasang</button>
+    </div>
+  </header>
+  <header id="thead" class="t-head" hidden></header>
+  <nav id="tabs" class="tabs" hidden></nav>
+  <main id="app"></main>
+  <div id="modal" class="modal" hidden></div>
+  <div id="toast" class="toast" hidden></div>
+  <script src="app.js" type="module"></script>
+</body>
+</html>

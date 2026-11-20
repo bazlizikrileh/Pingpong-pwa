@@ -72,7 +72,7 @@ export async function init() {
     unsubT = F.onSnapshot(F.collection(db, 'tournaments'), { includeMetadataChanges: true }, snap => {
       state.offline = !!snap.metadata?.fromCache;
       const m = new Map();
-      snap.forEach(d => { try { m.set(d.id, JSON.parse(d.data().data)); } catch {} });
+      snap.forEach(d => { try { const x = JSON.parse(d.data().data); if (x && x.sport !== 'carrom') m.set(d.id, x); } catch {} });   // pertandingan carrom dipapar dalam Portal Carrom
       state.tournaments = m;
       emit('tournaments');
     }, err => { console.warn('tournaments', err); state.failed = !state.tournaments; emit('error'); });
