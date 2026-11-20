@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.33.1';
+const VERSION = '3.33.2';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -486,6 +486,8 @@ function viewHome() {
     ${tests.length ? `<details class="card fold" ${ls.get('pingpong:testOpen') === '1' ? 'open' : ''} id="testF"><summary>🧪 Pertandingan ujian (${tests.length})</summary>
       <p class="muted small" style="margin:6px 0 0">Dikenal pasti daripada tanda "ujian", salinan di telefon ini, atau nama seperti <i>ujian, test, testing, cubaan, demo, latihan</i>. Tukar di Tetapan pertandingan → <b>Jenis</b> jika salah.</p>
       <div class="hc-list" style="margin-top:10px">${tests.map(card).join('')}</div></details>` : ''}
+    <a class="card noprint" href="https://carromsantai-portal.pages.dev/" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit">
+      <span style="font-size:34px">🎯</span><span style="flex:1"><b>Portal Carrom</b><br><span class="muted small">Pertandingan carrom kini di portal sendiri</span></span><span class="pill-btn light small">Buka →</span></a>
     <details class="card fold noprint"><summary>Sandaran data</summary>
       <p class="muted">Eksport untuk sandaran atau pindah ke peranti lain.</p>
       <div class="row"><button class="pill-btn light small" id="exp">Eksport</button>
