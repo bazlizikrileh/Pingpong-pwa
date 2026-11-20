@@ -33,3 +33,9 @@ export function schedule(key, at, topics, title, body, url, tag) {
   if (!URL_) return;
   fetch(URL_ + '/schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, at, topics, title, body, url, tag }), keepalive: true }).catch(() => {});
 }
+// Hantar dan tunggu jawapan pelayan (untuk ujian): { ok, sent, gone } atau { error }
+export async function sendNow(topics, title, body, url, tag) {
+  if (!URL_) return { error: 'PUSH_URL tidak ditetapkan' };
+  try { const r = await fetch(URL_ + '/notify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topics, title, body, url, tag }) }); const j = await r.json().catch(() => ({})); return r.ok ? { ok: true, ...j } : { error: j.error || 'HTTP ' + r.status }; }
+  catch (e) { return { error: 'Tidak dapat menghubungi pelayan push (' + (e.message || e) + ')' }; }
+}

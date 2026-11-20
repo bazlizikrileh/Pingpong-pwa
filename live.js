@@ -257,3 +257,31 @@ export function myStatus(t, pid) {
   if (i >= 0) return { kind: 'wait', ahead: i, m: cand[i] };
   return { kind: 'none' };
 }
+
+// ---------- Servis ----------
+// Servis bertukar setiap 2 mata; dari 10-10 (deuce) bertukar setiap mata. Mata handicap tidak dikira sebagai servis.
+// cfg = { s: sisi yang servis dahulu dalam set ini (0/1), si: indeks pembuat servis pertama (regu), rc: indeks penerima pertama (regu) }
+// Regu (ITTF): X→Y, Y→X', X'→Y', Y'→X … ; x5 = bilangan rali ketika satu pihak mula-mula capai 5 mata dalam set penentu
+// (pasangan penerima menukar giliran menerima dari saat itu).
+export function serveAt(cur, st, cfg, dbl, x5) {
+  const n = Math.max(0, cur[0] + cur[1] - st[0] - st[1]), dn = 20 - st[0] - st[1];
+  const deuce = cur[0] >= 10 && cur[1] >= 10;
+  const turn = r => (deuce && r >= dn ? Math.floor(dn / 2) + (r - dn) : Math.floor(r / 2));
+  const k = turn(n), left = deuce ? 1 : 2 - (n % 2);
+  const side = (cfg.s + k) % 2;
+  if (!dbl) return { side, left, deuce, n };
+  const seq = [[cfg.s, cfg.si], [1 - cfg.s, cfg.rc], [cfg.s, 1 - cfg.si], [1 - cfg.s, 1 - cfg.rc]];
+  let sv = seq[k % 4], rv = seq[(k + 1) % 4];
+  if (x5 != null) {
+    const k5 = Math.floor(x5 / 2), q = 1 - ((cfg.s + k5) % 2);
+    if (k >= k5) { const f = p => (p[0] === q ? [p[0], 1 - p[1]] : p); sv = f(sv); rv = f(rv); }
+  }
+  return { side, left, deuce, n, sv, rv };
+}
+// Tetapan servis bagi set g: pilihan yang disimpan, jika tiada diterbitkan daripada set sebelumnya —
+// pihak lain servis dahulu, dan (regu) penerima pertama set lalu membuat servis kepada pembuat servis pertama set lalu.
+export function serveCfg(sv, ri, g) {
+  let c = (sv && sv[`${ri}:0`]) || { s: 0, si: 0, rc: 0 };
+  for (let i = 1; i <= g; i++) c = (sv && sv[`${ri}:${i}`]) || { s: 1 - c.s, si: c.rc, rc: c.si };
+  return c;
+}

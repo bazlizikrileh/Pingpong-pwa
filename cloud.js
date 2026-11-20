@@ -311,7 +311,7 @@ const _lockAt = {}, _sumAt = {}, _sumT = {};
 let _scoring = 0;
 export async function setLive(tid, mid, { rs, cur, ri, by, tb, sw }) {
   const u = await ensureAnon();
-  const e = { uid: u.uid, rs: encodeRubbers(rs), cur: `${cur[0]}-${cur[1]}`, ri: ri | 0, by: String(by || '').slice(0, 50), tb: String(tb || '').slice(0, 15), sw: !!sw };
+  const e = { uid: u.uid, rs: encodeRubbers(rs), cur: `${cur[0]}-${cur[1]}${cur[2] === 0 || cur[2] === 1 ? '-' + cur[2] : ''}`, ri: ri | 0, by: String(by || '').slice(0, 50), tb: String(tb || '').slice(0, 15), sw: !!sw };
   const k = tid + '/' + mid;
   if (!_lockAt[k] || Date.now() - _lockAt[k] > 60e3) {
     await F.setDoc(F.doc(db, 'tournaments', tid, 'live', mid), { ...e, at: F.serverTimestamp() });
