@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.39.0';
+const VERSION = '3.40.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -68,6 +68,7 @@ function pushSync() {
     const T = [];
     for (const x of store.list()) {
       if (!store.isCloud(x.id)) continue;
+      if (x.stage !== 'done' && !ls.get('pingpong:me:' + x.id) && profile().name) { const tt = load(x.id); if (tt) autoMeQuiet(tt); }
       if (store.canEdit(x.id)) T.push('adm:' + x.id);
       const me = ls.get('pingpong:me:' + x.id); if (me) T.push(`me:${x.id}:${me}`);
       if (ls.get('pingpong:regd:' + x.id) && cloud.myUid()) T.push(`reg:${x.id}:${cloud.myUid()}`);
@@ -1921,6 +1922,7 @@ ${esc(t.regCond)}</div>` : ''}
 function wireReg(t) {
   wireShare(t);
   const $ = id => document.getElementById(id);
+  if ($('rgMoreBtn')) $('rgMoreBtn').onclick = () => { $('rgMore').hidden = false; $('rgMoreBtn').parentElement.hidden = true; const sv = $('rgSave'); if (sv) sv.lastChild.textContent = 'Daftar sekarang'; };
   if ($('rgLogin')) $('rgLogin').onclick = async () => { try { await cloud.signInGoogle(); toast('Berjaya log masuk'); render(); } catch (e) { toast('Log masuk gagal: ' + (e.code || e.message)); } };
   $app.querySelectorAll('[data-rgedit]').forEach(b => (b.onclick = () => { _rgEdit = b.dataset.rgedit; render(); setTimeout(() => { const f = $('regForm'); if (f) f.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50); }));
   if ($('rgBack')) $('rgBack').onclick = () => { _rgEdit = null; render(); };
@@ -1937,7 +1939,7 @@ function wireReg(t) {
       const firstReg = !(cloud.state.regs[t.id] || []).some(r => r.uid === cloud.myUid());
       const data = { name, full: $('rgFull') ? $('rgFull').value.trim() : '', unit: $('rgUnit').value.trim(), level: $('rgLv') ? $('rgLv').value : '', partner: $('rgPartner') ? $('rgPartner').value.trim() : '', note: $('rgNote').value.trim() };
       await cloud.register(t.id, data, editId);
-      if (firstReg || (editId && editId === cloud.myUid())) ls.set('pingpong:profile', JSON.stringify({ name: data.name, full: data.full, unit: data.unit, level: data.level }));
+      if (firstReg || (editId && editId === cloud.myUid())) try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch {} ls.set('pingpong:profile', JSON.stringify({ name: data.name, full: data.full, unit: data.unit, level: data.level, partner: data.partner || profile().partner || '' }));
       ls.set('pingpong:myRegs', JSON.stringify([...new Set([t.id, ...myRegTids()])].slice(0, 30)));
       try { const L = JSON.parse(ls.get('pingpong:regn:' + t.id) || '[]'); if (!L.includes(data.name)) L.push(data.name); ls.set('pingpong:regn:' + t.id, JSON.stringify(L.slice(-10))); } catch {}
       _rgEdit = null;
@@ -1997,18 +1999,23 @@ function viewDaftar(t) {
   const r = _rgEdit && _rgEdit !== 'new' ? mineList.find(x => x.id === _rgEdit) : null;
   const prof = profile(), first = !mineList.length;
   const lvOpts = S ? S.levels.filter(l => !(t.regLevels || []).length || t.regLevels.includes(l[0]) || (r && r.level === l[0])) : [];
+  const quick = first && !r && prof.name && (!S || !(t.regLevels || []).length || !prof.level || t.regLevels.includes(prof.level));
   const form = `<div class="reg-form" id="regForm">
       ${!first && !r ? '<div class="section-title" style="margin-top:0">➕ Daftar orang lain</div>' : ''}
+      ${quick ? `<div class="notice small quick-reg"><div>👤 <b>${esc(prof.name)}</b>${prof.full ? ` · ${esc(prof.full)}` : ''}${prof.unit ? `<br><span class="muted">${esc(prof.unit)}</span>` : ''}${S && prof.level ? ` <span class="muted">· ${esc(lvName(prof.level))}</span>` : ''}</div>
+        <button type="button" class="pill-btn light small" id="rgMoreBtn">✏️ Ubah</button></div>` : ''}
+      <div id="rgMore" ${quick ? 'hidden' : ''}>
       <label>Nama penuh</label><input id="rgFull" maxlength="80" value="${esc(r ? r.full || '' : first ? prof.full || '' : '')}" placeholder="cth. Mohd Hazlan bin Mohd Haliman" autocomplete="${first ? 'name' : 'off'}">
       <label>Nama panggilan <small class="muted">(dipapar dalam jadual, undian & keputusan)</small></label><input id="rgName" maxlength="40" value="${esc(r ? r.name : first ? prof.name || '' : '')}" placeholder="cth. Hazlan">
       <label>Unit / Jabatan / Kumpulan (pilihan)</label><input id="rgUnit" maxlength="40" value="${esc(r ? r.unit : first ? prof.unit || '' : '')}">
       ${S ? `<label>Tahap</label><select id="rgLv">${opt({ '': '— pilih tahap —', ...Object.fromEntries(lvOpts.map(l => [l[0], l[1]])) }, r ? r.level : first ? prof.level || '' : '')}</select>` : ''}
-      ${t.entryMode === 'double' ? `<label>Nama pasangan</label><input id="rgPartner" maxlength="40" value="${esc(r ? r.partner : '')}">` : ''}
       <label>Catatan (pilihan)</label><input id="rgNote" maxlength="140" value="${esc(r ? r.note : '')}" placeholder="cth. no. telefon / saiz baju">
+      </div>
+      ${t.entryMode === 'double' ? `<label>Nama pasangan</label><input id="rgPartner" maxlength="40" value="${esc(r ? r.partner : first ? prof.partner || '' : '')}">` : ''}
       ${t.regCond ? `<label class="check" style="margin-top:10px"><input type="checkbox" id="rgCond" ${r ? 'checked' : ''}> <span>Saya memenuhi syarat penyertaan:<br><b style="white-space:pre-line">${esc(t.regCond)}</b></span></label>` : ''}
-      <button type="button" class="pill-btn orange big" id="rgSave" style="margin-top:14px;width:100%"><span class="dot"></span>${r ? 'Simpan perubahan' : 'Daftar sekarang'}</button>
+      <button type="button" class="pill-btn orange big" id="rgSave" style="margin-top:14px;width:100%"><span class="dot"></span>${r ? 'Simpan perubahan' : quick ? `Daftar sebagai ${esc(prof.name)}` : 'Daftar sekarang'}</button>
       ${_rgEdit ? '<button type="button" class="pill-btn light small" id="rgBack" style="margin-top:8px">Batal</button>' : ''}
-      <p class="muted small" style="margin-bottom:0">Tiada log masuk diperlukan. Pendaftaran disimpan untuk telefon ini, jadi anda boleh mengubah atau membatalkannya dari telefon yang sama.</p></div>`;
+      <p class="muted small" style="margin-bottom:0">Tiada log masuk diperlukan. Butiran anda diingati di telefon ini, jadi pendaftaran seterusnya hanya satu tekan, dan nama anda dikenal pasti secara automatik untuk notifikasi.</p></div>`;
   const info = [['📅', fmtDate(t.date)], ['⏰', t.startTime ? E.sessionTime(t, 1) : ''], ['📍', t.venue === 'X' ? t.venueName : E.VENUES[t.venue]],
     ['🏓', `${E.isTeam(t) ? E.teamWord(t) + (t.tieFormat === 'SSD' ? ' (Single + Single + Double)' : '') : ENTRY[t.entryMode]} · ${f[t.groupFormat].label}`],
     ['⚖️', t.hcMode === 'manual' ? 'Handicap' : S ? `Handicap ${S.name}` : ''], ['💰', t.regFee ? 'Yuran: ' + t.regFee : '']].filter(x => x[1]);
@@ -2232,17 +2239,22 @@ const STAT = {
 // Syarat ringkas untuk label kecil (baris pertama, maks 60 aksara)
 const condShort = c => { const f = String(c || '').split('\n')[0].trim(); return f.length > 60 || String(c).includes('\n') ? f.slice(0, 57).trim() + '…' : f; };
 const normN = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+let _amQuiet = false;
+function autoMeQuiet(t) { _amQuiet = true; try { autoMe(t); } finally { _amQuiet = false; } }
 function autoMe(t) {
   if (ls.get(meKey(t)) || ls.get('pingpong:meSet:' + t.id) || canAdmin(t)) return; // pilihan sendiri ("Saya ialah…") sentiasa diutamakan
   let names = []; try { names = JSON.parse(ls.get('pingpong:regn:' + t.id) || '[]'); } catch {}
   // nama terkini dalam dokumen pendaftaran saya (cth. selepas penganjur mengubah nama)
   const uid = cloud.myUid && cloud.myUid(); if (uid) (cloud.state.regs[t.id] || []).filter(r => r.uid === uid).forEach(r => names.unshift(r.name));
-  if (!names.length && ls.get('pingpong:regd:' + t.id) && profile().name) names = [profile().name];
-  if (!names.length) return;
-  const want = names.map(normN);
-  const pool = E.isMixer(t) ? t.individuals.map(x => [x.id, [x.name]]) : t.participants.map(p => [p.id, [p.name, ...(p.members || [])]]);
-  const hit = pool.find(([, ns]) => ns.some(n => want.includes(normN(n))));
-  if (hit) { ls.set(meKey(t), hit[0]); ls.set('pingpong:meAuto:' + t.id, '1'); pushSync(); }
+  const pool = E.isMixer(t) ? (t.individuals || []).map(x => [x.id, [x.name]]) : (t.participants || []).map(p => [p.id, [p.name, ...(p.members || [])]]);
+  let hit = null;
+  if (names.length) { const want = names.map(normN); hit = pool.find(([, ns]) => ns.some(n => want.includes(normN(n)))); }
+  else { // tiada pendaftaran dari telefon ini: cuba profil (nama penuh dahulu; nama panggilan hanya jika padanan tunggal)
+    const P = profile(), byName = n => { const w = normN(n); return w ? pool.filter(([, ns]) => ns.some(x => normN(x) === w)) : []; };
+    const f = byName(P.full), k = byName(P.name);
+    hit = f.length === 1 ? f[0] : k.length === 1 ? k[0] : null;
+  }
+  if (hit) { ls.set(meKey(t), hit[0]); ls.set('pingpong:meAuto:' + t.id, '1'); if (!_amQuiet) pushSync(); }
 }
 // Amaran dalam aplikasi bila status saya berubah (bermain / pengadil / bersedia) — getar, bunyi & sepanduk
 const _myLast = {};
