@@ -12,8 +12,8 @@
 // Topik: adm:<tid> (penganjur), me:<tid>:<pid> (peserta pilih nama), reg:<tid>:<uid> (pendaftar)
 
 const ORIGINS = ['https://bazlizikrileh.github.io', 'http://localhost:8765'];
-// Alamat Cloudflare Pages (pingpong & carrom, termasuk pratonton): pingpong-portal.pages.dev, carrom-portal-xyz.pages.dev, abc123.pingpong-portal.pages.dev
-const PAGES_RE = /^https:\/\/([a-z0-9-]+\.)?(pingpong|carrom)-portal(-[a-z0-9]+)?\.pages\.dev$/;
+// Alamat Cloudflare Pages pingpong & carrom (termasuk pratonton), cth. pingpongsantai-portal.pages.dev, carrom-portal.pages.dev, abc123.pingpongsantai-portal.pages.dev
+const PAGES_RE = /^https:\/\/([a-z0-9-]+\.)?[a-z0-9-]*(pingpong|carrom)[a-z0-9-]*\.pages\.dev$/;
 const okOrigin = o => ORIGINS.includes(o) || PAGES_RE.test(o);
 const TOPIC_RE = /^(adm|me|reg|club|t):[A-Za-z0-9_:-]{1,90}$/;
 const MAX_SUBS_PER_TOPIC = 60;
