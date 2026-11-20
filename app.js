@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.36.1';
+const VERSION = '3.37.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1312,10 +1312,10 @@ function standingsTable(t, g) {
     <tbody>${s.map((r, i) => `<tr class="${i < q ? 'q' : i < q + poolN ? 'pq' : ''}"><td>${i + 1}</td><td class="l">${E.usesDraw(t) ? pnUnit(t, r.id) : pn(t, r.id)}</td>
       <td>${r.p}</td><td>${r.w}</td>${team ? `<td>${r.d}</td>` : ''}<td>${r.l}</td><td><b>${r.pts}</b></td><td>${sign(r.sf - r.sa)}</td><td>${sign(r.pf - r.pa)}</td></tr>`).join('')}</tbody></table></div>`;
 }
-function matrixHtml(t, g, noCap) {
+function matrixHtml(t, g, noCap, pts) {
   const M = E.matrix(t, g.name), st = E.groupStandings(t, g.name);
-  return `<div class="tw"><table class="mx"><thead><tr><th class="l">${UNIT(t)}</th>${M.ids.map((_, i) => `<th>${i + 1}</th>`).join('')}<th>Set ±</th></tr></thead><tbody>
-    ${M.ids.map((id, i) => { const r = st.find(x => x.id === id); const d = r.sf - r.sa; return `<tr><td class="l">${i + 1}. ${esc(E.pname(t, id))}</td>${M.rows[i].map(c => c === 'self' ? '<td class="self"></td>' : c ? `<td class="${c.win ? 'win' : ''}">${c.v[0]}-${c.v[1]}</td>` : '<td>·</td>').join('')}<td>${d > 0 ? '+' : ''}${d}</td></tr>`; }).join('')}
+  return `<div class="tw"><table class="mx"><thead><tr><th class="l">${UNIT(t)}</th>${M.ids.map((_, i) => `<th>${i + 1}</th>`).join('')}<th>${pts ? 'Mata' : 'Set ±'}</th></tr></thead><tbody>
+    ${M.ids.map((id, i) => { const r = st.find(x => x.id === id); const d = r.sf - r.sa; return `<tr><td class="l">${i + 1}. ${esc(E.pname(t, id))}</td>${M.rows[i].map(c => c === 'self' ? '<td class="self"></td>' : c ? `<td class="${c.win ? 'win' : ''}">${c.v[0]}-${c.v[1]}</td>` : '<td>·</td>').join('')}<td>${pts ? `<b>${r.pts}</b>` : `${d > 0 ? '+' : ''}${d}`}</td></tr>`; }).join('')}
   </tbody></table></div>${noCap ? '' : '<p class="muted small">Baca mengikut baris: skor set pemain di baris itu menentang pemain di lajur. Hijau = menang.</p>'}`;
 }
 function mixPlanText(t) {
@@ -1564,7 +1564,7 @@ function rankingHtml(t, brief) {
   let n = 0;
   return `
     ${section('Keputusan akhir', 'Ranking Peserta')}
-    ${ko && ko.winner ? `<div class="champ">🏆 Johan: ${esc(E.pname(t, ko.winner))}</div>` : ''}
+    ${ko && ko.winner && !brief ? `<div class="champ">🏆 Johan: ${esc(E.pname(t, ko.winner))}</div>` : ''}
     <div class="card"><div class="print-only club-head">${logosHtml(t)}<div><b>${esc(t.name)}</b><br><span class="muted">${esc(clubOf(t).name)}</span></div></div>
     <div class="tw"><table class="rank"><thead><tr><th>#</th><th>Tempat*</th><th class="l">${UNIT(t)}</th><th class="l">Pencapaian</th><th>Kump.</th><th>Main</th><th>Set</th><th>(a)</th><th>(b)</th></tr></thead><tbody>
       ${rank.map(tr => tr.rows.map(r => `<tr><td>${++n}</td><td>${tr.ids.length > 1 ? `${tr.place}–${tr.place + tr.ids.length - 1}` : tr.place}</td>
@@ -3127,11 +3127,11 @@ function viewReport(t) {
       <tr><td>Perlawanan</td><td>${played.length} selesai</td><td>Meja</td><td>${E.numTablesOf(t)}</td></tr></table>
     ${podiumHtml(t) || (final && final.winner ? `<div class="champ">🏆 Johan: ${esc(E.pname(t, final.winner))}${final.a && final.b ? ` · Naib johan: ${esc(E.pname(t, final.winner === final.a ? final.b : final.a))}` : ''}</div>` : '')}
     ${E.isMixer(t) ? mixReport(t, played, resTable) : ''}
-    ${t.groups.length ? `<h3>${t.format === 'rr' ? 'Kedudukan Liga' : 'Kedudukan Kumpulan'}</h3>${t.groups.map(g => `<h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${standingsTable(t, g)}`).join('')}` : ''}
-    ${E.isMixer(t) ? '' : unitAwards(t, played)}
-    ${!E.isMixer(t) && t.groups.length && played.some(m => m.stage === 'group') ? `<section class="rp-sec pb"><h3>Matriks Keputusan</h3><div class="mx-grid${t.groups.length > 1 && Math.max(...t.groups.map(g => g.members.length)) <= 6 ? ' two' : ''}">${t.groups.map(g => `<div class="mx-mat"><h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${matrixHtml(t, g, true)}</div>`).join('')}</div><p class="muted small">Baca mengikut baris: skor set ${UNIT(t).toLowerCase()} di baris itu menentang ${UNIT(t).toLowerCase()} di lajur. Hijau = menang.</p></section>` : ''}
-    ${t.groups.length ? `<section class="rp-sec pb"><h3>Keputusan Peringkat ${t.format === 'rr' ? 'Liga' : 'Kumpulan'}</h3>${t.groups.map(g => { const ms = played.filter(m => m.stage === 'group' && m.group === g.name).sort((x, y) => x.gn - y.gn); return ms.length ? `<h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${resTable(ms)}` : ''; }).join('') || '<p class="muted small">Belum ada keputusan.</p>'}</section>` : ''}
+    ${t.groups.length ? `<h3>${t.format === 'rr' ? 'Kedudukan Liga' : 'Kedudukan Kumpulan'}</h3><div class="st-grid${t.groups.length > 1 && Math.max(...t.groups.map(g => g.members.length)) <= 6 ? ' two' : ''}">${t.groups.map(g => `<div class="st-g"><h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${standingsTable(t, g)}</div>`).join('')}</div>` : ''}
+    ${!E.isMixer(t) && t.groups.length && played.some(m => m.stage === 'group') ? `<section class="rp-sec mxs"><h3>Matriks Keputusan</h3><div class="mx-grid${t.groups.length > 1 && Math.max(...t.groups.map(g => g.members.length)) <= 6 ? ' two' : ''}">${t.groups.map(g => `<div class="mx-mat"><h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${matrixHtml(t, g, true, true)}</div>`).join('')}</div><p class="muted small">Baca mengikut baris: skor set ${UNIT(t).toLowerCase()} di baris itu menentang ${UNIT(t).toLowerCase()} di lajur. Hijau = menang. Mata: menang 3, kalah 0.</p></section>` : ''}
     ${t.rounds.ko && played.some(m => m.bracket === 'ko') ? `<section class="rp-sec pb">${chart('ko')}${chart('pool')}</section>` : ''}
+    ${E.isMixer(t) ? '' : unitAwards(t, played)}
+    ${t.groups.length ? `<section class="rp-sec pb"><h3>Keputusan Peringkat ${t.format === 'rr' ? 'Liga' : 'Kumpulan'}</h3>${t.groups.map(g => { const ms = played.filter(m => m.stage === 'group' && m.group === g.name).sort((x, y) => x.gn - y.gn); return ms.length ? `<h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${resTable(ms)}` : ''; }).join('') || '<p class="muted small">Belum ada keputusan.</p>'}</section>` : ''}
     ${ko('ko')}${ko('pool')}
     ${t.stage === 'done' && t.format !== 'rr' ? rankingHtml(t, true).replace(/<button[^>]*>Cetak<\/button>/, '') : ''}
     <section class="rp-sec pb"><h3>Peraturan &amp; Penentuan Kedudukan</h3><ol class="rules small">${[...rulesOf(t), ...(t.stage === 'done' && t.format !== 'rr' && !E.isMixer(t) ? [RANK_RULE] : [])].map(r => `<li>${esc(r)}</li>`).join('')}</ol>

@@ -792,3 +792,8 @@ table.rp-mx td.sets span { white-space:nowrap; display:inline-block; margin-righ
 .report .mx-grid .mx td.l { font-size:11px; padding:4px 6px; text-align:left; }
 .report .mx-grid .mx td, .report .mx-grid .mx th { padding:4px 3px; min-width:0; font-size:11px; }
 @media print { .report .mx-grid.two { grid-template-columns:1fr 1fr; } .t-head.has-bg { background: none; } }
+
+@media print { .report .rp-sec.mxs { break-inside: avoid; margin-top:14px; } }
+.report .st-grid.two { display:grid; grid-template-columns:1fr 1fr; gap:0 16px; }
+@media (max-width:640px) { .report .st-grid.two { grid-template-columns:1fr; } }
+@media print { .report .st-grid.two { grid-template-columns:1fr 1fr; } .report .st-g { break-inside: avoid; } .report .st-grid.two table { font-size:10px; } .report .st-grid.two td, .report .st-grid.two th { padding:3px 3px !important; } }
