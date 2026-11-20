@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.41.0';
+const VERSION = '3.42.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -629,7 +629,7 @@ function wireForm(form) {
     const mx = form.entryMode.value === 'mixer';
     show('team', form.entryMode.value === 'team');
     show('mixer', mx); show('notmixer', !mx);
-    { const gf = form.groupFormat; [...gf.options].forEach(o => { o.hidden = o.disabled = mx && !['3', '5'].includes(o.value); }); if (mx && !['3', '5'].includes(gf.value)) gf.value = '3'; }
+    { const gf = form.groupFormat; [...gf.options].forEach(o => { o.hidden = o.disabled = mx && !['3', '5', 'F3'].includes(o.value); }); if (mx && !['3', '5', 'F3'].includes(gf.value)) gf.value = '3'; }
     show('groups', f === 'group_ko' && !mx);
     show('ko', f !== 'rr' && !mx);
     show('venueX', form.venue.value === 'X');
@@ -667,7 +667,7 @@ function readSettings(form, t) {
   t.regFee = v('regFee').trim(); t.regMaxText = String(v('regMax') || '').trim(); t.regMax = Number((t.regMaxText.match(/\d+/) || [0])[0]) || 0; t.prizes = v('prizes').trim();
   if (!form.entryMode.disabled) {
     t.entryMode = v('entryMode'); t.teamSize = Number(v('teamSize')) || 3; t.format = v('format');
-    if (t.entryMode === 'mixer') { t.format = 'rr'; t.mixRounds = Math.max(0, Math.min(40, Number(v('mixRounds')) || 0)); t.mixLv = v('mixLv') || ''; if (form.mixFast) t.mixFast = form.mixFast.checked; if (!['3', '5'].includes(t.groupFormat)) t.groupFormat = '3'; E.relevel(t); }
+    if (t.entryMode === 'mixer') { t.format = 'rr'; t.mixRounds = Math.max(0, Math.min(40, Number(v('mixRounds')) || 0)); t.mixLv = v('mixLv') || ''; if (form.mixFast) t.mixFast = form.mixFast.checked; if (!['3', '5', 'F3'].includes(t.groupFormat)) t.groupFormat = '3'; E.relevel(t); }
     t.tieFormat = t.teamSize >= 4 ? v('tieFormat') || 'SD' : 'SD';
     t.numGroups = Number(v('numGroups')) || 0; t.groupSize = Number(v('groupSize')) || 4; t.bestThirds = Number(v('bestThirds')) || 0;
   }

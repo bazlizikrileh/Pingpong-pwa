@@ -23,7 +23,7 @@ export const SET_FORMATS = {
   'F3': { bo: 3, full: true, label: '3 set, semua dimainkan (3-0 / 2-1)' },
   'F2': { bo: 2, full: true, label: '2 set, kedua-dua dimainkan (2-0 / 1-1)' },
 };
-export const fmtFor = (t, stage) => (t.entryMode === 'mixer' ? SET_FORMATS[t.groupFormat === '5' ? '5' : '3'] : SET_FORMATS[stage === 'group' ? t.groupFormat : t.koFormat] || SET_FORMATS['5']);
+export const fmtFor = (t, stage) => (t.entryMode === 'mixer' ? SET_FORMATS[['5', 'F3'].includes(t.groupFormat) ? t.groupFormat : '3'] : SET_FORMATS[stage === 'group' ? t.groupFormat : t.koFormat] || SET_FORMATS['5']);
 
 // ---------- Jenis acara ----------
 // single · double (regu pilihan) · double_draw (regu diundi) · team (trio/kuartet diundi: 1 perseorangan + 1 regu)
