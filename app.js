@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.34.0';
+const VERSION = '3.35.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1467,24 +1467,26 @@ async function standingsImages(t) {
 }
 
 // ---------- Kalah mati ----------
-function bracketHtml(t, b) {
+function bracketHtml(t, b, noChamp) {
   const list = t.matches.filter(m => m.bracket === b);
   const cols = [];
   for (let r = 1; r <= t.rounds[b]; r++) {
     const ms = list.filter(m => m.round === r).sort((x, y) => x.slot - y.slot);
-    cols.push(`<div class="col"><h3>${E.roundName(t, b, r).replace('Pool: ', '')}</h3><div class="cb">${ms.map(m => {
+    const cell = m => {
       const e = E.evaluateMatch(t, m), team = E.isTeam(t);
       const has = m.rubbers.some(x => x.sets.length);
       const playable = m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE';
       const line = (id, s, src) => `<div class="ln ${m.winner === id && id && id !== 'BYE' && m.status === 'done' ? 'w' : ''}"><span>${id && id !== 'BYE' ? `<span class="sd">${esc(E.seedLabel(t, id))}</span>` : ''}${id ? esc(E.pname(t, id)) : src ? `<i class="ph">${esc(E.placeholderLabel(src))}</i>` : '…'}</span><span class="s">${has ? s : ''}</span></div>`;
       const meta = playable && m.status !== 'done' && m.session ? `<div class="bmeta">${esc(E.matchCode(m))} · Sesi ${m.session} · ${esc((m.table || '').replace(/ \(.*\)/, ''))}</div>` : '';
       const inner = line(m.a, E.tieScore(t, e)[0], m.srcA) + line(m.b, E.tieScore(t, e)[1], m.srcB) + meta;
-      return playable ? `<a class="bm" href="#/t/${t.id}/m/${m.id}">${inner}</a>` : `<div class="bm">${inner}</div>`;
-    }).join('')}</div></div>`);
+      return `<div class="sl">${playable ? `<a class="bm" href="#/t/${t.id}/m/${m.id}">${inner}</a>` : `<div class="bm">${inner}</div>`}</div>`;
+    };
+    const prs = []; for (let i = 0; i < ms.length; i += 2) prs.push(`<div class="pr${ms[i + 1] ? '' : ' one'}">${cell(ms[i])}${ms[i + 1] ? cell(ms[i + 1]) : ''}</div>`);
+    cols.push(`<div class="col"><h3>${E.roundName(t, b, r).replace('Pool: ', '')}</h3><div class="cb">${prs.join('')}</div></div>`);
   }
   const f = list.find(m => m.round === t.rounds[b]);
   const champ = f && f.status === 'done' && f.winner ? `<div class="champ">🏆 ${b === 'pool' ? 'Johan pool kalah' : 'Johan'}: ${esc(E.pname(t, f.winner))}</div>` : '';
-  return champ + `<div class="bracket">${cols.join('')}</div>`;
+  return (noChamp ? '' : champ) + `<div class="bracket">${cols.join('')}</div>`;
 }
 function viewBrackets(t) {
   if (!t.rounds.ko && !canAdmin(t)) {
@@ -1538,7 +1540,9 @@ function viewPool(t) {
 
 // ---------- Ranking ----------
 function viewRanking(t) { $app.innerHTML = rankingHtml(t); }
-function rankingHtml(t) {
+const RANK_NOTE = '<b>Tempat</b> = pusingan terakhir yang dicapai (kalah mati utama, kemudian pool kalah); yang tersingkir di pusingan sama berkongsi Tempat. Dalam Tempat yang sama disusun ikut <b>(a)</b> set ±/main, kemudian <b>(b)</b> set menang/main. <b>†</b> bersemuka. Butiran penuh di bahagian Peraturan.';
+const RANK_RULE = 'Penentuan ranking akhir: Tempat ialah pusingan terakhir yang dicapai, kalah mati utama dahulu, kemudian pool kalah; yang tersingkir di pusingan yang sama berkongsi Tempat (contoh 5–8). Dalam Tempat yang sama, peserta disusun ikut (a) set ±/main = (set menang − set kalah) ÷ main, kemudian (b) set menang/main, kemudian purata beza mata permainan setiap perlawanan. Main = perlawanan dimainkan (kumpulan, kalah mati dan pool; BYE tidak dikira). Bersemuka (†): jika rakan sekumpulan berada dalam Tempat yang sama, yang lebih tinggi dalam kumpulan diletakkan terus di atas rakan sekumpulannya.';
+function rankingHtml(t, brief) {
   if (t.stage !== 'done') return `${section('Ranking', 'Ranking Peserta')}<div class="card"><p class="muted">Ranking dipaparkan selepas perlawanan akhir tamat${t.rounds.pool ? ' (dan akhir pool kalah)' : ''}.</p></div>`;
   const rank = E.finalRanking(t);
   const showB = new Set();
@@ -1555,12 +1559,12 @@ function rankingHtml(t) {
         <td class="l">${pn(t, r.id)}</td><td class="l small">${esc(r.label)}</td><td>${esc(E.seedLabel(t, r.id))}${r.bumped ? ' <span class="dag">†</span>' : ''}</td>
         <td>${r.st.p}</td><td>${r.st.sf}-${r.st.sa}</td><td>${r.st.a === 0 ? '0.00' : sign(r.st.a)}</td><td>${showB.has(r.id) ? r.st.b.toFixed(2) : ''}</td></tr>`).join('')).join('')}
     </tbody></table></div>
-    <div class="foot">
+    ${brief ? `<div class="foot"><p>* ${RANK_NOTE}</p></div>` : `<div class="foot">
       <p>* <b>Tempat:</b> pusingan terakhir yang dicapai, kalah mati utama dahulu, kemudian pool kalah. Yang tersingkir di pusingan yang sama berkongsi Tempat (contoh 5–8).</p>
       <p><b>#:</b> dalam Tempat yang sama disusun ikut (a), kemudian (b), kemudian purata beza mata permainan setiap perlawanan.</p>
       <p><b>†</b> Bersemuka: jika rakan sekumpulan berada dalam Tempat yang sama, pemain yang lebih tinggi dalam kumpulan diletakkan terus di atas rakan sekumpulannya.</p>
       <p><b>Main:</b> perlawanan dimainkan (kumpulan, kalah mati dan pool; BYE tidak dikira). <b>(a)</b> Set ±/main = (set menang − set kalah) ÷ main. <b>(b)</b> Set menang/main, dipaparkan hanya jika (a) sama. Purata = jumlah ÷ bilangan perlawanan, bukan nisbah.</p>
-    </div></div>
+    </div>`}</div>
     <a class="pill-btn light small noprint" href="#/t/${t.id}/laporan">🖨️ Laporan PDF</a>`;
 }
 
@@ -2917,7 +2921,8 @@ function unitAwards(t, played) {
 function podiumHtml(t) {
   if (E.isMixer(t) || !t.matches.length || !t.matches.every(m => m.status === 'done' || m.status === 'bye')) return '';
   const R = E.finalRanking(t).filter(x => x.place <= 3), at = p => (R.find(x => x.place === p) || { ids: [] }).ids.map(id => esc(E.pname(t, id))).join(', ');
-  return at(1) ? `<div class="champ">🏆 Johan: ${at(1)}${at(2) ? ` · 🥈 ${at(2)}` : ''}${at(3) ? ` · 🥉 ${at(3)}` : ''}</div>` : '';
+  const n3 = (R.find(x => x.place === 3) || { ids: [] }).ids.length;
+  return at(1) ? `<div class="champ">🏆 Johan: ${at(1)}${at(2) ? ` · 🥈 Naib johan: ${at(2)}` : ''}${at(3) ? ` · 🥉 Tempat ketiga${n3 > 1 ? ' (bersama)' : ''}: ${at(3)}` : ''}</div>` : '';
 }
 function mixReport(t, played, resTable) {
   const S = E.mixStandings(t), nm = id => esc(E.pname(t, id)), sgn = x => (x > 0 ? '+' : '') + x;
@@ -3100,7 +3105,8 @@ function viewReport(t) {
   const resTable = ms => ms.length ? `<div class="tw"><table class="rp"><thead><tr><th>Game</th><th class="l">${UNIT(t)}</th><th>Skor</th><th class="l">${UNIT(t)}</th><th class="l">Game</th></tr></thead><tbody>${ms.map(resRow).join('')}</tbody></table></div>` : '<p class="muted small">Belum ada keputusan.</p>';
   const ko = b => { const R = t.rounds[b]; if (!R) return ''; let h = '';
     for (let r = 1; r <= R; r++) { const ms = played.filter(m => m.bracket === b && m.round === r).sort((x, y) => x.slot - y.slot); if (ms.length) h += `<h4>${esc(E.roundName(t, b, r))}</h4>${resTable(ms)}`; }
-    return h ? `<h3>${b === 'ko' ? 'Kalah Mati' : 'Pool Kalah'}</h3>${h}` : ''; };
+    return h ? `<h3>${b === 'ko' ? 'Keputusan Kalah Mati' : 'Keputusan Pool Kalah'}</h3>${h}` : ''; };
+  const chart = b => t.rounds[b] && played.some(m => m.bracket === b) ? `<div class="rp-bk"><h3>${b === 'ko' ? 'Carta Kalah Mati' : 'Carta Pool Kalah'}</h3>${bracketHtml(t, b, true)}</div>` : '';
   const final = t.matches.find(m => m.bracket === 'ko' && m.round === t.rounds.ko);
   const body = `<div class="rp-head">${c.logos.map(s => `<img src="${esc(s)}" alt="">`).join('')}<div><h2>${esc(t.name)}</h2><div class="muted">${esc(c.name)}</div></div></div>
     <table class="rp-info"><tr><td>Tarikh</td><td>${(() => { const d = t.date ? new Date(t.date + 'T00:00') : null; return d && !isNaN(d) ? `${HARI[d.getDay()]}, ${esc(fmtDate(t.date))}` : esc(t.date || '-'); })()}${t.startTime ? `<br><small>${esc(E.sessionTime(t, 1))} – ${esc(E.sessionTime(t, (E.lastSession(t) || 1) + 1))}</small>` : ''}</td><td>Tempat</td><td>${esc(t.venue === 'X' ? (t.venueName || '-') : E.VENUES[t.venue] || '-')}</td></tr>
@@ -3113,9 +3119,10 @@ function viewReport(t) {
     ${E.isMixer(t) ? '' : unitAwards(t, played)}
     ${!E.isMixer(t) && t.groups.length && played.some(m => m.stage === 'group') ? `<section class="rp-sec pb"><h3>Matriks Keputusan</h3>${t.groups.map(g => `<div class="mx-mat"><h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${matrixHtml(t, g)}</div>`).join('')}</section>` : ''}
     ${t.groups.length ? `<section class="rp-sec pb"><h3>Keputusan Peringkat ${t.format === 'rr' ? 'Liga' : 'Kumpulan'}</h3>${t.groups.map(g => { const ms = played.filter(m => m.stage === 'group' && m.group === g.name).sort((x, y) => x.gn - y.gn); return ms.length ? `<h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${resTable(ms)}` : ''; }).join('') || '<p class="muted small">Belum ada keputusan.</p>'}</section>` : ''}
+    ${t.rounds.ko && played.some(m => m.bracket === 'ko') ? `<section class="rp-sec pb">${chart('ko')}${chart('pool')}</section>` : ''}
     ${ko('ko')}${ko('pool')}
-    ${t.stage === 'done' && t.format !== 'rr' ? rankingHtml(t).replace(/<button[^>]*>Cetak<\/button>/, '') : ''}
-    <section class="rp-sec pb"><h3>Peraturan &amp; Penentuan Kedudukan</h3><ol class="rules small">${rulesOf(t).map(r => `<li>${esc(r)}</li>`).join('')}</ol>
+    ${t.stage === 'done' && t.format !== 'rr' ? rankingHtml(t, true).replace(/<button[^>]*>Cetak<\/button>/, '') : ''}
+    <section class="rp-sec pb"><h3>Peraturan &amp; Penentuan Kedudukan</h3><ol class="rules small">${[...rulesOf(t), ...(t.stage === 'done' && t.format !== 'rr' && !E.isMixer(t) ? [RANK_RULE] : [])].map(r => `<li>${esc(r)}</li>`).join('')}</ol>
       <div class="rp-sign"><div><div class="ln"></div>Disediakan oleh<br><small>Nama: ${esc((t.createdBy && t.createdBy.name) || '')}</small></div><div><div class="ln"></div>Disahkan oleh<br><small>Penganjur / Pengurus pertandingan</small></div></div></section>
     <p class="muted small rp-foot">Dijana oleh Pingpong Portal · ${new Date().toLocaleString('ms-MY')}</p>`;
   $app.innerHTML = `${section('Laporan', 'Laporan Pertandingan')}

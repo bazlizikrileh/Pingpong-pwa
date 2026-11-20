@@ -162,7 +162,20 @@ tr:last-child td { border-bottom: 0; }
 .bracket { display:flex; gap:14px; overflow-x:auto; padding-bottom:8px; align-items:stretch; }
 .bracket .col { min-width: 176px; display:flex; flex-direction:column; }
 .bracket .col h3 { font-family: var(--serif); text-transform: uppercase; letter-spacing:.14em; color: var(--gold); font-size: 13px; text-align:center; margin:0 0 8px; }
-.bracket .cb { flex:1; display:flex; flex-direction:column; justify-content:space-around; gap:10px; }
+.bracket .cb { flex:1; display:flex; flex-direction:column; }
+/* garis penyambung bracket: setiap pasangan perlawanan (.pr) bercantum ke perlawanan pusingan seterusnya */
+.bracket .pr { flex:1; display:flex; flex-direction:column; position:relative; }
+.bracket .sl { flex:1; display:flex; flex-direction:column; justify-content:center; padding:5px 0; position:relative; }
+.bracket .col:not(:last-child) .pr::after { content:''; position:absolute; right:-8px; top:25%; bottom:25%; width:7px; border:1.5px solid var(--line); border-left:0; border-radius:0 6px 6px 0; }
+.bracket .col:not(:last-child) .pr.one::after { top:50%; bottom:auto; height:0; border-bottom:0; border-radius:0; }
+.bracket .col:not(:first-child) .sl::before { content:''; position:absolute; left:-7px; top:50%; width:7px; border-top:1.5px solid var(--line); }
+.report .rp-bk + .rp-bk { margin-top:14px; }
+.report .bracket { overflow:visible; gap:14px; }
+.report .bracket .col { min-width:0; flex:1; }
+.report .bracket .bm { font-size:11.5px; border-radius:8px; }
+.report .bracket .bm .ln { padding:4px 7px; }
+.report .bracket .bmeta { display:none; }
+@media print { .report .bracket .bm .ln.w, .report .bracket .pr::after, .report .bracket .sl::before { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .report .rp-bk { break-inside: avoid; } }
 .bm { display:block; background: var(--card); border:1.5px solid var(--line); border-radius:12px; overflow:hidden; font-size:13px; text-decoration:none; color:inherit; }
 .bm .ln { display:flex; justify-content:space-between; gap:6px; padding:6px 9px; align-items:center; }
 .bm .ln + .ln { border-top:1px solid var(--line2); }
