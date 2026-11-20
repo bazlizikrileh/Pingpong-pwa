@@ -1,9 +1,9 @@
 // Service worker: simpan fail app supaya boleh dibuka walaupun internet lemah.
 // Tukar VERSION setiap kali fail app berubah supaya pengguna dapat versi baharu.
-const VERSION = 'v3.32.1';
+const VERSION = 'v3.33.0';
 const CACHE = `pingpong-${VERSION}`;
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'engine.js', 'store.js',
-  'draw-anim.js', 'cloud.js', 'live.js', 'draw-video.js', 'recap-video.js', 'sound.js', 'vendor/mp4-muxer.js', 'poster.js', 'reg-poster.js', 'poster-kit.js', 'vendor/qrcode.js', 'push.js', 'push-config.js', 'firebase-config.js', 'manifest.webmanifest', 'logos/kskpkpjb.webp', 'logos/ksas-pingpong.webp', 'logos/ksas.webp', 'icons/pp-192.png', 'icons/pp-512.png', 'icons/pp-apple-180.png'];
+  'draw-anim.js', 'cloud.js', 'live.js', 'draw-video.js', 'recap-video.js', 'sound.js', 'vendor/mp4-muxer.js', 'poster.js', 'reg-poster.js', 'poster-real.js', 'poster-kit.js', 'vendor/qrcode.js', 'push.js', 'push-config.js', 'firebase-config.js', 'manifest.webmanifest', 'logos/kskpkpjb.webp', 'logos/ksas-pingpong.webp', 'logos/ksas.webp', 'icons/pp-192.png', 'icons/pp-512.png', 'icons/pp-apple-180.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));

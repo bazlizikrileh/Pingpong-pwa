@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.32.0';
+const VERSION = '3.33.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1770,15 +1770,21 @@ async function showRegPoster(t, auto = false, combo = null) {
     <div id="rpBox" class="rp-box"><p class="muted">Menjana poster…</p></div></div>`;
   md.hidden = false; md.onclick = e => { if (e.target === md || e.target.id === 'mx') md.hidden = true; };
   try {
-    const K = await import('./poster-kit.js'), m = await import('./reg-poster.js');
+    const K = await import('./poster-kit.js'), m = await import('./reg-poster.js'), PR = await import('./poster-real.js');
     const lockKey = 'pingpong:posterLock:' + t.id, locked = ls.get(lockKey);
-    if (!combo) combo = locked && K.COMBOS.includes(locked) ? locked : K.COMBOS[Math.floor(Math.random() * K.COMBOS.length)];
-    document.getElementById('rpBar').innerHTML = `<button type="button" class="pill-btn small orange" id="rpRand">🎲 Rawak lagi</button>
+    // dua jenis: 🏓 Realistik (R1–R8: meja, raket & bola seperti foto) atau 🎨 Grafik (100 gabungan)
+    const REAL = PR.REAL_NAMES.map((_, i) => 'R' + (i + 1)), mode = combo ? (combo[0] === 'R' ? 'real' : 'graf') : ls.get('pingpong:posterMode') || 'real';
+    const pool = mode === 'real' ? REAL : K.COMBOS, all = [...REAL, ...K.COMBOS];
+    if (!combo) combo = locked && all.includes(locked) && (locked[0] === 'R') === (mode === 'real') ? locked : pool[Math.floor(Math.random() * pool.length)];
+    const label = combo[0] === 'R' ? `Realistik ${combo.slice(1)} · ${PR.REAL_NAMES[+combo.slice(1) - 1]}` : `Gaya ${combo} · ${K.LAYOUT_NAMES[combo.slice(0, -1)]} · ${K.TREAT_NAMES[combo.slice(-1)]}`;
+    document.getElementById('rpBar').innerHTML = `<div class="row" style="gap:6px;width:100%"><button type="button" class="pill-btn small ${mode === 'real' ? 'brand' : 'light'}" data-pm="real">🏓 Realistik</button><button type="button" class="pill-btn small ${mode === 'graf' ? 'brand' : 'light'}" data-pm="graf">🎨 Grafik</button></div>
+      <button type="button" class="pill-btn small orange" id="rpRand">🎲 ${mode === 'real' ? 'Gaya seterusnya' : 'Rawak lagi'}</button>
       <button type="button" class="pill-btn small ${locked === combo ? 'brand' : 'light'}" id="rpLock">${locked === combo ? '📌 Dikunci' : '📌 Kunci gaya ini'}</button>
-      <span class="muted small" style="align-self:center">Gaya ${combo} · ${K.LAYOUT_NAMES[combo.slice(0, -1)]} · ${K.TREAT_NAMES[combo.slice(-1)]}</span>`;
-    document.getElementById('rpRand').onclick = () => { let n; do n = K.COMBOS[Math.floor(Math.random() * K.COMBOS.length)]; while (n === combo); showRegPoster(t, true, n); };
+      <span class="muted small" style="align-self:center">${esc(label)}</span>`;
+    document.querySelectorAll('[data-pm]').forEach(b => (b.onclick = () => { ls.set('pingpong:posterMode', b.dataset.pm); const P = b.dataset.pm === 'real' ? REAL : K.COMBOS; showRegPoster(t, true, P[Math.floor(Math.random() * P.length)]); }));
+    document.getElementById('rpRand').onclick = () => { let n; if (mode === 'real') n = REAL[(REAL.indexOf(combo) + 1) % REAL.length]; else do n = K.COMBOS[Math.floor(Math.random() * K.COMBOS.length)]; while (n === combo); showRegPoster(t, true, n); };
     document.getElementById('rpLock').onclick = () => { ls.set(lockKey, locked === combo ? null : combo); showRegPoster(t, true, combo); };
-    const blob = await K.withSponsors(await K.makeKitPoster(regPosterData(t), combo), sponsorsOf(t));
+    const blob = await K.withSponsors(combo[0] === 'R' ? await PR.makeRealPoster(regPosterData(t), +combo.slice(1)) : await K.makeKitPoster(regPosterData(t), combo), sponsorsOf(t));
     const name = `Poster-${(t.name || 'pertandingan').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-')}.png`;
     document.getElementById('rpBox').innerHTML = `<img src="${URL.createObjectURL(blob)}" alt="Poster" class="rp-img">
       <div class="btn-stack" style="margin-top:10px"><button class="pill-btn orange" id="rpShare"><span class="dot"></span>📤 Kongsi poster</button></div>
