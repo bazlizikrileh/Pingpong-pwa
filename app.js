@@ -7,7 +7,7 @@ import * as PUSH from './push.js';
 import * as CL from './club.js';
 import * as RT from './rating.js';
 
-const VERSION = '3.45.0';
+const VERSION = '3.45.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1704,7 +1704,7 @@ function levelsCard(t) {
   return `<details class="card fold" data-fold="lv" ${missing && admin ? 'open' : ''}><summary>🎚️ ${hcOn ? 'Tahap handicap' : 'Tahap pemain (imbang regu)'} · ${esc(S.name)}${missing ? ` <span class="role-chip">${missing} belum</span>` : ''}</summary>
     <table class="lv-tab"><tr><th></th>${S.levels.map(l => `<th>${esc(l[1])}</th>`).join('')}</tr><tr><td>Single</td>${S.levels.map(l => `<td>${l[2]}</td>`).join('')}</tr><tr><td>Double</td>${S.levels.map(l => `<td>${l[3]}</td>`).join('')}</tr></table>
     <p class="muted small">${hcOn ? `Pihak bernilai rendah mula dengan beza nilai. Double: jumlah dua ahli, maks. ${S.capD}.` : 'Tahap digunakan untuk mengimbangkan regu semasa undian (tiada mata handicap). Mod meja pantas menggunakannya serta-merta; jadual penuh perlu dijana semula selepas tahap diubah.'}</p>
-    ${admin && RT.orgOf(t.clubId) && store.isCloud(t.id) && CL.orgAdmin(RT.orgOf(t.clubId)) ? `<div class="row" style="margin:6px 0"><button class="pill-btn brand small" id="lvRate"><span class="dot"></span>📈 Isi tahap ikut rating kelab</button><span class="muted small">Cadangan daripada rating ${esc((RT.ORGS[RT.orgOf(t.clubId)] || {}).name || '')}; pemain baharu ikut daftar.</span></div>` : ''}
+    ${RT.RATING_ON && admin && RT.orgOf(t.clubId) && store.isCloud(t.id) && CL.orgAdmin(RT.orgOf(t.clubId)) ? `<div class="row" style="margin:6px 0"><button class="pill-btn brand small" id="lvRate"><span class="dot"></span>📈 Isi tahap ikut rating kelab</button><span class="muted small">Cadangan daripada rating ${esc((RT.ORGS[RT.orgOf(t.clubId)] || {}).name || '')}; pemain baharu ikut daftar.</span></div>` : ''}
     <div class="lv-list">${P.map(n => `<div class="lv-row"><span>${esc(n)}</span>${admin ? `<select data-lvn="${esc(n)}">${opt({ '': '— tahap —', ...Object.fromEntries(S.levels.map(l => [l[0], `${l[1]} (S${l[2]} · D${l[3]})`])) }, E.levelOf(t, n))}</select>` : chip(E.levelOf(t, n))}</div>`).join('')}</div></details>`;
 }
 // ---------- Pautan kongsi ----------

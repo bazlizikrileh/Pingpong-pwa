@@ -26,6 +26,8 @@ export const SEED = {
 };
 const KRONI_FROM_KSAS = { NE: 'N', N: 'N', S: 'L', R: 'T', H: 'H' };
 const KSAS_FROM_KRONI = { N: 'N', L: 'S', LW: 'S', T: 'R', TW: 'R', H: 'H', HW: 'H' };
+// Rating Elo ditangguhkan (KIV): statistik sahaja dipapar dan disimpan. Tukar ke true untuk hidupkan.
+export const RATING_ON = false;
 export const BASE = 1500;
 export const PROVISIONAL = 8;   // bilangan game sebelum rating dianggap stabil
 
@@ -158,7 +160,7 @@ export function compute({ org, tours, links, players }) {
   for (const t of list) {
     const map = links[t.id].map || {}, space = t.clubId;
     const pidOf = nm => { const k = key(nm); const v = map[k]; return v && P[v] ? v : 'g:' + k; };   // tetamu: rating sementara, tidak dipapar
-    const before = {}, inT = new Set();
+    const before = {}, inT = new Set(), wl = {};
     const gs = gamesOf(t);
     for (const g of gs) {
       const A = g.a.map(pidOf), B = g.b.map(pidOf);
@@ -176,6 +178,7 @@ export function compute({ org, tours, links, players }) {
       const rec = (id, mine, other, side) => {
         if (id.startsWith('g:')) return;
         const won = g.win === side, drew = !g.win;
+        const e = (wl[id] ||= [0, 0]); if (won) e[0]++; else if (!drew) e[1]++;
         for (const s of [all[id] ||= blank(), S(space, id)]) {
           s.p++; if (drew) s.d++; else if (won) s.w++; else s.l++;
           s.sf += side === 'a' ? g.sa : g.sb; s.sa += side === 'a' ? g.sb : g.sa;
@@ -194,7 +197,7 @@ export function compute({ org, tours, links, players }) {
       if (id.startsWith('g:')) continue;
       const name = Object.keys(map).find(k => map[k] === id) || '';
       const place = pl[name] || null;
-      const entry = { id: t.id, n: t.name || '', d: t.date || '', sp: space, r0: Math.round(before[id]), r1: Math.round(R[id]), pl: place ? place.place : 0 };
+      const entry = { id: t.id, n: t.name || '', d: t.date || '', sp: space, r0: Math.round(before[id]), r1: Math.round(R[id]), pl: place ? place.place : 0, w: (wl[id] || [0, 0])[0], l: (wl[id] || [0, 0])[1] };
       for (const s of [all[id], S(space, id)]) {
         s.t++; s.tours.push(entry);
         if (place && place.place <= 2 && place.label) s.titles.push({ id: t.id, n: t.name || '', d: t.date || '', l: place.label });

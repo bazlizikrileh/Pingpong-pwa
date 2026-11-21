@@ -98,7 +98,7 @@ function gate(org, space, admin) {
 }
 
 // ---------- Papan kedudukan ----------
-let _sort = 'r';
+let _sort = RT.RATING_ON ? 'r' : 'w';
 const schemeOf = space => (space === 'kroni' ? 'kroni' : (RT.ORGS[RT.orgOf(space)] || {}).scheme || 'umum');
 function sugText(row, space) {
   const sc = schemeOf(space), c = row.sug[sc];
@@ -115,17 +115,18 @@ function boardHtml(space) {
   if (doc === undefined) return '<div class="card empty">Memuatkan statistik…</div>';
   if (!doc) return `<div class="card empty">Statistik belum dikira untuk ruang ini.${orgAdmin(C.org) ? ' Buka <b>⚙️ Urus</b> untuk padankan pemain bagi pertandingan yang telah tamat.' : ''}</div>`;
   const B = RT.board(doc, _sort), played = B.filter(x => x.s.p);
-  const sorts = { r: 'Rating', w: 'Menang', pct: '% menang', p: 'Main' };
+  const sorts = { ...(RT.RATING_ON ? { r: 'Rating' } : {}), w: 'Menang', pct: '% menang', p: 'Main' };
   const row = (x, i) => `<tr data-pl="${x.id}" class="${x.s.p ? '' : 'muted'}"><td>${x.s.p ? i + 1 : '–'}</td>
       <td class="l"><b>${esc(x.n)}</b> ${grpChip(x, space)}${x.s.titles.length ? ` <span title="Gelaran">🏆${x.s.titles.length > 1 ? x.s.titles.length : ''}</span>` : ''}</td>
-      <td><b>${x.r}</b>${x.rn < RT.PROVISIONAL ? '<sup title="Rating sementara (kurang 8 perlawanan)">*</sup>' : ''}${x.dr ? ` <span class="small ${x.dr > 0 ? 'up' : 'down'}">${x.dr > 0 ? '▲' : '▼'}${Math.abs(x.dr)}</span>` : ''}</td>
-      <td>${x.s.w}-${x.s.l}${x.s.d ? '-' + x.s.d : ''}</td><td>${x.s.p ? Math.round(x.s.w / x.s.p * 100) + '%' : '–'}</td><td class="small">${esc(sugText(x, space))}</td></tr>`;
+      ${RT.RATING_ON ? `<td><b>${x.r}</b>${x.rn < RT.PROVISIONAL ? '<sup title="Rating sementara (kurang 8 perlawanan)">*</sup>' : ''}${x.dr ? ` <span class="small ${x.dr > 0 ? 'up' : 'down'}">${x.dr > 0 ? '▲' : '▼'}${Math.abs(x.dr)}</span>` : ''}</td>` : `<td>${x.s.t}</td><td>${x.s.p}</td>`}
+      <td>${x.s.w}-${x.s.l}${x.s.d ? '-' + x.s.d : ''}</td><td>${x.s.p ? Math.round(x.s.w / x.s.p * 100) + '%' : '–'}</td>${RT.RATING_ON ? `<td class="small">${esc(sugText(x, space))}</td>` : `<td>${x.s.sf - x.s.sa > 0 ? '+' : ''}${x.s.sf - x.s.sa}</td>`}</tr>`;
   return `<div class="card">
     <div class="row" style="justify-content:space-between"><span class="muted small">${played.length} pemain · ${doc.tids.length} pertandingan dikira · dikemas kini ${esc(new Date(doc.at).toLocaleDateString('ms-MY', { day: 'numeric', month: 'short', year: 'numeric' }))}</span></div>
     <div class="hc-chips" style="margin:8px 0">${Object.entries(sorts).map(([k, n]) => `<button class="chip ${_sort === k ? 'on' : ''}" data-sort="${k}">${n}</button>`).join('')}</div>
-    <div style="overflow-x:auto"><table class="club-board"><thead><tr><th>#</th><th class="l">Pemain</th><th>Rating</th><th>M-K</th><th>%</th><th>Cadangan</th></tr></thead>
+    <div style="overflow-x:auto"><table class="club-board"><thead><tr><th>#</th><th class="l">Pemain</th>${RT.RATING_ON ? '<th>Rating</th>' : '<th>Prtd</th><th>Main</th>'}<th>M-K</th><th>%</th>${RT.RATING_ON ? '<th>Cadangan</th>' : '<th>±Set</th>'}</tr></thead>
     <tbody>${B.map(row).join('')}</tbody></table></div>
-    <p class="muted small">Rating jenis Elo: menang lawan yang lebih kuat beri lebih mata. Regu dikira ikut purata rating pasangan. Perlawanan handicap dikira separuh. * = rating sementara. Cadangan = tahap ${esc(schemeOf(space) === 'kroni' ? 'Kroni Shell' : schemeOf(space) === 'ksas' ? 'KSAS' : 'umum')} yang sepadan dengan rating. Pertandingan persendirian tidak dikira.</p></div>`;
+    <p class="muted small">${RT.RATING_ON ? '' : 'Prtd = pertandingan · Main = perlawanan (setiap rubber dalam pertandingan berpasukan dikira berasingan) · ±Set = beza set. Hanya pertandingan yang disahkan admin dikira; pertandingan persendirian dan ujian tidak dikira.'}</p>
+    ${RT.RATING_ON ? `<p class="muted small">Rating jenis Elo: menang lawan yang lebih kuat beri lebih mata. Regu dikira ikut purata rating pasangan. Perlawanan handicap dikira separuh. * = rating sementara. Cadangan = tahap ${esc(schemeOf(space) === 'kroni' ? 'Kroni Shell' : schemeOf(space) === 'ksas' ? 'KSAS' : 'umum')} yang sepadan dengan rating. Pertandingan persendirian tidak dikira.</p>` : ''}</div>`;
 }
 
 // ---------- Profil pemain ----------
@@ -144,16 +145,15 @@ function profileHtml(space, pid) {
   const s = x.s, nm = id => (doc.names && doc.names[id]) || (doc.players[id] || {}).n || '?';
   const pc = (w, p) => (p ? Math.round(w / p * 100) + '%' : '–');
   const ks = RT.orgOf(space) === 'ksasjb';
-  const sug = ks ? `Kumpulan KSAS: <b>${esc(lvName('ksas', x.sug.ksas))}</b> · Kroni Shell: <b>${esc(lvName('kroni', x.sug.kroni))}</b>` : `Tahap: <b>${esc(lvName('umum', x.sug.umum))}</b>`;
+  const sug = !RT.RATING_ON || !x.sug ? '' : ks ? `Kumpulan KSAS: <b>${esc(lvName('ksas', x.sug.ksas))}</b> · Kroni Shell: <b>${esc(lvName('kroni', x.sug.kroni))}</b>` : `Tahap: <b>${esc(lvName('umum', x.sug.umum))}</b>`;
   const mates = Object.entries(s.mates).sort((a, b) => b[1][0] - a[1][0] || b[1][1] - a[1][1]);
   const opp = Object.entries(s.opp).sort((a, b) => b[1][0] - a[1][0]).slice(0, 10);
   const pl = n => (n === 1 ? '🥇 Johan' : n === 2 ? '🥈 Naib' : n && n <= 4 ? `🥉 ${n}` : n ? `#${n}` : '');
   return `<a class="pill-btn light small" href="#/kelab/${space}/kedudukan" style="margin-bottom:10px">← Kedudukan</a>
     <div class="card">
       <div class="row" style="flex-wrap:nowrap">${av(x.n)}<div style="flex:1"><h2 style="margin:0">${esc(x.n)}</h2><span class="muted small">${[ks && x.g ? 'Kumpulan ' + lvName('ksas', x.g) : '', ks && x.k ? 'Kroni ' + lvName('kroni', x.k) : '', !ks && x.lv ? lvName('umum', x.lv) : ''].filter(Boolean).map(esc).join(' · ')}</span></div>
-      <div style="text-align:right"><div class="rating-big">${x.r}</div><span class="muted small">rating${x.rn < RT.PROVISIONAL ? ' (sementara)' : ''}</span></div></div>
-      ${spark(x.h)}
-      <p class="small" style="margin:8px 0 0">📈 Cadangan ikut rating — ${sug}</p>
+      ${RT.RATING_ON ? `<div style="text-align:right"><div class="rating-big">${x.r}</div><span class="muted small">rating${x.rn < RT.PROVISIONAL ? ' (sementara)' : ''}</span></div>` : `<div style="text-align:right"><div class="rating-big">${pc(s.w, s.p)}</div><span class="muted small">% menang</span></div>`}</div>
+      ${RT.RATING_ON ? `${spark(x.h)}<p class="small" style="margin:8px 0 0">📈 Cadangan ikut rating — ${sug}</p>` : ''}
     </div>
     <div class="card"><div class="section-title" style="margin-top:0">Statistik dalam ${esc(X.CLUBS[space].short)}</div>
       <div class="stat-grid">
@@ -169,7 +169,7 @@ function profileHtml(space, pid) {
       ${opp.map(([id, [p, w]]) => `<tr><td class="l">${esc(nm(id))}</td><td>${p}</td><td>${w}</td><td>${pc(w, p)}</td></tr>`).join('')}</tbody></table></div>` : ''}
     <div class="card"><div class="section-title" style="margin-top:0">🗓️ Pertandingan</div>
       ${s.tours.length ? s.tours.map(g => `<div class="list-item"><span><a href="#/t/${g.id}"><b>${esc(g.n)}</b></a><br><span class="muted small">${esc(fmtDate(g.d))}${g.sp !== space && X.CLUBS[g.sp] ? ' · ' + esc(X.CLUBS[g.sp].short) : ''}${g.pl ? ' · ' + pl(g.pl) : ''}</span></span>
-        <span class="small ${g.r1 >= g.r0 ? 'up' : 'down'}">${g.r0} → <b>${g.r1}</b></span></div>`).join('') : '<p class="muted">Belum bermain dalam ruang ini.</p>'}</div>`;
+        ${RT.RATING_ON ? `<span class="small ${g.r1 >= g.r0 ? 'up' : 'down'}">${g.r0} → <b>${g.r1}</b></span>` : g.w != null ? `<span class="small">${g.w}-${g.l}</span>` : ''}</div>`).join('') : '<p class="muted">Belum bermain dalam ruang ini.</p>'}</div>`;
 }
 
 // ---------- Urus (admin kelab) ----------
@@ -253,13 +253,16 @@ function padanHtml(org, space, tid) {
 }
 
 // ---------- Kira semula ----------
+// Rating ditangguhkan: jangan simpan rating / cadangan / sejarah rating dalam dokumen statistik
+const strip = d => RT.RATING_ON ? d : { ...d, players: Object.fromEntries(Object.entries(d.players).map(([id, x]) => {
+  const { r, rn, dr, sug, h, ...rest } = x; return [id, { ...rest, s: { ...x.s, tours: x.s.tours.map(({ r0, r1, ...t }) => t) } }]; })) };
 export async function recompute(org) {
   const [players, links] = await Promise.all([C.org === org && C.players ? C.players : onceCol(org, 'players'), cloud.loadLinks(org)]);
   if (C.org === org) C.links = links;
   const res = RT.compute({ org, tours: orgTours(org).filter(RT.finished), links, players });
   const names = Object.fromEntries(players.map(p => [p.id, p.name]));
-  const docs = { _org: { ...res.org, names } };
-  for (const [sp, d] of Object.entries(res.spaces)) docs[sp] = { ...d, names };
+  const docs = { _org: { ...strip(res.org), names } };
+  for (const [sp, d] of Object.entries(res.spaces)) docs[sp] = { ...strip(d), names };
   await cloud.writeStats(org, docs);
   return res;
 }

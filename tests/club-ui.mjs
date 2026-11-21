@@ -67,24 +67,22 @@ console.log('Admin kelab (Rimau)');
   // kedudukan & profil
   await go(page, '#/kelab/ksas/kedudukan'); await page.waitForTimeout(500);
   html = await page.locator('#app').innerHTML();
-  ok(html.includes('club-board') && html.includes('Asyraf') && html.includes('🏆'), 'papan kedudukan dengan gelaran');
+  ok(html.includes('club-board') && html.includes('Asyraf') && html.includes('🏆') && !html.includes('Rating'), 'papan kedudukan dengan gelaran, tanpa rating');
   await page.screenshot({ path: shots + '/3-kedudukan.png', fullPage: true });
   await page.click('button[data-sort="pct"]'); await page.waitForTimeout(200);
   ok((await page.locator('button[data-sort="pct"].on').count()) === 1, 'susun ikut % menang');
   await page.locator('tr[data-pl]').first().click(); await page.waitForTimeout(400);
   html = await page.locator('#app').innerHTML();
-  ok(page.url().includes('/pemain/') && html.includes('rating-big') && html.includes('Rekod bersemuka'), 'profil pemain dibuka');
+  ok(page.url().includes('/pemain/') && html.includes('% menang') && !html.includes('Cadangan ikut rating') && html.includes('Rekod bersemuka'), 'profil pemain tanpa rating');
   await page.screenshot({ path: shots + '/4-profil.png', fullPage: true });
   // kad statistik pada pertandingan tamat
   await go(page, '#/t/nov6/kalahmati'); await page.waitForTimeout(400);
   ok((await page.locator('a[href="#/kelab/ksas/padan/nov6"]').count()) === 1, 'kad "Kemas kini statistik kelab" pada pertandingan tamat');
   // isi tahap ikut rating dalam pertandingan akan datang (handicap KSAS)
   await go(page, '#/t/up1/pemain'); await page.waitForTimeout(500);
-  ok((await page.locator('#lvRate').count()) === 1, 'butang isi tahap ikut rating');
-  await page.click('#lvRate'); await page.waitForTimeout(800);
+  ok((await page.locator('#lvRate').count()) === 0, 'butang isi tahap ikut rating disembunyi');
   d = await docsOf(page);
-  const up = JSON.parse(d['tournaments/up1'].data);
-  ok(up.levels.hatta && up.levels.asyraf && !up.levels['orang baru'], `tahap diisi: Hatta=${up.levels.hatta}, Asyraf=${up.levels.asyraf}, Orang Baru tiada`);
+  const stj = d['clubs/ksasjb/stats/ksas'].data; ok(!/"r":|"sug":|"r0":/.test(stj), 'dokumen statistik tidak mengandungi rating');
   // borang cipta: pilihan kelab terhad
   await go(page, '#/baru'); await page.waitForTimeout(300);
   const opts = await page.locator('select[name=clubId] option').allTextContents();
