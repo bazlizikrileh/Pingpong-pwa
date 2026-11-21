@@ -365,7 +365,7 @@ tr.pq td { background: color-mix(in srgb, var(--or) 7%, transparent); }
 .tt-h b { font-family: var(--num); letter-spacing:.06em; }
 .tt-h small { color: var(--muted); font-size:11px; text-align:right; }
 .tt-top { position:relative; display:grid; grid-template-columns: 1fr 4px 1fr; align-items:center; min-height:70px; border-radius:10px; text-decoration:none;
-  background: linear-gradient(160deg, var(--tb), var(--tb2)); color:#fff; box-shadow: inset 0 0 0 2px rgba(255,255,255,.8); overflow:hidden; font-weight:700; font-size:13.5px; }
+  background: linear-gradient(160deg, var(--ttb1), var(--ttb2)); color:#fff; box-shadow: inset 0 0 0 2px rgba(255,255,255,.8); overflow:hidden; font-weight:700; font-size:13.5px; }
 .tt-top::before { content:''; position:absolute; left:2px; right:2px; top:50%; height:1px; background: rgba(255,255,255,.55); }
 .tt-top > div { position:relative; padding:6px 8px; text-align:center; line-height:1.2; }
 .tt-net { align-self:stretch; padding:0 !important; background: rgba(255,255,255,.95); box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
@@ -523,7 +523,7 @@ body.tv main#app { max-width:none; padding:0; margin:0; }
 .tv-tt { background: rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.15); border-radius:1vw; padding:.8vw; display:flex; flex-direction:column; gap:.5vw; min-height:0; }
 .tv-tt.free { opacity:.5; }
 .tv-tno { font-family: var(--num); font-weight:800; letter-spacing:.1em; color:#ffb02e; font-size:1.3vw; }
-.tv-court { flex:1; display:grid; grid-template-columns: 1fr .35vw 1fr; align-items:center; border-radius:.7vw; background: linear-gradient(160deg, var(--tb), var(--tb2)); box-shadow: inset 0 0 0 .2vw rgba(255,255,255,.85); position:relative; min-height:5vw; }
+.tv-court { flex:1; display:grid; grid-template-columns: 1fr .35vw 1fr; align-items:center; border-radius:.7vw; background: linear-gradient(160deg, var(--ttb1), var(--ttb2)); box-shadow: inset 0 0 0 .2vw rgba(255,255,255,.85); position:relative; min-height:5vw; }
 .tv-court::before { content:''; position:absolute; left:.2vw; right:.2vw; top:50%; height:1px; background: rgba(255,255,255,.5); }
 .tv-court > div { position:relative; text-align:center; font-weight:800; font-size:1.5vw; padding:.4vw; line-height:1.15; }
 .tv-court > i { align-self:stretch; background:#fff; }
@@ -807,3 +807,6 @@ table.rp-mx td.sets span { white-space:nowrap; display:inline-block; margin-righ
 .cs-srv { font-style:normal; }
 .info-fold summary { cursor:pointer; list-style:none; } .info-fold summary::-webkit-details-marker{display:none} .info-fold summary::after { content:' ▾'; color:var(--muted); }
 .prof-card { display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-top:8px; }
+
+/* meja langsung: biru pertandingan (seperti meja ITTF/Olimpik), garisan putih */
+:root { --ttb1:#2366b8; --ttb2:#123e7c; }
