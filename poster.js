@@ -49,10 +49,6 @@ export async function makePoster({ title, club, date, logos, places }) {
 }
 export async function sharePoster(opts) {
   const blob = await makePoster(opts);
-  const file = new File([blob], `Juara-${(opts.title || 'pertandingan').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-')}.png`, { type: 'image/png' });
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: opts.title }); return 'shared'; } catch (e) { if (e && e.name === 'AbortError') return 'cancel'; }
-  }
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
-  return 'download';
+  const { shareBlob } = await import('./reg-poster.js');
+  return shareBlob(blob, `Juara-${(opts.title || 'pertandingan').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-')}.png`, opts.title);
 }

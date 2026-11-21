@@ -94,12 +94,42 @@ export async function makeRegPoster(d, style = 'editorial') {
   c.fillText('🏓 Pingpong Portal', W / 2, H - 46);
   return new Promise(res => cv.toBlob(b => res(b), 'image/png'));
 }
-export async function shareBlob(blob, name, title) {
-  const file = new File([blob], name, { type: 'image/png' });
+// Kongsi gambar terus ke WhatsApp (atau app lain) melalui menu Kongsi telefon.
+// - WebP ditukar ke JPEG (WhatsApp tidak menerima WebP sebagai gambar).
+// - Jika penjanaan poster mengambil masa, pelayar membatalkan "tekanan" pengguna (NotAllowedError):
+//   paparkan butang kongsi sekali lagi supaya satu tekan terus membuka menu Kongsi.
+async function toJpeg(blob) {
+  const im = await createImageBitmap(blob), cv = document.createElement('canvas'); cv.width = im.width; cv.height = im.height;
+  const c = cv.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height); c.drawImage(im, 0, 0);
+  return new Promise(r => cv.toBlob(r, 'image/jpeg', 0.92));
+}
+const dl = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000); };
+function tapToShare(file, data) {
+  return new Promise(res => {
+    const url = URL.createObjectURL(file), d = document.createElement('div');
+    d.className = 'share-tap';
+    d.innerHTML = `<div class="share-box"><img src="${url}" alt=""><button type="button" class="pill-btn orange" data-s><span class="dot"></span>📤 Kongsi ke WhatsApp / app lain</button>
+      <div class="row" style="gap:8px;justify-content:center"><button type="button" class="pill-btn light small" data-d>⬇️ Muat turun</button><button type="button" class="pill-btn light small" data-x>Tutup</button></div></div>`;
+    const end = r => { d.remove(); URL.revokeObjectURL(url); res(r); };
+    d.querySelector('[data-s]').onclick = async () => { try { await navigator.share(data); end('shared'); } catch (e) { if (e && e.name === 'AbortError') end('cancel'); else { dl(file, file.name); end('download'); } } };
+    d.querySelector('[data-d]').onclick = () => { dl(file, file.name); end('download'); };
+    d.querySelector('[data-x]').onclick = () => end('cancel');
+    document.body.appendChild(d);
+  });
+}
+export async function shareBlob(blob, name, title, text) {
+  let b = blob;
+  if (/webp/.test(b.type || '')) { try { b = await toJpeg(b); name = name.replace(/\.webp$/i, '.jpg'); } catch {} }
+  const file = new File([b], name, { type: b.type || 'image/png' });
+  const data = { files: [file], title, ...(text ? { text } : {}) };
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title }); return 'shared'; } catch (e) { if (e && e.name === 'AbortError') return 'cancel'; }
+    try { await navigator.share(data); return 'shared'; }
+    catch (e) {
+      if (e && e.name === 'AbortError') return 'cancel';
+      return tapToShare(file, data);   // tekanan pengguna tamat semasa menjana: satu tekan lagi
+    }
   }
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  dl(b, name);
   return 'download';
 }
 

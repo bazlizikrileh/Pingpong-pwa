@@ -369,7 +369,11 @@ export async function prepareDrawVideo(o, onP) {
   const share = async () => {
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try { await navigator.share({ files: [file], title: o.title, text: `${o.title}${o.subtitle ? ' · ' + o.subtitle : ''}` }); return { shared: true }; }
-      catch (e) { if (e && e.name === 'AbortError') return { cancelled: true }; }
+      catch (e) {
+        if (e && e.name === 'AbortError') return { cancelled: true };
+        const { shareBlob } = await import('./reg-poster.js'); const r = await shareBlob(blob, fname, o.title, `${o.title}${o.subtitle ? ' · ' + o.subtitle : ''}`);
+        return r === 'shared' ? { shared: true } : r === 'cancel' ? { cancelled: true } : { downloaded: true };
+      }
     }
     download(); return { downloaded: true };
   };
