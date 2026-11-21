@@ -810,3 +810,4 @@ table.rp-mx td.sets span { white-space:nowrap; display:inline-block; margin-righ
 
 /* meja langsung: biru pertandingan (seperti meja ITTF/Olimpik), garisan putih */
 :root { --ttb1:#2366b8; --ttb2:#123e7c; }
+.tot { display:block; font-size:10px; font-weight:500; color:var(--muted); line-height:1.1; white-space:nowrap; }

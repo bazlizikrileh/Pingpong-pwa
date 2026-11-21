@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.42.6';
+const VERSION = '3.42.7';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1317,7 +1317,7 @@ function standingsTable(t, g) {
   const sign = n => (n > 0 ? '+' : '') + n;
   return `<div class="tw"><table><thead><tr><th>#</th><th class="l">${UNIT(t)}</th><th>P</th><th>M</th>${team ? '<th>S</th>' : ''}<th>K</th><th>Mata</th><th>Set ±</th><th>Main ±</th></tr></thead>
     <tbody>${s.map((r, i) => `<tr class="${i < q ? 'q' : i < q + poolN ? 'pq' : ''}"><td>${i + 1}</td><td class="l">${E.usesDraw(t) ? pnUnit(t, r.id) : pn(t, r.id)}</td>
-      <td>${r.p}</td><td>${r.w}</td>${team ? `<td>${r.d}</td>` : ''}<td>${r.l}</td><td><b>${r.pts}</b></td><td>${sign(r.sf - r.sa)}</td><td>${sign(r.pf - r.pa)}</td></tr>`).join('')}</tbody></table></div>`;
+      <td>${r.p}</td><td>${r.w}</td>${team ? `<td>${r.d}</td>` : ''}<td>${r.l}</td><td><b>${r.pts}</b></td><td>${sign(r.sf - r.sa)}<small class="tot">${r.sf}-${r.sa}</small></td><td>${sign(r.pf - r.pa)}<small class="tot">${r.pf}-${r.pa}</small></td></tr>`).join('')}</tbody></table></div>`;
 }
 function matrixHtml(t, g, noCap, pts) {
   const M = E.matrix(t, g.name), st = E.groupStandings(t, g.name);
@@ -1368,8 +1368,8 @@ function viewMixStandings(t) {
     <div class="card"><div class="tw"><table class="mx-st"><thead><tr><th>#</th><th class="l">Pemain</th><th>Main</th><th>M</th><th>K</th><th>±Set</th><th>±Skor</th><th>Mata</th></tr></thead><tbody>
     ${S.map((r, i) => `<tr><td>${i + 1}</td><td class="l"><details class="mx-d"><summary><b>${nm(r.id)}</b>${E.levelOf(t, E.pname(t, r.id)) && E.levelInfo(t, E.levelOf(t, E.pname(t, r.id))) ? ` <span class="muted small">${esc(E.levelInfo(t, E.levelOf(t, E.pname(t, r.id)))[1])}</span>` : ''}</summary>
       ${r.with.length ? `<div class="mx-w">${r.with.map(w => `<span class="${w.draw ? '' : w.win ? 'ok' : 'no'}">P${w.mr} · ${nm(w.mate)} · ${w.draw ? 'Seri' : w.win ? 'Menang' : 'Kalah'} ${w.s}</span>`).join('')}</div>` : '<span class="muted small">Belum bermain</span>'}</details></td>
-      <td>${r.p}</td><td>${r.w}</td><td>${r.l}</td><td>${sgn(r.sf - r.sa)}</td><td>${sgn(r.pf - r.pa)}</td><td><b>${r.pts}</b></td></tr>`).join('')}
-    </tbody></table></div></div>
+      <td>${r.p}</td><td>${r.w}</td><td>${r.l}</td><td>${sgn(r.sf - r.sa)}<small class="tot">${r.sf}-${r.sa}</small></td><td>${sgn(r.pf - r.pa)}<small class="tot">${r.pf}-${r.pa}</small></td><td><b>${r.pts}</b></td></tr>`).join('')}
+    </tbody></table></div><p class="muted small" style="margin:6px 0 0">Angka kecil = jumlah menang-kalah (set, dan mata permainan).</p></div>
     ${mixMatrix(t, S)}
     ${done >= 3 ? `<div class="card">${mixAwards(t, S).replace('<section class="rp-sec pb">', '<div>').replace('</section>', '</div>').replace('<h3>', '<h3 style="margin-top:0">')}</div>` : ''}
     <div class="row" style="margin:0 0 12px"><button class="pill-btn small" data-mxp="1"><span class="dot"></span>▶ Tonton undian</button></div>
@@ -3044,7 +3044,8 @@ function mixReport(t, played, resTable) {
   return `${done && top.length ? `<div class="champ">🏆 Juara individu: ${nm(top[0].id)}${top[1] ? ` · 🥈 ${nm(top[1].id)}` : ''}${top[2] ? ` · 🥉 ${nm(top[2].id)}` : ''}</div>` : ''}
     <h3>Kedudukan Individu</h3><p class="muted small">Mata: menang 3, kalah 0. Sama mata → beza set → beza skor.</p>
     <div class="tw"><table class="rp"><thead><tr><th>#</th><th class="l">Pemain</th><th>Main</th><th>M</th><th>K</th><th>±Set</th><th>±Skor</th><th>Mata</th></tr></thead><tbody>
-    ${S.map((r, i) => `<tr><td>${i + 1}</td><td class="l">${nm(r.id)}</td><td>${r.p}</td><td>${r.w}</td><td>${r.l}</td><td>${sgn(r.sf - r.sa)}</td><td>${sgn(r.pf - r.pa)}</td><td><b>${r.pts}</b></td></tr>`).join('')}</tbody></table></div>
+    ${S.map((r, i) => `<tr><td>${i + 1}</td><td class="l">${nm(r.id)}</td><td>${r.p}</td><td>${r.w}</td><td>${r.l}</td><td>${sgn(r.sf - r.sa)}<small class="tot">${r.sf}-${r.sa}</small></td><td>${sgn(r.pf - r.pa)}<small class="tot">${r.pf}-${r.pa}</small></td><td><b>${r.pts}</b></td></tr>`).join('')}</tbody></table></div>
+    <p class="muted small">Angka kecil = jumlah menang-kalah (set, dan mata permainan).</p>
     ${mixAwards(t, S)}
     <section class="rp-sec pb"><h3>Matriks Pasangan &amp; Lawan</h3>${mixMatrix(t, S, 'p', true)}${mixMatrix(t, S, 'o', true)}</section>
     <section class="rp-sec pb"><h3>Keputusan Mengikut Sesi</h3>
