@@ -45,15 +45,19 @@ export function liveState(t) {
 }
 // Semak kehadiran (pilihan penganjur): hanya perlawanan yang semua pemainnya sudah hadir diagih ke meja
 const here = (t, m) => !t.checkin || pl2(m).every(p => (t.present || {})[p]);
+// Perlawanan yang baru ditangguh tidak diagih semula ke meja selama 5 minit (supaya meja benar-benar dikosongkan);
+// selepas itu ia berada di hujung giliran.
+const DEFER_MS = 5 * 60e3;
+const cool = m => m.tg && Date.now() - m.tg < DEFER_MS;
 function pick(t, k, cand, busy, used) {
-  const fr = m => !used.has(m) && pl2(m).every(p => !busy.has(p)) && here(t, m);
+  const fr = m => !used.has(m) && !cool(m) && pl2(m).every(p => !busy.has(p)) && here(t, m);
   if (t.entryMode === 'mixer') {
     // Meja kosong diisi segera: utamakan pemain yang paling sedikit bermain (supaya ada rehat), kemudian susunan sesi
     const pc = {}; t.matches.forEach(m => { if (m.px && (m.status === 'done' || m.lt)) m.px.forEach(id => (pc[id] = (pc[id] || 0) + 1)); });
     const sc = m => m.px.reduce((a, id) => a + (pc[id] || 0), 0) * 10 + (m.session || 0);
-    return cand.filter(fr).sort((x, y) => sc(x) - sc(y))[0];
+    return cand.filter(fr).sort((x, y) => (x.tg ? 1 : 0) - (y.tg ? 1 : 0) || sc(x) - sc(y))[0];
   }
-  return cand.find(m => fr(m) && m.stage === 'group' && homeTable(t, m) === k) || cand.find(fr);
+  return cand.find(m => !m.tg && fr(m) && m.stage === 'group' && homeTable(t, m) === k) || cand.find(m => !m.tg && fr(m)) || cand.find(fr);
 }
 // Regu bertukar, mod meja pantas: bila meja kosong, 4 pemain yang bebas & paling sedikit bermain diundi terus menjadi
 // dua regu (elak pasangan berulang, kurangkan lawan berulang, imbang tahap) dan ditulis ke perlawanan seterusnya.
@@ -69,9 +73,11 @@ function planMixFast(t) {
   const nm = id => (t.individuals.find(x => x.id === id) || {}).name || '';
   const bal = !!E.lvScheme(t), LV = Object.fromEntries(ids.map(id => [id, bal ? E.lvVal(t, nm(id), 'D') ?? 2.5 : 0]));
   const pending = t.matches.filter(m => m.px && !isDone(m) && !live.includes(m)).sort(ocmp);
+  const dfr = new Set(); t.matches.filter(m => m.px && cool(m) && !isDone(m) && !live.includes(m)).forEach(m => m.px.forEach(id => dfr.add(id)));
   for (const { k } of tableList(t)) {
     if (occ[k] || !pending.length) continue;
-    const F = ids.filter(id => !busy.has(id) && (played[id] || 0) < (G[id] || 0)).sort((x, y) => (played[x] || 0) - (played[y] || 0));
+    let F = ids.filter(id => !busy.has(id) && (played[id] || 0) < (G[id] || 0)).sort((x, y) => (played[x] || 0) - (played[y] || 0));
+    if (dfr.size) { const F2 = F.filter(id => !dfr.has(id)); if (F2.length >= 4) F = F2; else break; }
     if (F.length < 4) {
       // hujung pertandingan: jika tiada meja lain berjalan, lengkapkan dengan pemain bebas yang paling sedikit bermain
       if (busy.size || !F.length) break;
@@ -79,7 +85,7 @@ function planMixFast(t) {
     }
     // jika perlawanan yang dirancang (ikut jadual) boleh dimainkan sekarang, guna terus — jadual & video undian kekal
     // (hanya untuk sesi pertama, supaya undian sesi 1 yang ditayang kekal; selepas itu diundi semasa)
-    const ready = !t.matches.some(isDone) && pending.find(m => m.session === 1 && m.px.every(id => F.includes(id) && !(played[id] || 0)));
+    const ready = !t.matches.some(isDone) && pending.find(m => !m.tg && m.session === 1 && m.px.every(id => F.includes(id) && !(played[id] || 0)));
     if (ready) {
       pending.splice(pending.indexOf(ready), 1);
       ready.px.forEach(id => { busy.add(id); inc(played, id); }); inc(pc, k2(ready.px[0], ready.px[1])); inc(pc, k2(ready.px[2], ready.px[3]));

@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.42.4';
+const VERSION = '3.42.5';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1290,7 +1290,7 @@ function viewMatch(t, mid) {
   };
   const tgh = document.getElementById('tgh');
   if (tgh) tgh.onclick = () => {
-    if (!confirm('Tangguh perlawanan ini? Ia diletak di hujung giliran' + (m.lt ? ' dan meja diberi kepada perlawanan seterusnya.' : '.'))) return;
+    if (!confirm('Tangguh perlawanan ini? Ia diletak di hujung giliran' + (m.lt ? ' dan meja diberi kepada perlawanan seterusnya (jika tiada, meja dibiarkan kosong). Perlawanan ini tidak diagih semula sekurang-kurangnya 5 minit.' : '.'))) return;
     LV.defer(t, m.id); save(t); toast('Ditangguh ke hujung giliran'); location.hash = `#/t/${t.id}/${_back}`;
   };
   const cl = document.getElementById('clear');
