@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.42.3';
+const VERSION = '3.42.4';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2625,7 +2625,7 @@ function viewLiveScore(t, mid0) {
     H.push(JSON.stringify(S)); if (H.length > 200) H.shift();
     const pmax = Math.max(...S.cur);
     S.cur[k] = Math.max(0, S.cur[k] + d);
-    if (d > 0 && !gameOver(...S.cur) && pmax < 5 && Math.max(...S.cur) >= 5 && (S.rs[S.ri] || []).length === fmt.bo - 1 && !(S.x5 || {})[srvKey()]) {
+    if (d > 0 && !gameOver(...S.cur) && pmax < 5 && Math.max(...S.cur) >= 5 && !fmt.full && (S.rs[S.ri] || []).length === fmt.bo - 1 && !(S.x5 || {})[srvKey()]) {
       const st = lsStart(t, m, S.ri); S.x5 = { ...(S.x5 || {}), [srvKey()]: S.cur[0] + S.cur[1] - st[0] - st[1] };
       setTimeout(() => toast(`⇄ Set penentu: pemain tukar hujung meja${dblNames(S.ri) ? ' · pasangan penerima tukar giliran menerima' : ''}`, 4500), 50);
     }
