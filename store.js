@@ -1,3 +1,4 @@
+const DATA_V = 1;
 // Lapisan simpanan data (hibrid).
 // - Pertandingan di awan (Firebase) dikongsi semua orang; hanya admin/pengesah boleh ubah.
 // - Pertandingan "tempatan" disimpan dalam peranti ini sahaja (cth. ujian, atau semasa luar talian).
@@ -58,11 +59,20 @@ export const store = {
     const t = readLocal().tournaments.find(x => x.id === id);
     return t ? clone(t) : null;
   },
+  // DATA_V: naikkan apabila versi lama boleh merosakkan data baharu (1 = format '3 set semua dimainkan' untuk regu bertukar)
   // Simpan: ke awan jika pertandingan itu di awan (atau baharu dan pengguna ialah admin), jika tidak ke peranti
   save(t, { forceCloud = false } = {}) {
     if (inCloud(t.id) || (forceCloud && cloud.isAdmin())) {
       const created = !inCloud(t.id);
       if (!created && !store.canEdit(t.id)) throw new Error('Hanya pengurus pertandingan ini boleh membuat perubahan');
+      // Telefon dengan app lama tidak boleh menimpa data yang disimpan oleh versi lebih baharu (cth. format set baharu ditukar semula)
+      const rv = ((cloud.state.tournaments.get(t.id) || {}).dataV) || 0;
+      if (rv > DATA_V) {
+        alert('App di telefon ini versi lama. Tutup app sepenuhnya dan buka semula untuk kemas kini, kemudian cuba lagi. Perubahan belum disimpan.');
+        try { navigator.serviceWorker && navigator.serviceWorker.getRegistration().then(r => r && r.update()); } catch {}
+        return Promise.resolve();
+      }
+      t.dataV = Math.max(rv, DATA_V);
       if (!created) snapshot(cloud.state.tournaments.get(t.id), t);
       cloud.state.tournaments.set(t.id, clone(t));       // kemas kini serta-merta di skrin
       return cloud.saveTournament(t, { created }).catch(e => { console.error(e); alert('Gagal simpan ke awan: ' + (e.code || e.message)); });
