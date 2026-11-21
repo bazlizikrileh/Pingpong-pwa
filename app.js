@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.42.5';
+const VERSION = '3.42.6';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2808,7 +2808,16 @@ function viewLive(t) {
   const ag = document.getElementById('agih');
   if (ag) ag.onclick = () => {
     const n = LV.allocate(t);
-    if (!n) return toast('Tiada meja kosong atau tiada perlawanan sedia untuk diagih.');
+    if (!n) {
+      const w = LV.whyIdle(t);
+      if (w.cooled && w.cooled.length && confirm(`Meja tidak dapat diagih:\n\n${w.msg}\n\nAgih juga perlawanan yang ditangguh sekarang?`)) {
+        LV.uncool(t); const n2 = LV.allocate(t);
+        if (n2) { save(t); toast(`${n2} perlawanan diagih ke meja.`); return render(true); }
+        return alert('Masih tidak dapat diagih:\n\n' + LV.whyIdle(t).msg);
+      }
+      if (!(w.cooled && w.cooled.length)) alert('Meja tidak dapat diagih:\n\n' + w.msg);
+      return;
+    }
     save(t); toast(`${n} perlawanan diagih ke meja.`); render(true);
   };
   $app.querySelectorAll('[data-tgh]').forEach(b => (b.onclick = () => {

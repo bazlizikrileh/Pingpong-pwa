@@ -291,3 +291,29 @@ export function serveCfg(sv, ri, g) {
   for (let i = 1; i <= g; i++) c = (sv && sv[`${ri}:${i}`]) || { s: 1 - c.s, si: c.rc, rc: c.si };
   return c;
 }
+
+// Sebab meja kosong tidak dapat diagih (untuk penganjur)
+export function whyIdle(t) {
+  const { live, occ, cand } = liveState(t), free = tableList(t).filter(x => !occ[x.k]).map(x => x.k);
+  if (!free.length) return { msg: 'Semua meja sedang digunakan.' };
+  if (!cand.length) return { msg: live.length ? 'Semua perlawanan yang berbaki sedang dimainkan, atau menunggu keputusan pusingan sebelumnya.' : 'Tiada perlawanan sedia untuk dimainkan.' };
+  const busy = new Set(); live.forEach(m => { pl2(m).forEach(p => busy.add(p)); if (m.ump) busy.add(m.ump); });
+  const nm = id => E.pname(t, id), cooled = cand.filter(cool), R = [];
+  if (cooled.length) {
+    const left = Math.max(...cooled.map(m => DEFER_MS - (Date.now() - m.tg))), mm = Math.ceil(left / 60e3);
+    R.push(`${cooled.length} perlawanan baru ditangguh (boleh diagih semula dalam ~${mm} minit).`);
+  }
+  if (t.checkin) { const abs = new Set(); cand.forEach(m => pl2(m).forEach(p => { if (!(t.present || {})[p]) abs.add(p); })); if (abs.size) R.push(`Semak kehadiran aktif: ${abs.size} pemain belum ditanda hadir (${[...abs].slice(0, 4).map(nm).join(', ')}${abs.size > 4 ? '…' : ''}).`); }
+  if (mixFast(t)) {
+    const dfr = new Set(); cooled.forEach(m => (m.px || []).forEach(id => dfr.add(id)));
+    const G = t.mixG || {}, pl = {}; t.matches.forEach(m => { if (m.px && (isDone(m) || live.includes(m))) m.px.forEach(id => (pl[id] = (pl[id] || 0) + 1)); });
+    const fr = (t.individuals || []).filter(x => !busy.has(x.id) && !dfr.has(x.id) && (!t.mixG || (pl[x.id] || 0) < (G[x.id] || 0)));
+    R.push(`Mod meja pantas: hanya ${fr.length} pemain bebas yang masih ada baki perlawanan (perlu 4)${fr.length ? ': ' + fr.map(x => x.name).join(', ') : ''}. Yang lain sedang bermain atau menjadi pengadil.`);
+    return { msg: R.join('\n'), cooled };
+  }
+  const blocked = cand.filter(m => !cool(m) && pl2(m).some(p => busy.has(p)));
+  if (blocked.length) { const who = new Set(); blocked.forEach(m => pl2(m).forEach(p => busy.has(p) && who.add(p))); R.push(`Perlawanan seterusnya melibatkan pemain yang sedang bermain atau menjadi pengadil di meja lain (${[...who].slice(0, 4).map(nm).join(', ')}${who.size > 4 ? '…' : ''}). Meja akan diagih bila mereka selesai.`); }
+  return { msg: R.join('\n') || 'Tiada perlawanan yang boleh dimainkan sekarang.', cooled };
+}
+// Penganjur memilih untuk mengagih juga perlawanan yang baru ditangguh
+export function uncool(t) { t.matches.forEach(m => { if (cool(m)) m.tg = Date.now() - DEFER_MS - 1; }); }
