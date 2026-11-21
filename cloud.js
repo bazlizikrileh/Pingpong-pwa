@@ -30,14 +30,9 @@ export const isAdmin = () => state.role === 'owner' || state.role === 'admin';
 state.owners = {};
 const myEmail = () => (auth && auth.currentUser && auth.currentUser.email ? auth.currentUser.email.toLowerCase() : '');
 // Pengurus: pemilik; admin yang mencipta / diserahkan; atau admin bersama (co) yang dijemput untuk pertandingan ini
-// Admin kelab (roles/{email}.clubs = ['ksas', 'kroni', …]): urus semua pertandingan dalam ruang kelab tersebut sahaja
-state.clubs = [];
-const tClub = tid => ((state.tournaments && state.tournaments.get(tid)) || {}).clubId || '';
-export const clubAdmin = space => state.role === 'owner' || (state.role === 'admin' && !!space && state.clubs.includes(space));
 export const manages = tid => state.role === 'owner' || (state.role === 'admin' && (state.owners[tid] || {}).email === myEmail())
-  || clubAdmin(tClub(tid))
   || (!!myEmail() && ((state.owners[tid] || {}).co || []).includes(myEmail()));
-export const isMainManager = tid => state.role === 'owner' || (state.role === 'admin' && (state.owners[tid] || {}).email === myEmail()) || clubAdmin(tClub(tid));
+export const isMainManager = tid => state.role === 'owner' || (state.role === 'admin' && (state.owners[tid] || {}).email === myEmail());
 // Bukan admin umum: semak sama ada saya admin bersama untuk pertandingan ini (dokumen boleh dibaca jika e-mel saya tersenarai)
 const _ownTried = {};
 export async function loadOwner(tid) {
@@ -94,15 +89,12 @@ async function watchRole() {
   if (unsubRole) { unsubRole(); unsubRole = null; }
   Object.values(unsubSub).forEach(u => u()); for (const k in unsubSub) delete unsubSub[k];
   state.pending = {};
-  resetMember(); emit('member');
   const u = auth.currentUser;
   // e-mel mesti disahkan (akaun e-mel/kata laluan perlu klik pautan pengesahan dahulu)
-  state.clubs = [];
   if (!u || u.isAnonymous || !u.email || !u.emailVerified) { state.role = ''; watchOwners(); emit('role'); return; }
   if (await sha256(u.email.toLowerCase()) === OWNER_HASH) { state.role = 'owner'; watchOwners(); emit('role'); return; }
   unsubRole = F.onSnapshot(F.doc(db, 'roles', u.email.toLowerCase()), d => {
     state.role = d.exists() ? (d.data().role || '') : '';
-    state.clubs = d.exists() && Array.isArray(d.data().clubs) ? d.data().clubs : [];
     watchOwners();
     emit('role');
   }, () => { state.role = ''; emit('role'); });
@@ -195,7 +187,7 @@ export async function setPin(tid, pin) { await init(); await F.setDoc(F.doc(db, 
 export function watchRoles(cb) {
   return F.onSnapshot(F.collection(db, 'roles'), snap => { const out = []; snap.forEach(d => out.push({ email: d.id, ...d.data() })); cb(out); }, () => cb([]));
 }
-export async function setRole(email, role, name = '', clubs = []) { await init(); await F.setDoc(F.doc(db, 'roles', email.trim().toLowerCase()), { role, name, clubs }); }
+export async function setRole(email, role, name = '') { await init(); await F.setDoc(F.doc(db, 'roles', email.trim().toLowerCase()), { role, name }); }
 export async function removeRole(email) { await init(); await F.deleteDoc(F.doc(db, 'roles', email.trim().toLowerCase())); }
 
 // ---------- Penghantaran skor ----------
@@ -387,57 +379,3 @@ export function watchPoster(tid) {
 }
 export async function setPoster(tid, img) { await init(); await F.setDoc(F.doc(db, 'posters', tid), { img, at: F.serverTimestamp() }); }
 export async function delPoster(tid) { await init(); await F.deleteDoc(F.doc(db, 'posters', tid)); }
-
-// ---------- Ruang kelab: ahli, daftar pemain, padanan & statistik ----------
-// clubs/{org}/members/{uid}  { uid, name, email, space, note, status: pending|ok|no, spaces: [ruang], pid, at }  — peribadi
-// clubs/{org}/players/{pid}  { name, aliases, group, kroni, lv, w, off, at }                          — admin kelab sahaja
-// clubs/{org}/links/{tid}    { map: { kunciNama: pid|'' }, ok, by, at }                                 — admin kelab sahaja
-// clubs/{org}/stats/{ruang}  { data: JSON, at }  (ruang '_org' = keseluruhan)                           — ahli disahkan ruang itu
-const once = q => new Promise((ok, no) => { const u = F.onSnapshot(q, s => { u(); ok(s); }, no); });
-state.member = {};   // org → dokumen keahlian saya (null = tiada)
-const _memU = {};
-export function watchMember(org) {
-  if (!F || _memU[org] !== undefined) return;
-  const u = auth.currentUser;
-  if (!u || u.isAnonymous) { state.member[org] = null; return; }
-  _memU[org] = F.onSnapshot(F.doc(db, 'clubs', org, 'members', u.uid), d => { state.member[org] = d.exists() ? d.data() : null; emit('member'); },
-    () => { state.member[org] = null; emit('member'); });
-}
-export function resetMember() { Object.values(_memU).forEach(u => u && u()); for (const k in _memU) delete _memU[k]; state.member = {}; }
-export async function requestMember(org, { name, space, note }) {
-  await init(); const u = auth.currentUser;
-  if (!u || u.isAnonymous) throw Object.assign(new Error('Log masuk dengan Google dahulu'), { code: 'perlu-log-masuk' });
-  try { await u.getIdToken(true); } catch {}   // akaun baru dipaut daripada tanpa nama: pastikan token bukan lagi 'anonymous'
-  const email = (u.email || (u.providerData[0] || {}).email || '').toLowerCase();
-  await F.setDoc(F.doc(db, 'clubs', org, 'members', u.uid), { uid: u.uid, name: String(name || '').slice(0, 50), email, space: String(space || ''), note: String(note || '').slice(0, 150), status: 'pending', at: F.serverTimestamp() });
-}
-export async function cancelMember(org) { await init(); await F.deleteDoc(F.doc(db, 'clubs', org, 'members', auth.currentUser.uid)); }
-export function watchCol(org, col, cb) {
-  if (!F) return () => {};
-  return F.onSnapshot(F.collection(db, 'clubs', org, col), snap => { const out = []; snap.forEach(d => out.push({ id: d.id, ...d.data() })); cb(out); }, err => { console.warn(col, err); cb(null, err); });
-}
-export async function setMember(org, uid, data) { await init(); await F.setDoc(F.doc(db, 'clubs', org, 'members', uid), data, { merge: true }); }
-export async function delMember(org, uid) { await init(); await F.deleteDoc(F.doc(db, 'clubs', org, 'members', uid)); }
-export async function savePlayer(org, p) {
-  await init(); const { id, ...d } = p;
-  const clean = { name: String(d.name || '').slice(0, 50), aliases: (d.aliases || []).map(x => String(x).slice(0, 50)).filter(Boolean).slice(0, 10),
-    group: d.group || '', kroni: d.kroni || '', lv: d.lv || '', w: !!d.w, off: !!d.off, at: F.serverTimestamp() };
-  await F.setDoc(F.doc(db, 'clubs', org, 'players', id), clean);
-}
-export async function delPlayer(org, pid) { await init(); await F.deleteDoc(F.doc(db, 'clubs', org, 'players', pid)); }
-export async function loadLinks(org) {
-  await init(); const s = await once(F.collection(db, 'clubs', org, 'links')); const o = {};
-  s.forEach(d => (o[d.id] = d.data())); return o;
-}
-export async function saveLink(org, tid, map, ok = true, skip = false) {
-  await init(); const who = state.user && !state.user.anon ? (state.user.name || (state.user.email || '').split('@')[0]) : '';
-  await F.setDoc(F.doc(db, 'clubs', org, 'links', tid), { map, ok, skip: !!skip, by: who, at: F.serverTimestamp() });
-}
-export function watchStats(org, space, cb) {
-  if (!F) return () => {};
-  return F.onSnapshot(F.doc(db, 'clubs', org, 'stats', space), d => { let x = null; try { x = d.exists() ? JSON.parse(d.data().data) : null; } catch {} cb(x); }, err => cb(null, err));
-}
-export async function writeStats(org, docs) {
-  await init();
-  await Promise.all(Object.entries(docs).map(([sp, x]) => F.setDoc(F.doc(db, 'clubs', org, 'stats', sp), { data: JSON.stringify(x), n: Object.keys(x.players || {}).length, at: F.serverTimestamp() })));
-}

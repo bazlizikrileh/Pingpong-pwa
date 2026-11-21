@@ -4,10 +4,8 @@ import { playDeal } from './draw-anim.js';
 import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
-import * as CL from './club.js';
-import * as RT from './rating.js';
 
-const VERSION = '3.45.2';
+const VERSION = '3.46.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -110,11 +108,7 @@ const CLUBS = {
   ksas: { short: 'KSAS Kumpulan Rimau', name: 'Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru · Kumpulan Rimau', logos: ['logos/ksas.webp', 'logos/ksas-pingpong.webp'], thumb: 'logos/ksas-pingpong.webp', theme: { tb: '#1f4aa8', tb2: '#173a86', or: '#ff7a1a', w: '#eaf1ff', hd1: '#0b1a3f', hd2: '#1d3f8c' }, waGroup: 'KSAS Rimau - Laporan Skor' },
   ksasall: { short: 'KSAS', name: 'Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru', logos: ['logos/ksas.webp', 'logos/ksas-pingpong.webp'], theme: { tb: '#1f4aa8', tb2: '#173a86', or: '#ff7a1a', w: '#eaf1ff', hd1: '#0b1a3f', hd2: '#1d3f8c' }, waGroup: '' },
   kroni: { short: 'Kroni Shell KSAS', name: 'Kroni Shell · Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru', logos: [], ownLogo: true, theme: { tb: '#c8102e', tb2: '#9b0d23', or: '#ffc600', w: '#fff4d1', hd1: '#4a0a0f', hd2: '#a3111f' }, waGroup: '' },
-  helang: { short: 'KSAS Kumpulan Helang', name: 'Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru · Kumpulan Helang', logos: ['logos/ksas.webp', 'logos/ksas-pingpong.webp'], theme: { tb: '#1f4aa8', tb2: '#173a86', or: '#ff7a1a', w: '#eaf1ff', hd1: '#0b1a3f', hd2: '#1d3f8c' }, waGroup: '' },
-  singa: { short: 'KSAS Kumpulan Singa', name: 'Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru · Kumpulan Singa', logos: ['logos/ksas.webp', 'logos/ksas-pingpong.webp'], theme: { tb: '#1f4aa8', tb2: '#173a86', or: '#ff7a1a', w: '#eaf1ff', hd1: '#0b1a3f', hd2: '#1d3f8c' }, waGroup: '' },
-  naga: { short: 'KSAS Kumpulan Naga', name: 'Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru · Kumpulan Naga', logos: ['logos/ksas.webp', 'logos/ksas-pingpong.webp'], theme: { tb: '#1f4aa8', tb2: '#173a86', or: '#ff7a1a', w: '#eaf1ff', hd1: '#0b1a3f', hd2: '#1d3f8c' }, waGroup: '' },
-  nagaelit: { short: 'KSAS Kumpulan Naga Elit', name: 'Kelab Santai Antara Sahabat (K.S.A.S) Johor Bahru · Kumpulan Naga Elit', logos: ['logos/ksas.webp', 'logos/ksas-pingpong.webp'], theme: { tb: '#1f4aa8', tb2: '#173a86', or: '#ff7a1a', w: '#eaf1ff', hd1: '#0b1a3f', hd2: '#1d3f8c' }, waGroup: '' },
-  sendiri: { short: 'Persendirian', unlisted: true, name: 'Penganjur persendirian · main santai', logos: [], ownLogo: true, theme: { tb: '#0f766e', tb2: '#0b5a54', or: '#f59e0b', w: '#e6f6f4', hd1: '#062e2b', hd2: '#0f5f58' }, waGroup: '' },
+  sendiri: { short: 'Persendirian', name: 'Penganjur persendirian · main santai', logos: [], ownLogo: true, theme: { tb: '#0f766e', tb2: '#0b5a54', or: '#f59e0b', w: '#e6f6f4', hd1: '#062e2b', hd2: '#0f5f58' }, waGroup: '' },
   kskpkpjb: { short: 'KSKPKPJB', name: 'Kelab Sukan Kebajikan Perubatan Kesihatan dan Pergigian Johor Bahru', logos: ['logos/kskpkpjb.webp'], theme: { tb: '#16803c', tb2: '#0d5a2a', or: '#e3262e', w: '#e8f6ec', hd1: '#07301b', hd2: '#0f5a2c' }, waGroup: '' },
 };
 function clubOf(t) {
@@ -187,7 +181,7 @@ cloud.onChange(what => {
   if (what === 'auth') syncProfile();
   updateTop();
   if (_cur && store.isCloud(_cur) && store.canEdit(_cur)) cloud.watchSubmissions(_cur);
-  if (['pending', 'tournaments', 'role', 'auth', 'error', 'regs', 'poster', 'member'].includes(what)) softRender();
+  if (['pending', 'tournaments', 'role', 'auth', 'error', 'regs', 'poster'].includes(what)) softRender();
   else if (what === 'live' && /^#\/tv\//.test(location.hash)) tvLiveRefresh();
   else if (what === 'live' && /^#\/t\/[^/]+\/ls\//.test(location.hash)) { if (_lsOnLive) _lsOnLive(); }
   else if (what === 'live' && !/^#\/t\/[^/]+\/(ls|m)\//.test(location.hash)) softRender();
@@ -278,7 +272,6 @@ function render(keep = false) {
   if (!parts.length) { viewHome(); if (keep) window.scrollTo(0, y); return; }
   if (parts[0] === 'baru') return viewNew();
   if (parts[0] === 'pentadbir') return viewAdmin();
-  if (parts[0] === 'kelab') { CL.viewClub(parts); if (keep) window.scrollTo(0, y); return; }
   if (parts[0] === 'tv') {
     const t = load(parts[1]);
     if (!t) { $app.innerHTML = '<div class="empty">Memuatkan data…</div>'; return; }
@@ -287,7 +280,7 @@ function render(keep = false) {
   if (parts[0] === 'daftar') {
     const t = load(parts[1]);
     if (!t) { $app.innerHTML = cloud.state.tournaments || cloud.state.failed ? '<div class="empty">Pertandingan tidak dijumpai.</div>' : '<div class="empty">Memuatkan data…</div>'; return; }
-    seenT(t); _cur = t.id; applyTheme(t); renderHead(t, 'daftar'); $tabs.hidden = true; updateTop();
+    _cur = t.id; applyTheme(t); renderHead(t, 'daftar'); $tabs.hidden = true; updateTop();
     viewDaftar(t); if (keep) window.scrollTo(0, y); return;
   }
   if (parts[0] === 't') {
@@ -297,7 +290,6 @@ function render(keep = false) {
       location.hash = '#/'; return;
     }
     if (store.isCloud(t.id) && canEdit(t)) cloud.watchSubmissions(t.id);
-    seenT(t);
     _cur = t.id;
     applyTheme(t);
     const page = parts[2] || defaultPage(t);
@@ -309,7 +301,6 @@ function render(keep = false) {
     if (page === 'qr') viewQR(t); else if (page === 'status') viewStatus(t); else if (page === 'm') viewMatch(t, parts[3]); else if (page === 'ls') viewLiveScore(t, parts[3]); else if (page === 'kadskor') viewKadSkor(t); else if (views[page]) views[page](t); else { location.hash = '#/'; return; }
     if (page === 'kumpulan' && t.format === 'rr' && t.stage === 'done') { $app.insertAdjacentHTML('beforeend', '<div class="row" style="margin:12px 0"><button class="pill-btn orange" id="posterBtn"><span class="dot"></span>🏆 Kongsi poster juara</button></div>'); wirePoster(t); }
     guideCard(t, page);
-    clubStatCard(t, page);
     if (store.isCloud(t.id)) cloud.loadOwner(t.id);
     autoMe(t);
     if (page !== 'langsung') myStrip(t);
@@ -318,14 +309,6 @@ function render(keep = false) {
     return;
   }
   location.hash = '#/';
-}
-// Pertandingan kelab tamat: pautan ke ruang kelab (admin: padankan pemain untuk statistik)
-function clubStatCard(t, page) {
-  const org = RT.orgOf(t.clubId);
-  if (!org || !store.isCloud(t.id) || isTestT(t) || !RT.finished(t) || !['kalahmati', 'kumpulan', 'ranking', 'keputusan'].includes(page)) return;
-  const adm = CL.orgAdmin(org);
-  $app.insertAdjacentHTML('beforeend', `<a class="card noprint" href="#/kelab/${t.clubId}/${adm ? 'padan/' + t.id : 'kedudukan'}" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit">
-    <span style="font-size:30px">📊</span><span style="flex:1"><b>${adm ? 'Kemas kini statistik kelab' : 'Kedudukan & rating kelab'}</b><br><span class="muted small">${adm ? 'Padankan peserta dengan daftar pemain, kemudian sahkan supaya rating dikemas kini.' : `Ruang ${esc(CLUBS[t.clubId].short)} · untuk ahli kelab`}</span></span><span class="pill-btn light small">Buka →</span></a>`);
 }
 const defaultPage = t => t.stage === 'setup' ? (canAdmin(t) ? 'tetapan' : 'pemain') : t.stage === 'done' ? (t.format === 'rr' ? 'kumpulan' : 'kalahmati') : 'langsung';
 
@@ -469,10 +452,8 @@ function playBracketDraw(t, b) {
 // ---------- Laman utama ----------
 let _homeClub = '', _drwKeep = false;
 function viewHome() {
-  const mineReg = new Set(myRegTids());
-  const all = store.list().map(E.migrate).filter(t => store.isLocal(t.id) || store.canAdmin(t.id) || (!isHidden(t) && (t.clubId !== 'sendiri' || seenIds().includes(t.id) || mineReg.has(t.id))));
+  const all = store.list().map(E.migrate).filter(t => store.isLocal(t.id) || store.canAdmin(t.id) || !isHidden(t));
   const clubs = [...new Map(all.filter(t => t.clubId && CLUBS[t.clubId]).map(t => [t.clubId, CLUBS[t.clubId].short])).entries()];
-  const spaceOf = k => (k && RT.orgOf(k) ? k : '');
   if (_homeClub && !clubs.some(([k]) => k === _homeClub)) _homeClub = '';
   const list = all.filter(t => !_homeClub || t.clubId === _homeClub);
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -514,7 +495,6 @@ function viewHome() {
     ${cloud.isAdmin() || cloud.state.failed || !cloud.state.ready ? `<div class="row" style="margin-bottom:14px"><a class="pill-btn orange" href="#/baru"><span class="dot"></span>Pertandingan baharu</a></div>` : ''}
     ${clubs.length > 1 ? `<div class="hc-chips"><button class="chip ${!_homeClub ? 'on' : ''}" data-hclub="">Semua kelab</button>${clubs.map(([k, n]) => `<button class="chip ${_homeClub === k ? 'on' : ''}" data-hclub="${k}">${esc(n)}</button>`).join('')}</div>` : ''}
     ${(_homeClub || clubs.length === 1) && store.isCloud && (_homeClub || clubs[0][0]) !== 'sendiri' ? (() => { const k = _homeClub || clubs[0][0], on = subs.includes(k) && notifOn(); return `<div class="hc-sub"><span>${on ? '🔔' : '🔕'} ${on ? 'Anda akan dimaklumkan bila' : 'Dapatkan notifikasi bila'} <b>${esc(CLUBS[k].short)}</b> membuka pendaftaran</span><button class="pill-btn small ${on ? 'light' : 'brand'}" data-csub="${k}">${on ? 'Berhenti' : 'Langgan'}</button></div>`; })() : ''}
-    ${spaceOf(_homeClub) ? `<a class="hc-sub" href="#/kelab/${_homeClub}" style="text-decoration:none;color:inherit"><span>🏠 <b>Ruang kelab ${esc(CLUBS[_homeClub].short)}</b> · pertandingan, kedudukan &amp; statistik pemain</span><span class="pill-btn small brand">Buka →</span></a>` : ''}
     ${mine.length ? `<div class="section-title">📝 Pertandingan saya</div><div class="my-list">${mine.map(t => `<a class="my-item" href="#/daftar/${t.id}"><b>${esc(t.name)}</b><span>${esc(fmtDate(t.date) || '')} · Lihat pendaftaran →</span></a>`).join('')}</div>` : ''}
     <div class="section-title">Akan datang</div>
     ${up.length ? `<div class="hc-list">${up.map(card).join('')}</div>` : '<div class="card empty">Tiada pertandingan akan datang.</div>'}
@@ -522,8 +502,6 @@ function viewHome() {
     ${tests.length ? `<details class="card fold" ${ls.get('pingpong:testOpen') === '1' ? 'open' : ''} id="testF"><summary>🧪 Pertandingan ujian (${tests.length})</summary>
       <p class="muted small" style="margin:6px 0 0">Dikenal pasti daripada tanda "ujian", salinan di telefon ini, atau nama seperti <i>ujian, test, testing, cubaan, demo, latihan</i>. Tukar di Tetapan pertandingan → <b>Jenis</b> jika salah.</p>
       <div class="hc-list" style="margin-top:10px">${tests.map(card).join('')}</div></details>` : ''}
-    <details class="card fold noprint"><summary>🏠 Ruang kelab</summary><p class="muted small" style="margin:6px 0">Pertandingan, papan kedudukan, rating dan profil pemain bagi setiap kelab. Statistik untuk ahli yang disahkan.</p>
-      <div class="hc-chips">${Object.entries(CLUBS).filter(([k]) => RT.orgOf(k)).map(([k, c]) => `<a class="chip" href="#/kelab/${k}">${esc(c.short)}</a>`).join('')}</div></details>
     <a class="card noprint" href="https://carromsantai-portal.pages.dev/" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit">
       <span style="font-size:34px">🎯</span><span style="flex:1"><b>Portal Carrom</b><br><span class="muted small">Pertandingan carrom kini di portal sendiri</span></span><span class="pill-btn light small">Buka →</span></a>
     <details class="card fold noprint"><summary>Sandaran data</summary>
@@ -572,20 +550,13 @@ function settingsForm(t, locked, part) {
   const i = all.indexOf('<div class="section-title">Acara</div>'), j = all.indexOf('<div class="section-title">Meja</div>');
   return part === 'info' ? all.slice(0, i) + all.slice(j) : all.slice(i, j);
 }
-// Pilihan kelab: admin kelab hanya nampak ruang kelab yang diurusnya
-const CLUB_CHOICES = { ksasall: 'KSAS (gabungan semua kumpulan)', ksas: 'KSAS Kumpulan Rimau', helang: 'KSAS Kumpulan Helang', singa: 'KSAS Kumpulan Singa', naga: 'KSAS Kumpulan Naga', nagaelit: 'KSAS Kumpulan Naga Elit', kroni: 'Kroni Shell KSAS', kskpkpjb: 'KSKPKPJB', sendiri: '🙋 Persendirian (main santai)', lain: 'Lain-lain', '': '— Tiada —' };
-function clubChoices(cur) {
-  const mine = cloud.state.role === 'admin' && (cloud.state.clubs || []).length ? cloud.state.clubs : null;
-  if (!mine) return CLUB_CHOICES;
-  return Object.fromEntries(Object.entries(CLUB_CHOICES).filter(([k]) => mine.includes(k) || k === cur));
-}
 function settingsFormAll(t, locked) {
   const dis = locked ? 'disabled' : '';
   return `
     <div class="section-title" style="margin-top:0">Maklumat</div>
     <label>Nama pertandingan</label><input name="name" value="${esc(t.name)}" required>
     <div class="grid2">
-      <div><label>Kelab / Penganjur</label><select name="clubId">${opt(clubChoices(clubOf(t).id), clubOf(t).id)}</select></div>
+      <div><label>Kelab / Penganjur</label><select name="clubId">${opt({ ksasall: 'KSAS', ksas: 'KSAS Kumpulan Rimau', kroni: 'Kroni Shell KSAS', kskpkpjb: 'KSKPKPJB', sendiri: '🙋 Persendirian (main santai)', lain: 'Lain-lain', '': '— Tiada —' }, clubOf(t).id)}</select></div>
       <div><label>Tarikh</label><input name="date" type="date" value="${esc(t.date)}"></div>
       <div><label>Masa mula</label><input name="startTime" type="time" value="${esc(t.startTime)}"></div>
       <div><label>Minit setiap sesi</label><input name="sessionMin" type="number" min="10" max="90" step="5" value="${t.sessionMin}"></div>
@@ -712,7 +683,6 @@ function viewNew() {
   const t = E.newTournament();
   if (cloud.state.user && !cloud.state.user.anon) t.createdBy = { name: cloud.state.user.name || (cloud.state.user.email || '').split('@')[0], at: Date.now() };
   t.clubId = ls.get('pingpong:lastClub') ?? 'ksas';
-  if (cloud.state.role === 'admin' && (cloud.state.clubs || []).length && !cloud.state.clubs.includes(t.clubId)) t.clubId = cloud.state.clubs[0];
   t.waGroup = (CLUBS[t.clubId] || {}).waGroup || '';
   $app.innerHTML = `${section('Pertandingan', 'Cipta baharu')}
     <p class="notice small">${cloud.isAdmin() ? '☁️ Pertandingan ini akan disimpan di awan dan boleh dilihat semua orang.' : '📱 Anda belum log masuk sebagai admin, jadi pertandingan ini disimpan dalam peranti ini sahaja (sesuai untuk ujian). Ia boleh dipindah ke awan kemudian.'}</p>
@@ -1704,7 +1674,6 @@ function levelsCard(t) {
   return `<details class="card fold" data-fold="lv" ${missing && admin ? 'open' : ''}><summary>🎚️ ${hcOn ? 'Tahap handicap' : 'Tahap pemain (imbang regu)'} · ${esc(S.name)}${missing ? ` <span class="role-chip">${missing} belum</span>` : ''}</summary>
     <table class="lv-tab"><tr><th></th>${S.levels.map(l => `<th>${esc(l[1])}</th>`).join('')}</tr><tr><td>Single</td>${S.levels.map(l => `<td>${l[2]}</td>`).join('')}</tr><tr><td>Double</td>${S.levels.map(l => `<td>${l[3]}</td>`).join('')}</tr></table>
     <p class="muted small">${hcOn ? `Pihak bernilai rendah mula dengan beza nilai. Double: jumlah dua ahli, maks. ${S.capD}.` : 'Tahap digunakan untuk mengimbangkan regu semasa undian (tiada mata handicap). Mod meja pantas menggunakannya serta-merta; jadual penuh perlu dijana semula selepas tahap diubah.'}</p>
-    ${RT.RATING_ON && admin && RT.orgOf(t.clubId) && store.isCloud(t.id) && CL.orgAdmin(RT.orgOf(t.clubId)) ? `<div class="row" style="margin:6px 0"><button class="pill-btn brand small" id="lvRate"><span class="dot"></span>📈 Isi tahap ikut rating kelab</button><span class="muted small">Cadangan daripada rating ${esc((RT.ORGS[RT.orgOf(t.clubId)] || {}).name || '')}; pemain baharu ikut daftar.</span></div>` : ''}
     <div class="lv-list">${P.map(n => `<div class="lv-row"><span>${esc(n)}</span>${admin ? `<select data-lvn="${esc(n)}">${opt({ '': '— tahap —', ...Object.fromEntries(S.levels.map(l => [l[0], `${l[1]} (S${l[2]} · D${l[3]})`])) }, E.levelOf(t, n))}</select>` : chip(E.levelOf(t, n))}</div>`).join('')}</div></details>`;
 }
 // ---------- Pautan kongsi ----------
@@ -2046,9 +2015,6 @@ function wireProfileCard(root = document) {
     catch (e) { toast('Gagal: ' + (e.code === 'auth/popup-closed-by-user' ? 'dibatalkan' : e.code || e.message)); b.disabled = false; }
   }));
 }
-// Pertandingan Persendirian tidak tersenarai: hanya muncul di halaman utama telefon yang pernah membuka pautannya
-const seenIds = () => { try { return JSON.parse(ls.get('pingpong:seenT') || '[]'); } catch { return []; } };
-function seenT(t) { if (t.clubId !== 'sendiri') return; const L = seenIds(); if (!L.includes(t.id)) ls.set('pingpong:seenT', JSON.stringify([t.id, ...L].slice(0, 40))); }
 const myRegTids = () => { try { return JSON.parse(ls.get('pingpong:myRegs') || '[]'); } catch { return []; } };
 let _rgEdit = null;
 function condTags(t) {
@@ -2128,18 +2094,6 @@ function viewPemain(t) {
     const ent = document.getElementById('entries');
     ent ? ent.insertAdjacentHTML('afterend', lc) : $app.insertAdjacentHTML('beforeend', lc);
     $app.querySelectorAll('[data-lvn]').forEach(sel => (sel.onchange = () => { E.setLevel(t, sel.dataset.lvn, sel.value); save(t); toast('Tahap disimpan'); }));
-    const lr = document.getElementById('lvRate');
-    if (lr) lr.onclick = async () => {
-      lr.disabled = true;
-      try {
-        const { out, miss } = await CL.levelsFromRating(t, personsOf(t));
-        const T = load(t.id), diff = out.filter(x => E.levelOf(T, x.name) !== x.code), had = diff.filter(x => E.levelOf(T, x.name));
-        if (!diff.length) { toast(`Tiada perubahan${miss.length ? ` · ${miss.length} nama tiada dalam daftar` : ''}`, 3500); lr.disabled = false; return; }
-        const over = !had.length || confirm(`${diff.length - had.length} tahap kosong akan diisi.\n${had.length} pemain sudah ada tahap berbeza:\n${had.slice(0, 8).map(x => `• ${x.name}: ${(E.levelInfo(T, E.levelOf(T, x.name)) || [])[1]} → ${(E.levelInfo(T, x.code) || [])[1]}`).join('\n')}${had.length > 8 ? '\n…' : ''}\n\nOK = timpa juga · Batal = isi yang kosong sahaja`);
-        let n = 0; diff.forEach(x => { if (over || !E.levelOf(T, x.name)) { E.setLevel(T, x.name, x.code); n++; } });
-        await save(T); toast(`📈 ${n} tahap diisi${miss.length ? ` · tidak dijumpai: ${miss.slice(0, 4).join(', ')}${miss.length > 4 ? '…' : ''}` : ''}`, 5000);
-      } catch (e) { toast('Gagal: ' + (e.code === 'permission-denied' ? 'tiada kebenaran' : e.code || e.message), 4500); lr.disabled = false; }
-    };
     const d = $app.querySelector('details[data-fold=lv]'); if (d) d.ontoggle = () => {};
   }
   $app.insertAdjacentHTML('beforeend', `<details class="card fold" style="margin-top:14px"><summary>📜 Peraturan &amp; panduan peserta</summary>${rulesHtml(t)}</details>`);
@@ -3530,29 +3484,20 @@ function viewAdmin() {
       <div class="grid2"><div><label>E-mel <small class="muted">(Google, Yahoo, Outlook…)</small></label><input id="rEmail" type="email" placeholder="nama@gmail.com / nama@yahoo.com"></div>
       <div><label>Nama</label><input id="rName" placeholder="cth. Hatta"></div>
       <div><label>Peranan</label><select id="rRole">${opt({ verifier: 'Pengesah skor', admin: 'Admin pertandingan' }, 'verifier')}</select></div></div>
-      <div id="rClubsW" hidden><label>Admin kelab untuk <small class="muted">(kosong = admin umum: urus pertandingan yang dicipta sendiri sahaja)</small></label>
-        <div class="hc-chips">${Object.entries(CLUBS).filter(([k]) => RT.orgOf(k)).map(([k, c]) => `<label class="chip"><input type="checkbox" class="rClub" value="${k}"> ${esc(c.short)}</label>`).join('')}</div>
-        <p class="muted small">Admin kelab mengurus <b>semua</b> pertandingan dalam ruang yang ditanda, daftar pemain, ahli dan statistik organisasinya (KSAS atau KSKPKPJB), dan hanya boleh mencipta pertandingan dalam ruang tersebut.</p></div>
       <button class="pill-btn brand" id="rAdd" style="margin-top:12px"><span class="dot"></span>Tambah / kemas kini</button></div>
     <div class="card"><div class="section-title" style="margin-top:0">Senarai</div><div id="rList" class="muted">Memuatkan…</div></div>`;
   if (_rolesUnsub) _rolesUnsub();
   _rolesUnsub = cloud.watchRoles(list => {
     const el = document.getElementById('rList'); if (!el) return;
     el.innerHTML = `<div class="list-item"><span><b>${esc(cloud.ownerEmail())}</b><br><span class="muted small">Pemilik</span></span><span class="role-chip">Admin utama</span></div>` +
-      list.map(r => `<div class="list-item"><span><b>${esc(r.name || r.email)}</b><br><span class="muted small">${esc(r.email)}${(r.clubs || []).length ? ' · ' + esc(r.clubs.map(k => (CLUBS[k] || {}).short || k).join(', ')) : ''}</span></span>
-      <span class="row"><span class="role-chip">${(r.clubs || []).length && r.role === 'admin' ? 'Admin kelab' : ROLE[r.role] || r.role}</span><button class="pill-btn light small" data-red="${esc(r.email)}">Ubah</button><button class="pill-btn no small" data-rm="${esc(r.email)}">Buang</button></span></div>`).join('');
+      list.map(r => `<div class="list-item"><span><b>${esc(r.name || r.email)}</b><br><span class="muted small">${esc(r.email)}</span></span>
+      <span class="row"><span class="role-chip">${ROLE[r.role] || r.role}</span><button class="pill-btn no small" data-rm="${esc(r.email)}">Buang</button></span></div>`).join('');
     el.querySelectorAll('[data-rm]').forEach(b => (b.onclick = async () => { if (confirm(`Buang ${b.dataset.rm}?`)) await cloud.removeRole(b.dataset.rm); }));
-    el.querySelectorAll('[data-red]').forEach(b => (b.onclick = () => { const r = list.find(x => x.email === b.dataset.red); if (!r) return;
-      document.getElementById('rEmail').value = r.email; document.getElementById('rName').value = r.name || ''; document.getElementById('rRole').value = r.role;
-      document.querySelectorAll('.rClub').forEach(x => (x.checked = (r.clubs || []).includes(x.value))); document.getElementById('rRole').onchange(); window.scrollTo(0, 0); }));
   });
-  const rr = document.getElementById('rRole');
-  rr.onchange = () => (document.getElementById('rClubsW').hidden = rr.value !== 'admin');
   document.getElementById('rAdd').onclick = async () => {
     const em = document.getElementById('rEmail').value.trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) return toast('E-mel tidak sah');
-    const clubs = rr.value === 'admin' ? [...document.querySelectorAll('.rClub')].filter(x => x.checked).map(x => x.value) : [];
-    try { await cloud.setRole(em, rr.value, document.getElementById('rName').value.trim(), clubs); document.querySelectorAll('.rClub').forEach(x => (x.checked = false)); toast('Disimpan'); document.getElementById('rEmail').value = ''; document.getElementById('rName').value = ''; }
+    try { await cloud.setRole(em, document.getElementById('rRole').value, document.getElementById('rName').value.trim()); toast('Disimpan'); document.getElementById('rEmail').value = ''; document.getElementById('rName').value = ''; }
     catch (err) { toast('Gagal: ' + (err.code || err.message), 4000); }
   };
 }
@@ -3583,9 +3528,6 @@ function showProfile(t, id) {
   md.hidden = false;
   md.onclick = e => { if (e.target === md || e.target.id === 'mx' || e.target.closest('a.mrow, a.mc')) md.hidden = true; };
 }
-
-// ---------- Ruang kelab ----------
-CL.initClub({ $app, esc, toast, section, av, opt, fmtDate, CLUBS, store, isTestT, isHidden, applyTheme, load, rerender: force => (force ? render(true) : document.getElementById('pf') || document.getElementById('pbT') ? null : softRender()) });
 
 // ---------- PWA ----------
 // Kemas kini automatik: semak versi baharu setiap kali app dibuka/kembali ke skrin, dan muat semula sekali bila versi baharu aktif
