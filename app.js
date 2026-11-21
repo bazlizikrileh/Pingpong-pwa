@@ -7,7 +7,7 @@ import * as PUSH from './push.js';
 import * as CL from './club.js';
 import * as RT from './rating.js';
 
-const VERSION = '3.45.1';
+const VERSION = '3.45.2';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');

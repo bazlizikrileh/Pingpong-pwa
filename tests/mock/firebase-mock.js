@@ -4,6 +4,11 @@ const M = (window.__MOCK ||= {});
 const D = (M.docs ||= {});
 const subs = new Set();
 const deny = p => (M.deny || []).some(r => new RegExp(r).test(p));
+import { makeRules } from './rules.js';
+let RULES = null; const rules = () => (M.rules ? (RULES ||= makeRules(D, () => auth.currentUser)) : null);
+const can = (op, path, data, before) => { const r = rules(); return !r || r(op, path, data, before); };
+const denied = () => Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
+M.log = [];
 const later = f => setTimeout(f, 5);
 const ts = () => { const n = Date.now(); return { toMillis: () => n, _ts: n }; };
 const DEL = { _del: 1 };
@@ -19,7 +24,7 @@ const kids = path => Object.keys(D).filter(k => k.startsWith(path + '/') && k.sl
 const dsnap = (path) => ({ id: path.split('/').pop(), exists: () => path in D, data: () => (D[path] ? JSON.parse(JSON.stringify(D[path])) : undefined) });
 const csnap = path => ({ metadata: { fromCache: false }, size: kids(path).length, forEach: f => kids(path).forEach(k => f(dsnap(k))) });
 function fire(ref, cb, err) {
-  if (deny(ref.path)) { err && err({ code: 'permission-denied' }); return; }
+  if (deny(ref.path) || !can('read', ref.col ? ref.path + '/__col__' : ref.path)) { M.log.push('READ ' + ref.path); err && err({ code: 'permission-denied' }); return; }
   cb(ref.col ? csnap(ref.path) : dsnap(ref.path));
 }
 export function onSnapshot(ref, a, b, c) {
@@ -34,15 +39,17 @@ export async function setDoc(ref, data, opt = {}) {
   const cur = opt.merge && D[ref.path] ? D[ref.path] : {};
   const out = { ...cur };
   for (const [k, v] of Object.entries(data)) { if (v === DEL) delete out[k]; else out[k] = clean(v); }
+  const ex = ref.path in D;
+  if (!can(ex ? 'update' : 'create', ref.path, out, D[ref.path])) { M.log.push((ex ? 'UPDATE ' : 'CREATE ') + ref.path); throw denied(); }
   D[ref.path] = out; changed(ref.path);
 }
-export async function getDoc(ref) { if (deny(ref.path)) throw Object.assign(new Error('denied'), { code: 'permission-denied' }); return dsnap(ref.path); }
+export async function getDoc(ref) { if (!can('read', ref.path)) { M.log.push('READ ' + ref.path); throw denied(); } if (deny(ref.path)) throw Object.assign(new Error('denied'), { code: 'permission-denied' }); return dsnap(ref.path); }
 export async function addDoc(ref, data) { const id = Math.random().toString(36).slice(2, 10); await setDoc({ path: ref.path + '/' + id }, data); return { id }; }
-export async function deleteDoc(ref) { if (deny(ref.path)) throw Object.assign(new Error('denied'), { code: 'permission-denied' }); delete D[ref.path]; changed(ref.path); }
+export async function deleteDoc(ref) { if (!can('delete', ref.path)) { M.log.push('DELETE ' + ref.path); throw denied(); } if (deny(ref.path)) throw Object.assign(new Error('denied'), { code: 'permission-denied' }); delete D[ref.path]; changed(ref.path); }
 // ---- Auth ----
 const authL = new Set();
 const mkUser = u => u && { uid: u.uid, email: u.email || null, displayName: u.displayName || '', isAnonymous: !!u.isAnonymous, emailVerified: u.emailVerified !== false && !!u.email, providerData: u.isAnonymous ? [] : [{ providerId: 'google.com', email: u.email, displayName: u.displayName }], getIdToken: async () => 'x' };
-const auth = { currentUser: mkUser(M.user) };
+var auth = { currentUser: mkUser(M.user) };
 export const getAuth = () => auth;
 export const setPersistence = async () => {}; export const browserLocalPersistence = {};
 export const getRedirectResult = async () => null;

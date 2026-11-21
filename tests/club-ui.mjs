@@ -10,10 +10,11 @@ const shots = '/home/claude/tests/shots'; fs.mkdirSync(shots, { recursive: true 
 async function open(cfg, w = 420) {
   const ctx = await browser.newContext({ viewport: { width: w, height: 860 }, serviceWorkers: 'block' });
   await ctx.route('**/vendor/firebase.js', r => r.fulfill({ contentType: 'text/javascript', body: mock }));
+  await ctx.route('**/vendor/rules.js', r => r.fulfill({ contentType: 'text/javascript', body: fs.readFileSync('/home/claude/tests/mock/rules.js', 'utf8') }));
   await ctx.route(/workers\.dev|googleapis|gstatic/, r => r.abort());
   const page = await ctx.newPage();
   page.on('pageerror', e => { console.log('  ‼ pageerror', e.message); fail++; });
-  await page.addInitScript(c => { window.__MOCK = c; localStorage.setItem('pingpong:movedSnooze', String(Date.now() + 1e9)); }, cfg);
+  await page.addInitScript(c => { window.__MOCK = { rules: true, ...c }; localStorage.setItem('pingpong:movedSnooze', String(Date.now() + 1e9)); }, cfg);
   page.on('dialog', d => d.accept());
   return { ctx, page };
 }
@@ -87,6 +88,11 @@ console.log('Admin kelab (Rimau)');
   await go(page, '#/baru'); await page.waitForTimeout(300);
   const opts = await page.locator('select[name=clubId] option').allTextContents();
   ok(opts.length === 1 && opts[0].includes('Rimau'), 'admin kelab hanya boleh pilih Rimau: ' + opts.join(' | '));
+  // cipta pertandingan baharu sebagai admin kelab (peraturan: clubId mesti dalam clubs)
+  await page.fill('input[name=name]', 'Rimau Disember Kedua'); await page.click('#f button.orange'); await page.waitForTimeout(600);
+  d = await docsOf(page);
+  const nt = Object.entries(d).find(([k, v]) => k.startsWith('tournaments/') && v.name === 'Rimau Disember Kedua');
+  ok(nt && nt[1].clubId === 'ksas', 'admin kelab cipta pertandingan: meta clubId = ksas');
   // urus ahli: permohonan menunggu
   await page.evaluate(() => { window.__MOCK.docs['clubs/ksasjb/members/u-m1'] = { uid: 'u-m1', name: 'Bazli', email: 'bazli@gmail.com', space: 'ksas', status: 'pending', at: 1 }; });
   await go(page, '#/kelab/ksas'); await go(page, '#/kelab/ksas/urus'); await page.waitForTimeout(400);
@@ -94,6 +100,8 @@ console.log('Admin kelab (Rimau)');
   await page.click('[data-mok="u-m1"]'); await page.waitForTimeout(300);
   d = await docsOf(page);
   ok(d['clubs/ksasjb/members/u-m1'].status === 'ok' && d['clubs/ksasjb/members/u-m1'].spaces.join() === 'ksas,ksasall', 'diluluskan dengan akses Rimau + KSAS');
+  const rej = await page.evaluate(() => window.__MOCK.log);
+  ok(!rej.length, 'tiada "insufficient permissions" dalam aliran admin' + (rej.length ? ': ' + rej.join(', ') : ''));
   await ctx.close();
   fs.writeFileSync('/home/claude/tests/after-admin.json', JSON.stringify(d));
 }
@@ -116,6 +124,7 @@ console.log('Ahli & orang awam');
   ok(mine && mine[1].status === 'pending' && mine[1].email === 'ahli@gmail.com', 'permohonan dihantar (pending)');
   html = await page.locator('#app').innerHTML();
   ok(html.includes('menunggu kelulusan'), 'papar menunggu kelulusan');
+  ok(!(await page.evaluate(() => window.__MOCK.log)).some(x => !/^READ clubs\/ksasjb\/members\//.test(x)), 'mohon ahli (tanpa nama → Google): tiada penolakan tulis');
   await page.screenshot({ path: shots + '/5-mohon.png', fullPage: true });
   // Persendirian: buka pautan → muncul di utama peranti ini
   await go(page, '#/t/priv1'); await go(page, '#/');

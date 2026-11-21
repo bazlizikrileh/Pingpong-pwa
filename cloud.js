@@ -407,6 +407,7 @@ export function resetMember() { Object.values(_memU).forEach(u => u && u()); for
 export async function requestMember(org, { name, space, note }) {
   await init(); const u = auth.currentUser;
   if (!u || u.isAnonymous) throw Object.assign(new Error('Log masuk dengan Google dahulu'), { code: 'perlu-log-masuk' });
+  try { await u.getIdToken(true); } catch {}   // akaun baru dipaut daripada tanpa nama: pastikan token bukan lagi 'anonymous'
   const email = (u.email || (u.providerData[0] || {}).email || '').toLowerCase();
   await F.setDoc(F.doc(db, 'clubs', org, 'members', u.uid), { uid: u.uid, name: String(name || '').slice(0, 50), email, space: String(space || ''), note: String(note || '').slice(0, 150), status: 'pending', at: F.serverTimestamp() });
 }
