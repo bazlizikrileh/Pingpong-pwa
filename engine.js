@@ -919,6 +919,8 @@ export function buildPool(t) {
 export const HC_SCHEMES = {
   ksas: { name: 'KSAS dalaman', capS: 99, capD: 5, levels: [
     ['NE', 'Naga Elit', 7, 5], ['N', 'Naga', 5, 3], ['S', 'Singa', 2, 2], ['R', 'Rimau', 1, 1], ['H', 'Helang', 0, 0]] },
+  umum: { name: 'Umum (Kuat / Sederhana / Baru)', capS: 99, capD: 5, levels: [
+    ['A', 'Kuat', 4, 2], ['B', 'Sederhana', 2, 1], ['C', 'Baru', 0, 0]] },
   kroni: { name: 'Kroni Shell', capS: 99, capD: 5, levels: [
     ['N', 'Naga', 6, 5], ['L', 'Lion', 4, 4], ['LW', 'Lion (W)', 3, 3], ['T', 'Tiger', 2, 2], ['TW', 'Tiger (W)', 1, 1], ['H', 'Helang', 1, 1], ['HW', 'Helang (W)', 0, 0]] },
 };
@@ -930,6 +932,7 @@ export function parseLevel(t, txt) {
   const S = HC_SCHEMES[lvScheme(t)]; if (!S || !txt) return '';
   let s = lvKey(txt).replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim();
   const w = /\b(w|wanita|perempuan|p|f)\b/.test(s); s = s.replace(/\b(w|wanita|perempuan|lelaki|l|m|p|f)\b/g, '').trim();
+  if (lvScheme(t) === 'umum') { const u = { kuat: 'A', a: 'A', sederhana: 'B', b: 'B', baru: 'C', lemah: 'C', c: 'C' }[s]; return u || (S.levels.some(l => l[0] === txt) ? txt : ''); }
   const alias = { 'naga elit': 'NE', 'naga elite': 'NE', 'elit': 'NE', 'elite': 'NE', 'ne': 'NE', naga: 'N', n: 'N', singa: 'S', lion: 'S', s: 'S', rimau: 'R', tiger: 'R', harimau: 'R', r: 'R', helang: 'H', eagle: 'H', h: 'H' };
   let c = alias[s] || '';
   if (lvScheme(t) === 'kroni') c = ({ N: 'N', S: 'L', R: 'T', H: 'H' })[c] || '';

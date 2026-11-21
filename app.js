@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.42.7';
+const VERSION = '3.43.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -575,7 +575,7 @@ function settingsFormAll(t, locked) {
     <div data-show="mixer" class="notice small" style="margin:8px 0">🔀 <b>Regu bertukar:</b> setiap pusingan pemain diundi menjadi regu baharu. Mata dikira untuk setiap individu (menang, kemudian beza set dan beza mata). Pasangan yang sama dielakkan.</div>
     <div data-show="mixer" class="grid2">
       <div><label>Bilangan pusingan</label><input name="mixRounds" type="number" min="1" max="40" value="${t.mixRounds || ''}" placeholder="Kosong = penuh (semua berpasangan sekali)" ${dis}></div>
-      <div><label>Imbang regu ikut tahap</label><select name="mixLv" ${dis}>${opt({ '': 'Tidak (undian bebas)', ksas: 'Tahap KSAS', kroni: 'Tahap Kroni Shell' }, t.mixLv || '')}</select></div>
+      <div><label>Imbang regu ikut tahap</label><select name="mixLv" ${dis}>${opt({ '': 'Tidak (undian bebas)', umum: 'Umum: Kuat / Sederhana / Baru', ksas: 'Tahap KSAS', kroni: 'Tahap Kroni Shell' }, t.mixLv || '')}</select></div>
     </div>
     <label data-show="mixer" class="check" style="margin-top:10px"><input type="checkbox" name="mixFast" ${t.mixFast === true ? 'checked' : ''} ${dis}> <span>⚡ <b>Meja pantas</b>: meja yang tamat terus diisi dengan 4 pemain yang bebas (pasangan diundi ketika itu)<br><small class="muted">Lebih cepat (anggaran jimat ~40 minit untuk 12 pemain / 2 meja) kerana tiada meja menunggu meja lain. Semua pemain tetap main sama banyak; pasangan berulang sangat jarang. Jadual sesi 2 dan seterusnya menjadi anggaran sahaja. Jika tidak ditanda, ikut jadual sesi yang tetap.</small></span></label>
     <p data-show="mixer" class="muted small" style="margin:4px 0 0">Kosong = penuh: setiap pemain berpasangan dengan semua pemain lain sekali (cth. 12 pemain → 11 kali main). Isi nombor untuk pusingan lebih pendek. Tahap ditulis dalam senarai individu, cth. <i>Ali (Naga)</i>. Jika Handicap ikut tahap dipilih, tahap itu juga digunakan untuk imbang.</p>
@@ -1666,13 +1666,14 @@ function rosterOf(t) {
   return out;
 }
 function levelsCard(t) {
-  const S = E.HC_SCHEMES[t.hcMode]; if (!S) return '';
+  const S = E.HC_SCHEMES[E.lvScheme(t)]; if (!S) return '';
   const P = personsOf(t); if (!P.length) return '';
+  const hcOn = !!E.HC_SCHEMES[t.hcMode];   // tahap untuk handicap, atau hanya untuk imbang regu (regu bertukar)
   const admin = canAdmin(t), missing = P.filter(n => !E.levelOf(t, n)).length;
   const chip = c => { const L = E.levelInfo(t, c); return L ? `<span class="lv lv-${c}">${esc(L[1])}</span>` : '<span class="lv none">—</span>'; };
-  return `<details class="card fold" data-fold="lv" ${missing && admin ? 'open' : ''}><summary>🎚️ Tahap handicap · ${esc(S.name)}${missing ? ` <span class="role-chip">${missing} belum</span>` : ''}</summary>
+  return `<details class="card fold" data-fold="lv" ${missing && admin ? 'open' : ''}><summary>🎚️ ${hcOn ? 'Tahap handicap' : 'Tahap pemain (imbang regu)'} · ${esc(S.name)}${missing ? ` <span class="role-chip">${missing} belum</span>` : ''}</summary>
     <table class="lv-tab"><tr><th></th>${S.levels.map(l => `<th>${esc(l[1])}</th>`).join('')}</tr><tr><td>Single</td>${S.levels.map(l => `<td>${l[2]}</td>`).join('')}</tr><tr><td>Double</td>${S.levels.map(l => `<td>${l[3]}</td>`).join('')}</tr></table>
-    <p class="muted small">Pihak bernilai rendah mula dengan beza nilai. Double: jumlah dua ahli, maks. ${S.capD}.</p>
+    <p class="muted small">${hcOn ? `Pihak bernilai rendah mula dengan beza nilai. Double: jumlah dua ahli, maks. ${S.capD}.` : 'Tahap digunakan untuk mengimbangkan regu semasa undian (tiada mata handicap). Mod meja pantas menggunakannya serta-merta; jadual penuh perlu dijana semula selepas tahap diubah.'}</p>
     <div class="lv-list">${P.map(n => `<div class="lv-row"><span>${esc(n)}</span>${admin ? `<select data-lvn="${esc(n)}">${opt({ '': '— tahap —', ...Object.fromEntries(S.levels.map(l => [l[0], `${l[1]} (S${l[2]} · D${l[3]})`])) }, E.levelOf(t, n))}</select>` : chip(E.levelOf(t, n))}</div>`).join('')}</div></details>`;
 }
 // ---------- Pautan kongsi ----------
@@ -2843,7 +2844,7 @@ function tvSlides(t) {
 function tvSlideHtml(t, sl) {
   if (sl.k === 'live') {
     const { occ, xr } = LV.liveState(t), nx = LV.nextUp(t), U = LV.umpirePlan(t);
-    return `<h2 class="tv-h">🟢 Sedang berlangsung</h2><div class="tv-tables">${LV.tableList(t).map(({ k }) => {
+    return `<h2 class="tv-h">🟢 Sedang berlangsung</h2><div class="tv-tables" style="--tvc:${(n => (n <= 1 ? 1 : n <= 4 ? 2 : n <= 6 ? 3 : 4))(LV.tableList(t).length)}">${LV.tableList(t).map(({ k }) => {
       const m = occ[k], ri = xr[k], u = m && ri == null ? LV.umpireOf(t, m, U) : '', x = m ? liveOf(t, m, m.id + (ri != null ? '~' + ri : '')) : null;
       return `<div class="tv-tt ${m ? '' : 'free'}"><div class="tv-tno">MEJA ${k}</div>
         ${m ? `<div class="tv-court${x ? ' live' : ''}">${x && x.sw ? courtSide(t, m, 1, x) : courtSide(t, m, 0, x)}<i></i>${x && x.sw ? courtSide(t, m, 0, x) : courtSide(t, m, 1, x)}</div>

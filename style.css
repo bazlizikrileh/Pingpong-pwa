@@ -519,7 +519,7 @@ body.tv main#app { max-width:none; padding:0; margin:0; }
 .tv-clock { font-family: var(--num); font-size:2.4vw; font-weight:800; min-width:9vw; text-align:right; }
 .tv-body { flex:1; min-height:0; padding:1.2vw 2vw; display:flex; flex-direction:column; }
 .tv-h { margin:0 0 1vw; font-size:2vw; color:#fff; }
-.tv-tables { flex:1; display:grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 1fr; gap:1vw; min-height:0; }
+.tv-tables { flex:1; display:grid; grid-template-columns: repeat(var(--tvc, 4), 1fr); grid-auto-rows: 1fr; gap:1vw; min-height:0; }
 .tv-tt { background: rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.15); border-radius:1vw; padding:.8vw; display:flex; flex-direction:column; gap:.5vw; min-height:0; }
 .tv-tt.free { opacity:.5; }
 .tv-tno { font-family: var(--num); font-weight:800; letter-spacing:.1em; color:#ffb02e; font-size:1.3vw; }
@@ -543,7 +543,7 @@ body.tv main#app { max-width:none; padding:0; margin:0; }
 .tv-foot { display:flex; justify-content:space-between; align-items:center; padding:.6vw 2vw; background: rgba(0,0,0,.25); }
 .tv-dots i { display:inline-block; width:.8vw; height:.8vw; border-radius:50%; background: rgba(255,255,255,.3); margin-right:.4vw; } .tv-dots i.on { background:#ffb02e; }
 .tv-ctl { display:flex; gap:.6vw; } .tv-ctl button, .tv-ctl a { background: rgba(255,255,255,.12); color:#fff; border:0; border-radius:99px; padding:.4vw 1vw; font-size:1vw; text-decoration:none; cursor:pointer; }
-@media (orientation: portrait) { .tv-wrap { font-size:2.4vw; } .tv-tables { grid-template-columns: repeat(2, 1fr); } .tv-cols { grid-template-columns: 1fr; } }
+@media (orientation: portrait) { .tv-wrap { font-size:2.4vw; } .tv-tables { grid-template-columns: 1fr; } .tv-cols { grid-template-columns: 1fr; } }
 
 .tv-fit { display:flex; justify-content:center; } .tv-scale { width:max-content; } .tv-scale * { overflow:visible !important; }
 
@@ -811,3 +811,19 @@ table.rp-mx td.sets span { white-space:nowrap; display:inline-block; margin-righ
 /* meja langsung: biru pertandingan (seperti meja ITTF/Olimpik), garisan putih */
 :root { --ttb1:#2366b8; --ttb2:#123e7c; }
 .tot { display:block; font-size:10px; font-weight:500; color:var(--muted); line-height:1.1; white-space:nowrap; }
+
+/* Mod TV: meja melintang ikut nisbah meja sebenar (274 × 152.5 cm), jaring tebal menegak, garis tengah halus melintang.
+   Saiz meja & tulisan dikira daripada ruang kad (container query), jadi muat untuk 1–8 meja. */
+.tv-tt { container-type: size; justify-content:center; --W: min(100cqw - 1.6vw, 72cqh * 1.797); }
+.tv-tt > * { width: var(--W); margin: 0 auto; flex:none; }
+.tv-tt .tv-court { aspect-ratio: 274 / 152.5; min-height:0; grid-template-columns: 1fr auto 1fr; }
+.tv-tt .tv-tno { font-size: max(12px, calc(var(--W) * .04)); }
+.tv-tt .tv-sub { font-size: max(11px, calc(var(--W) * .03)); }
+.tv-tt .tv-next { font-size: max(11px, calc(var(--W) * .028)); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tv-court > i { width: max(4px, calc(var(--W) * .012)); justify-self:center; }
+.tv-court .cs-nm, .tv-court > div:not(.cs) { font-size: calc(var(--W) * .048); line-height:1.15; }
+.tv-court .cs-pt { font-size: calc(var(--W) * .17); line-height:1; }
+.tv-court .cs-sets { font-size: calc(var(--W) * .036); } .tv-court .cs-sets small { font-size: calc(var(--W) * .03); }
+.tv-court > .cs { align-self:stretch; display:grid; grid-template-rows: 1fr auto 1fr; align-items:center; justify-items:center; padding: 3% 4%; }
+.tv-court > .cs > .cs-sets { align-self:start; }
+.tv-court > div:not(.cs) { align-self:stretch; display:grid; grid-template-rows: 1fr 1fr; align-items:center; padding: 0 4%; }
