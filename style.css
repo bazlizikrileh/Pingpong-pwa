@@ -832,3 +832,9 @@ table.rp-mx td.sets span { white-space:nowrap; display:inline-block; margin-righ
 .share-tap { position:fixed; inset:0; z-index:9999; background:rgba(5,10,20,.72); display:flex; align-items:center; justify-content:center; padding:20px; }
 .share-box { background:var(--card); border-radius:18px; padding:16px; max-width:360px; width:100%; display:flex; flex-direction:column; gap:12px; }
 .share-box img { width:100%; max-height:50vh; object-fit:contain; border-radius:10px; background:#0002; }
+
+/* Paparan peserta (pratonton penganjur) */
+.as-bar { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom) + 92px); z-index:900; background:#1e293b; color:#fff; padding:6px 8px 6px 14px; border-radius:999px; font-size:12.5px; display:flex; gap:8px; align-items:center; box-shadow:0 6px 20px #0005; max-width:94vw; }
+.as-bar .pill-btn { padding:4px 10px; }
+body.tv .as-bar { display:none; }
+.as-bar { white-space:nowrap; }

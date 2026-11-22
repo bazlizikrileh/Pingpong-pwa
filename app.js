@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.47.0';
+const VERSION = '3.48.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -80,8 +80,21 @@ function pushSync() {
   }, 800);
 }
 const clubSubs = () => { try { return JSON.parse(ls.get('pingpong:clubSubs') || '[]'); } catch { return []; } };
-const canAdmin = t => store.canAdmin(t.id);
-const canEdit = t => store.canEdit(t.id);
+// 👁️ Paparan peserta: penganjur boleh melihat app seperti peserta/penonton (tiada kuasa urus dalam paparan).
+// Notifikasi & langganan penganjur kekal berjalan di belakang.
+const asPeserta = () => ls.get('pingpong:asPeserta') === '1';
+const canAdmin = t => !asPeserta() && store.canAdmin(t.id);
+const canEdit = t => !asPeserta() && store.canEdit(t.id);
+const isAdm = () => !asPeserta() && cloud.isAdmin();
+const canPreview = () => cloud.isAdmin() || cloud.isVerifier() || store.list().some(x => store.isCloud(x.id) && store.canAdmin(x.id));
+function setAsPeserta(on) { ls.set('pingpong:asPeserta', on ? '1' : null); toast(on ? '👁️ Paparan peserta dihidupkan' : 'Kembali ke paparan penganjur'); render(true); }
+function asBar() {
+  let b = document.getElementById('asBar');
+  if (!asPeserta()) { if (b) b.remove(); return; }
+  if (!b) { b = document.createElement('div'); b.id = 'asBar'; b.className = 'as-bar noprint'; document.body.appendChild(b); }
+  b.innerHTML = '👁️ <b>Paparan peserta</b> <button type="button" class="pill-btn small light">Keluar</button>';
+  b.querySelector('button').onclick = () => setAsPeserta(false);
+}
 const isHidden = t => t.hidden ?? !!t.test;
 // Pertandingan ujian: ditanda ujian, salinan di telefon ini, atau nama mengandungi ujian/test/testing/cubaan/demo/latihan.
 // Penganjur boleh tetapkan sendiri di Tetapan (t.kind = 'test' / 'real') — pilihan itu sentiasa diutamakan.
@@ -261,6 +274,7 @@ let _cur = null, _back = 'keputusan';
 const current = () => (_cur ? load(_cur) : null);
 
 function render(keep = false) {
+  asBar();
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   const y = window.scrollY;
   if (!keep) window.scrollTo(0, 0);
@@ -452,7 +466,7 @@ function playBracketDraw(t, b) {
 // ---------- Laman utama ----------
 let _homeClub = '', _drwKeep = false;
 function viewHome() {
-  const all = store.list().map(E.migrate).filter(t => store.isLocal(t.id) || store.canAdmin(t.id) || !isHidden(t));
+  const all = store.list().map(E.migrate).filter(t => (!asPeserta() && store.isLocal(t.id)) || canAdmin(t) || !isHidden(t));
   const clubs = [...new Map(all.filter(t => t.clubId && CLUBS[t.clubId]).map(t => [t.clubId, CLUBS[t.clubId].short])).entries()];
   if (_homeClub && !clubs.some(([k]) => k === _homeClub)) _homeClub = '';
   const list = all.filter(t => !_homeClub || t.clubId === _homeClub);
@@ -474,8 +488,8 @@ function viewHome() {
       t.regCond ? `<span class="tg">${esc(condShort(t.regCond))}</span>` : '',
       store.isCloud(t.id) && isHidden(t) ? '<span class="tg mute">🙈 Tersembunyi</span>' : '',
       store.isLocal(t.id) ? '<span class="tg mute">📱 Peranti ini</span>' : '',
-      cloud.isAdmin() ? `<span class="tg mute">👤 ${esc((cloud.managerOf(t.id) || {}).name || (t.createdBy ? t.createdBy.name : 'pencipta tidak direkod'))}</span>` : '',
-      cloud.isAdmin() && store.isCloud(t.id) && !canAdmin(t) ? '<span class="tg mute">👁️ Lihat sahaja</span>' : '',
+      isAdm() ? `<span class="tg mute">👤 ${esc((cloud.managerOf(t.id) || {}).name || (t.createdBy ? t.createdBy.name : 'pencipta tidak direkod'))}</span>` : '',
+      isAdm() && store.isCloud(t.id) && !canAdmin(t) ? '<span class="tg mute">👁️ Lihat sahaja</span>' : '',
     ].join('');
     return `<div class="hc">
       <a class="hc-thumb" href="#/t/${t.id}">${own ? `<img src="${own}" alt="">` : `<span class="hc-logo">${c.thumb || c.logos[0] ? `<img src="${esc(c.thumb || c.logos[0])}" alt="">` : '🏓'}</span>`}</a>
@@ -485,14 +499,14 @@ function viewHome() {
         <div class="hc-meta">${esc(c.short || '—')} · ${E.isTeam(t) ? esc(E.teamWord(t)) : ENTRY_SHORT[t.entryMode]}${venue ? ' · ' + esc(venue) : ''}</div>
         <div class="hc-tags">${tags}</div>
         <div class="hc-act">${regLive(t) ? `<a class="pill-btn orange small" href="#/daftar/${t.id}"><span class="dot"></span>Daftar →</a>` : ''}<a class="pill-btn light small" href="#/t/${t.id}">Lihat</a>
-          ${store.isLocal(t.id) && cloud.isAdmin() ? `<button class="pill-btn small light" data-up="${t.id}">☁️ Pindah ke awan</button>` : ''}
-          ${isTestT(t) && store.canAdmin(t.id) ? `<button class="pill-btn small no" data-tdel="${t.id}">🗑 Padam</button>` : ''}</div>
+          ${store.isLocal(t.id) && isAdm() ? `<button class="pill-btn small light" data-up="${t.id}">☁️ Pindah ke awan</button>` : ''}
+          ${isTestT(t) && canAdmin(t) ? `<button class="pill-btn small no" data-tdel="${t.id}">🗑 Padam</button>` : ''}</div>
       </div></div>`;
   };
   $app.innerHTML = `
     ${section('Pingpong Portal', 'Pertandingan')}
     <p class="muted small" style="margin-top:-6px">${cloud.state.failed ? '📴 Tidak dapat menyambung ke awan. Hanya data dalam peranti ini dipaparkan.' : cloud.state.tournaments ? (cloud.state.offline ? '📴 Luar talian — memaparkan salinan terakhir' : '☁️ Disambung ke awan') : '⏳ Menyambung ke awan…'}</p>
-    ${cloud.isAdmin() || cloud.state.failed || !cloud.state.ready ? `<div class="row" style="margin-bottom:14px"><a class="pill-btn orange" href="#/baru"><span class="dot"></span>Pertandingan baharu</a></div>` : ''}
+    ${isAdm() || cloud.state.failed || !cloud.state.ready ? `<div class="row" style="margin-bottom:14px"><a class="pill-btn orange" href="#/baru"><span class="dot"></span>Pertandingan baharu</a></div>` : ''}
     ${clubs.length > 1 ? `<div class="hc-chips"><button class="chip ${!_homeClub ? 'on' : ''}" data-hclub="">Semua kelab</button>${clubs.map(([k, n]) => `<button class="chip ${_homeClub === k ? 'on' : ''}" data-hclub="${k}">${esc(n)}</button>`).join('')}</div>` : ''}
     ${(_homeClub || clubs.length === 1) && store.isCloud && (_homeClub || clubs[0][0]) !== 'sendiri' ? (() => { const k = _homeClub || clubs[0][0], on = subs.includes(k) && notifOn(); return `<div class="hc-sub"><span>${on ? '🔔' : '🔕'} ${on ? 'Anda akan dimaklumkan bila' : 'Dapatkan notifikasi bila'} <b>${esc(CLUBS[k].short)}</b> membuka pendaftaran</span><button class="pill-btn small ${on ? 'light' : 'brand'}" data-csub="${k}">${on ? 'Berhenti' : 'Langgan'}</button></div>`; })() : ''}
     ${mine.length ? `<div class="section-title">📝 Pertandingan saya</div><div class="my-list">${mine.map(t => `<a class="my-item" href="#/daftar/${t.id}"><b>${esc(t.name)}</b><span>${esc(fmtDate(t.date) || '')} · Lihat pendaftaran →</span></a>`).join('')}</div>` : ''}
@@ -685,17 +699,17 @@ function viewNew() {
   t.clubId = ls.get('pingpong:lastClub') ?? 'ksas';
   t.waGroup = (CLUBS[t.clubId] || {}).waGroup || '';
   $app.innerHTML = `${section('Pertandingan', 'Cipta baharu')}
-    <p class="notice small">${cloud.isAdmin() ? '☁️ Pertandingan ini akan disimpan di awan dan boleh dilihat semua orang.' : '📱 Anda belum log masuk sebagai admin, jadi pertandingan ini disimpan dalam peranti ini sahaja (sesuai untuk ujian). Ia boleh dipindah ke awan kemudian.'}</p>
-    <form class="card" id="f">${cloud.isAdmin() ? `<label class="test-chk"><input type="checkbox" id="isTest"> <span>🧪 <b>Pertandingan ujian</b><br><small class="muted">Disimpan di telefon ini sahaja, tidak dikongsi. Sesuai untuk mencuba tetapan, undian dan aliran skor.</small></span></label>` : ''}${settingsForm(t, false)}
+    <p class="notice small">${isAdm() ? '☁️ Pertandingan ini akan disimpan di awan dan boleh dilihat semua orang.' : '📱 Anda belum log masuk sebagai admin, jadi pertandingan ini disimpan dalam peranti ini sahaja (sesuai untuk ujian). Ia boleh dipindah ke awan kemudian.'}</p>
+    <form class="card" id="f">${isAdm() ? `<label class="test-chk"><input type="checkbox" id="isTest"> <span>🧪 <b>Pertandingan ujian</b><br><small class="muted">Disimpan di telefon ini sahaja, tidak dikongsi. Sesuai untuk mencuba tetapan, undian dan aliran skor.</small></span></label>` : ''}${settingsForm(t, false)}
       <div style="margin-top:18px" class="row"><button class="pill-btn orange"><span class="dot"></span>Seterusnya: peserta</button> <a href="#/" class="pill-btn light">Batal</a></div>
     </form>`;
   const f = document.getElementById('f');
   if (f) wireForm(f);
   if (f) f.onsubmit = async e => {
     e.preventDefault(); readSettings(f, t); await readLogo(f, t);
-    const test = !!(document.getElementById('isTest') || {}).checked || !cloud.isAdmin();
+    const test = !!(document.getElementById('isTest') || {}).checked || !isAdm();
     if (test) { t.test = true; if (!/ujian/i.test(t.name)) t.name += ' (Ujian)'; }
-    save(t, { forceCloud: cloud.isAdmin() && !test });
+    save(t, { forceCloud: isAdm() && !test });
     ls.set('pingpong:lastClub', t.clubId);
     location.hash = `#/t/${t.id}/tetapan`;
   };
@@ -805,7 +819,7 @@ function viewSetupCore(t, part = 'tetapan') {
       <div class="row" style="gap:6px;flex-wrap:wrap"><button type="button" class="pill-btn orange small" id="pinWa"><span class="dot"></span>💬 Kongsi ke group WhatsApp</button><button type="button" class="pill-btn light small" id="pinCopy">📋 Salin mesej</button><button type="button" class="pill-btn light small" id="pinPrev">👁️ Lihat mesej</button></div>
       <p class="muted small" style="margin:6px 0 0">Mesej mengandungi pautan portal, cara pilih 👤 Saya untuk tahu status (bermain / pengadil / bersedia), notifikasi dan cara jaga skor dengan PIN.</p></div>
       <div class="card"><label class="test-chk" style="margin:0"><input type="checkbox" id="hideChk" ${isHidden(t) ? 'checked' : ''}> <span>🙈 <b>Sembunyikan dari senarai awam</b><br><small class="muted">Peserta tidak nampak di laman utama, tetapi pautan terus masih boleh dibuka.</small></span></label></div>`
-      : `<div class="notice">📱 Pertandingan ini disimpan dalam peranti ini sahaja. ${cloud.isAdmin() ? '<button class="pill-btn small brand" id="upNow">☁️ Pindah ke awan</button>' : 'Log masuk sebagai admin untuk memindahkannya ke awan supaya semua orang boleh melihat dan menghantar skor.'}</div><br>`}
+      : `<div class="notice">📱 Pertandingan ini disimpan dalam peranti ini sahaja. ${isAdm() ? '<button class="pill-btn small brand" id="upNow">☁️ Pindah ke awan</button>' : 'Log masuk sebagai admin untuk memindahkannya ke awan supaya semua orang boleh melihat dan menghantar skor.'}</div><br>`}
     ${canAdmin(t) ? `<div class="card owner-card"><div class="section-title" style="margin-top:0">👤 Rekod pentadbir</div>
       <p class="small" style="margin:0">Dicipta oleh: <b>${esc(t.createdBy ? t.createdBy.name : 'tidak direkod')}</b>${t.createdBy && t.createdBy.at ? ` · ${esc(new Date(t.createdBy.at).toLocaleString('ms-MY', { dateStyle: 'medium', timeStyle: 'short' }))}` : ''}</p>
       ${t.lastEdit ? `<p class="small" style="margin:4px 0 0">Kemas kini terakhir: <b>${esc(t.lastEdit.name)}</b> · ${esc(new Date(t.lastEdit.at).toLocaleString('ms-MY', { dateStyle: 'medium', timeStyle: 'short' }))}</p>` : ''}
@@ -813,8 +827,8 @@ function viewSetupCore(t, part = 'tetapan') {
       ${store.isCloud(t.id) ? `<p class="small" style="margin:8px 0 0">Diurus oleh: <b>${esc((cloud.managerOf(t.id) || {}).name || (cloud.managerOf(t.id) ? cloud.managerOf(t.id).email.split('@')[0] : 'Pemilik sahaja'))}</b></p>` : ''}
       ${store.isCloud(t.id) && cloud.state.role === 'owner' ? `<label style="margin-top:8px">Serahkan pengurusan kepada admin</label><select id="mgrSel"><option value="">— memuatkan senarai admin… —</option></select>
         <p class="muted small" style="margin:4px 0 0">Hanya admin yang mengurus (dan anda sebagai pemilik) boleh mengubah pertandingan ini. Admin lain boleh melihat sahaja.</p>` : ''}</div>` : ''}
-    ${store.isCloud(t.id) && cloud.isMainManager(t.id) ? coAdminCard(t) : store.isCloud(t.id) && canAdmin(t) && !cloud.isAdmin() ? '<div class="notice small">👥 Anda <b>admin bersama</b> untuk pertandingan ini.</div>' : ''}
-    ${store.isCloud(t.id) && cloud.isAdmin() && !canAdmin(t) ? `<div class="notice">👁️ <b>Lihat sahaja.</b> Pertandingan ini diurus oleh ${esc((cloud.managerOf(t.id) || {}).name || 'admin lain')}. Hanya pengurusnya dan pemilik boleh membuat perubahan.</div>` : ''}
+    ${store.isCloud(t.id) && cloud.isMainManager(t.id) ? coAdminCard(t) : store.isCloud(t.id) && canAdmin(t) && !isAdm() ? '<div class="notice small">👥 Anda <b>admin bersama</b> untuk pertandingan ini.</div>' : ''}
+    ${store.isCloud(t.id) && isAdm() && !canAdmin(t) ? `<div class="notice">👁️ <b>Lihat sahaja.</b> Pertandingan ini diurus oleh ${esc((cloud.managerOf(t.id) || {}).name || 'admin lain')}. Hanya pengurusnya dan pemilik boleh membuat perubahan.</div>` : ''}
     ${extrasCard(t)}
     ${testTools(t)}
     <div class="card noprint"><button class="pill-btn danger small" id="del">Padam pertandingan</button></div>`;
@@ -3356,6 +3370,7 @@ function showAccount() {
     ${profileCard(true)}
     ${signed ? `<p>Log masuk sebagai <b>${esc(u.email)}</b><br><span class="role-chip">${ROLE[cloud.state.role] || (profile().name ? 'Peserta' : 'Penonton')}</span></p>
       ${!cloud.state.role ? (profile().name ? '' : '<p class="muted small">Akaun peserta. Penganjur: minta admin utama menambah e-mel anda di halaman Pentadbir.</p>') : ''}
+      ${canPreview() ? `<div class="row" style="justify-content:space-between;margin:6px 0 10px;gap:8px"><span class="small">👁️ <b>Paparan peserta</b><br><span class="muted">Lihat app seperti peserta/penonton</span></span><button type="button" class="pill-btn small ${asPeserta() ? 'brand' : 'light'}" id="asP">${asPeserta() ? 'Keluar paparan' : 'Hidupkan'}</button></div>` : ''}
       <div class="btn-stack">${cloud.state.role === 'owner' ? '<a class="pill-btn brand" href="#/pentadbir" id="goAdm"><span class="dot"></span>Pentadbir &amp; peranan</a>' : ''}
       <button class="pill-btn light" id="out">Log keluar</button></div>`
     : `<p class="muted">Penonton dan pemain tidak perlu log masuk. Pengadil menghantar skor dengan PIN acara pada kad perlawanan.</p>
@@ -3374,6 +3389,8 @@ function showAccount() {
   const ntf = document.getElementById('ntf');
   if (ntf) ntf.onclick = async () => { await askNotif(); showAccount(); };
   wireProfileCard(md);
+  const asP = document.getElementById('asP');
+  if (asP) asP.onclick = () => { setAsPeserta(!asPeserta()); md.hidden = true; };
   const nt = document.getElementById('ntfTest');
   if (nt) nt.onclick = async () => {
     const out = document.getElementById('ntfRes'), say = x => (out.innerHTML = x);
