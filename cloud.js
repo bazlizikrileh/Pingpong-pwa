@@ -54,7 +54,10 @@ export const isVerifier = () => isAdmin() || state.role === 'verifier';
 let unsubT = null, unsubRole = null;
 const unsubSub = {};
 
-export async function init() {
+// Satu permulaan sahaja walaupun dipanggil serentak (cth. senarai kelab + log masuk) — elak Firebase diinisialisasi dua kali
+let _initP = null;
+export function init() { return _initP || (_initP = init0()); }
+async function init0() {
   if (F || state.failed) return;
   try {
     F = await import('./vendor/firebase.js');
