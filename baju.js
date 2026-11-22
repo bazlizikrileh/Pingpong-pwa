@@ -64,7 +64,8 @@ function shell() {
       <p class="note">Pilihan yang ada: <b>Round neck</b>, <b>V neck</b>, <b>Polo</b> (button) dan <b>Premium Retro</b> (Polo V / Retro).</p>
     </details>
     <details style="margin-top:8px"><summary style="font-weight:600;cursor:pointer">📏 Carta saiz (inci)</summary>
-      <p class="note">Lebar = ketiak ke ketiak · Panjang = bahu ke bawah. Saiz budak untuk Round neck, Polo button &amp; V neck.</p>
+      <img src="baju/saiz.jpg" alt="Carta saiz baju" data-zoom="baju/saiz.jpg" style="width:100%;border-radius:12px;margin-top:8px;background:#fff;cursor:zoom-in">
+      <p class="note">Lebar = ketiak ke ketiak · Panjang = bahu ke bawah. Saiz budak untuk Round neck, Polo button &amp; V neck. Ketik gambar untuk besarkan.</p>
       <div class="row2" style="align-items:start;font-size:12px;gap:8px">
         <table><tr><th>Dewasa</th><th class="n">Lebar</th><th class="n">Panjang</th></tr>${ADULT.map(s => `<tr><td>${s[0]}</td><td class="n">${s[1]}"</td><td class="n">${s[2]}"</td></tr>`).join('')}</table>
         <table><tr><th>Budak</th><th class="n">Lebar</th><th class="n">Panjang</th></tr>${KIDS.map(s => `<tr><td>${s[0].slice(1)}</td><td class="n">${s[1]}"</td><td class="n">${s[2]}"</td></tr>`).join('')}</table>
@@ -84,12 +85,13 @@ function shell() {
         <button class="btn sm" id="copyAcc" style="margin-top:6px">📋 Salin no. akaun</button>
       </div>
     </div>
-    <p class="note">Ketik QR untuk besarkan / simpan. Selepas bayar, tekan <b>💰 Saya dah bayar</b> pada order anda dan hantar resit kepada Ahmad. Status jadi ✅ selepas disahkan.</p>
+    <p class="note">Ketik QR untuk besarkan / simpan. Selepas bayar, tekan <b>📎 Muat naik resit</b> pada order anda (atau <b>💰 Saya dah bayar</b> dan hantar resit kepada Ahmad). Status jadi ✅ selepas disahkan.</p>
   </section>
   <section class="card" id="admin" hidden></section>
   <section class="card" id="listCard"></section>`;
   $('#copyAcc').onclick = () => copy(ACC, 'No. akaun disalin');
-  $('#qr').onclick = () => { const z = $('#zoom'); z.innerHTML = '<img src="baju/qr-duitnow.jpg" alt="QR DuitNow">'; z.hidden = false; };
+  $('#qr').onclick = () => zoom('baju/qr-duitnow.jpg');
+  document.querySelectorAll('[data-zoom]').forEach(i => (i.onclick = () => zoom(i.dataset.zoom)));
   $('#zoom').onclick = () => ($('#zoom').hidden = true);
   renderForm();
 }
@@ -133,12 +135,13 @@ function renderLists() {
   if (mine.length) {
     m.innerHTML = `<h2>🧾 Order saya</h2><ul class="list">${mine.map(o => `
       <li><div class="who"><b>${esc(o.name)}</b> · ${desc(o)}${o.print ? ' · ' + esc(o.print) : ''} — <b>${rm(price(o))}</b>
-        <small class="st ${o.status}">${STATUS[o.status]}</small>
-        ${o.status === 'paid' ? '' : `<div class="acts">
+        <small class="st ${o.status}">${STATUS[o.status]}${o.rcpt ? ' · 📎 resit dihantar' : ''}</small>
+        ${o.status === 'paid' ? (o.rcpt ? `<div class="acts"><button class="btn sm" data-rview="${o.id}">📎 Lihat resit</button></div>` : '') : `<div class="acts">
+          <button class="btn sm${o.rcpt ? '' : ' ok'}" data-rup="${o.id}">📎 ${o.rcpt ? 'Tukar resit' : 'Muat naik resit'}</button>${o.rcpt ? `<button class="btn sm" data-rview="${o.id}">👁 Lihat</button>` : ''}
           ${o.status === 'unpaid' ? `<button class="btn sm ok" data-claim="${o.id}">💰 Saya dah bayar</button>` : `<button class="btn sm" data-unclaim="${o.id}">↩ Belum bayar</button>`}
           ${isOpen() ? `<button class="btn sm" data-edit="${o.id}">✏️ Ubah</button><button class="btn sm danger" data-del="${o.id}">🗑 Batal</button>` : ''}</div>`}
       </div></li>`).join('')}</ul>
-      <p class="note">Jumlah saya: <b>${rm(mine.reduce((s, o) => s + price(o), 0))}</b></p>`;
+      <p class="note">Jumlah saya: <b>${rm(mine.reduce((s, o) => s + price(o), 0))}</b>. Selepas bayar, muat naik gambar / screenshot resit — status terus jadi 💰 dan admin akan sahkan. Resit hanya boleh dilihat oleh anda dan admin.</p>`;
   }
   // Senarai awam
   const paid = orders.filter(o => o.status === 'paid').length, claimed = orders.filter(o => o.status === 'claimed').length;
@@ -150,9 +153,10 @@ function renderLists() {
     ${!loaded ? '<p class="muted">Memuatkan…</p>' : !shown.length ? '<p class="muted">Tiada order lagi.</p>' : `<ul class="list">${shown.map(o => `
       <li><span class="no">${orders.indexOf(o) + 1}.</span><div class="who"><b>${esc(o.name)}</b> · ${desc(o)}${o.print ? ' · ' + esc(o.print) : ''}
         ${owner ? `<small>${rm(price(o))}${o.note ? ' · ' + esc(o.note) : ''}</small><div class="acts">
+          ${o.rcpt ? `<button class="btn sm" data-rview="${o.id}">📎 Resit</button>` : ''}
           ${o.status === 'paid' ? `<button class="btn sm" data-set="${o.id}:unpaid">↩ Batal sah</button>` : `<button class="btn sm ok" data-set="${o.id}:paid">✅ Sah bayar</button>`}
           <button class="btn sm" data-edit="${o.id}">✏️</button><button class="btn sm danger" data-del="${o.id}">🗑</button></div>` : ''}
-      </div><span class="st ${o.status}">${STATUS[o.status]}</span></li>`).join('')}</ul>`}`;
+      </div><span class="st ${o.status}">${STATUS[o.status]}${o.rcpt && o.status !== 'paid' ? ' 📎' : ''}</span></li>`).join('')}</ul>`}`;
   renderAdmin();
   bindActs();
 }
@@ -212,6 +216,8 @@ function renderAdmin() {
 
 function bindActs() {
   document.querySelectorAll('[data-f]').forEach(b => (b.onclick = () => { filter = b.dataset.f; renderLists(); }));
+  document.querySelectorAll('[data-rup]').forEach(b => (b.onclick = () => pickReceipt(b.dataset.rup)));
+  document.querySelectorAll('[data-rview]').forEach(b => (b.onclick = () => viewReceipt(b.dataset.rview)));
   document.querySelectorAll('[data-claim]').forEach(b => (b.onclick = () => setStatus(b.dataset.claim, 'claimed')));
   document.querySelectorAll('[data-unclaim]').forEach(b => (b.onclick = () => setStatus(b.dataset.unclaim, 'unpaid')));
   document.querySelectorAll('[data-set]').forEach(b => (b.onclick = () => { const [id, s] = b.dataset.set.split(':'); setStatus(id, s); }));
@@ -221,8 +227,50 @@ function bindActs() {
   }));
   document.querySelectorAll('[data-del]').forEach(b => (b.onclick = async () => {
     const o = orders.find(x => x.id === b.dataset.del); if (!o || !confirm(`Batalkan order ${o.name} (${desc(o, ', ')})?`)) return;
-    try { await F.deleteDoc(F.doc(db, COL, o.id)); toast('Order dibatalkan'); if (editing === o.id) { editing = ''; renderForm(); } } catch (e) { fail(e); }
+    try { if (o.rcpt) await F.deleteDoc(F.doc(db, RCOL, o.id)).catch(() => {}); await F.deleteDoc(F.doc(db, COL, o.id)); toast('Order dibatalkan'); if (editing === o.id) { editing = ''; renderForm(); } } catch (e) { fail(e); }
   }));
+}
+
+// ---------- Resit bayaran ----------
+// bajuReceipts/{orderId}: { uid, img (JPEG dataURL dimampatkan, < ~700 KB), at } — dibaca oleh pemilik order & admin sahaja
+const RCOL = 'bajuReceipts';
+function zoom(src) { const z = $('#zoom'); z.innerHTML = ''; const i = new Image(); i.src = src; i.alt = 'Gambar'; z.append(i); z.hidden = false; }
+async function shrink(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
+    for (const [max, q] of [[1400, 0.72], [1100, 0.62], [900, 0.55], [700, 0.5]]) {
+      const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = Object.assign(document.createElement('canvas'), { width: Math.round(img.naturalWidth * k), height: Math.round(img.naturalHeight * k) });
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+      const d = c.toDataURL('image/jpeg', q);
+      if (d.length < 700000) return d;
+    }
+    throw new Error('besar');
+  } finally { URL.revokeObjectURL(url); }
+}
+function pickReceipt(id) {
+  const inp = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*' });
+  inp.onchange = async () => {
+    const f = inp.files && inp.files[0]; if (!f) return;
+    if (!f.type.startsWith('image/')) return toast('Sila pilih gambar / screenshot resit (bukan PDF)');
+    toast('Memuat naik resit…');
+    try {
+      const img = await shrink(f);
+      const o = orders.find(x => x.id === id);
+      await F.setDoc(F.doc(db, RCOL, id), { uid: o ? o.uid : auth.currentUser.uid, img, at: F.serverTimestamp() });
+      await F.setDoc(F.doc(db, COL, id), o && o.status === 'paid' ? { rcpt: true } : { rcpt: true, status: 'claimed' }, { merge: true });
+      toast('Resit dihantar 📎 — menunggu pengesahan admin');
+    } catch (e) { if (e && e.message === 'besar') toast('Gambar terlalu besar — cuba screenshot'); else fail(e); }
+  };
+  inp.click();
+}
+async function viewReceipt(id) {
+  try {
+    const d = await F.getDoc(F.doc(db, RCOL, id));
+    if (!d.exists()) return toast('Resit tidak dijumpai');
+    zoom(d.data().img);
+  } catch (e) { fail(e); }
 }
 
 // ---------- Tindakan ----------
