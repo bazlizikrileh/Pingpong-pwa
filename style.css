@@ -838,3 +838,10 @@ table.rp-mx td.sets span { white-space:nowrap; display:inline-block; margin-righ
 .as-bar .pill-btn { padding:4px 10px; }
 body.tv .as-bar { display:none; }
 .as-bar { white-space:nowrap; }
+
+/* Permohonan penganjur & kelab admin */
+.ar-clubs { display:flex; flex-wrap:wrap; gap:6px 12px; margin:6px 0; }
+.ar-ck { display:flex; align-items:center; gap:6px; font-size:13.5px; font-weight:500; }
+.ar-ck input { width:auto; margin:0; }
+.req-item { border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:8px; }
+.tg.warn { background:#fff3cd; color:#7a5200; padding:1px 6px; border-radius:6px; }

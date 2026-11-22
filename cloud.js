@@ -95,6 +95,7 @@ async function watchRole() {
   if (await sha256(u.email.toLowerCase()) === OWNER_HASH) { state.role = 'owner'; watchOwners(); emit('role'); return; }
   unsubRole = F.onSnapshot(F.doc(db, 'roles', u.email.toLowerCase()), d => {
     state.role = d.exists() ? (d.data().role || '') : '';
+    state.clubs = d.exists() && Array.isArray(d.data().clubs) ? d.data().clubs : null;   // kelab yang disahkan pemilik untuk admin
     watchOwners();
     emit('role');
   }, () => { state.role = ''; emit('role'); });
@@ -187,7 +188,24 @@ export async function setPin(tid, pin) { await init(); await F.setDoc(F.doc(db, 
 export function watchRoles(cb) {
   return F.onSnapshot(F.collection(db, 'roles'), snap => { const out = []; snap.forEach(d => out.push({ email: d.id, ...d.data() })); cb(out); }, () => cb([]));
 }
-export async function setRole(email, role, name = '') { await init(); await F.setDoc(F.doc(db, 'roles', email.trim().toLowerCase()), { role, name }); }
+export async function setRole(email, role, name = '', clubs) {
+  await init(); await F.setDoc(F.doc(db, 'roles', email.trim().toLowerCase()), { role, name, ...(Array.isArray(clubs) ? { clubs } : {}) });
+}
+export async function setRoleClubs(email, clubs) { await init(); await F.setDoc(F.doc(db, 'roles', email.trim().toLowerCase()), { clubs }, { merge: true }); }
+// Permohonan menjadi penganjur (admin): pemohon pilih kelab; pemilik luluskan/tolak di halaman Pentadbir
+export async function requestAdmin({ clubs, note, name }) {
+  await init(); const u = auth.currentUser; if (!u || u.isAnonymous || !u.email) throw new Error('Log masuk dahulu');
+  const email = u.email.toLowerCase();
+  await F.setDoc(F.doc(db, 'adminReq', email), { email, uid: u.uid, name: String(name || u.displayName || '').slice(0, 50), clubs: clubs.slice(0, 6), note: String(note || '').slice(0, 200), at: F.serverTimestamp() });
+}
+export async function myAdminReq() {
+  await init(); const u = auth.currentUser; if (!u || u.isAnonymous || !u.email) return null;
+  try { const d = await F.getDoc(F.doc(db, 'adminReq', u.email.toLowerCase())); return d.exists() ? d.data() : null; } catch { return null; }
+}
+export async function cancelAdminReq(email) { await init(); const u = auth.currentUser; await F.deleteDoc(F.doc(db, 'adminReq', (email || (u && u.email) || '').toLowerCase())); }
+export function watchAdminReqs(cb) {
+  return F.onSnapshot(F.collection(db, 'adminReq'), snap => { const out = []; snap.forEach(d => out.push({ email: d.id, ...d.data() })); cb(out); }, () => cb([]));
+}
 export async function removeRole(email) { await init(); await F.deleteDoc(F.doc(db, 'roles', email.trim().toLowerCase())); }
 
 // ---------- Penghantaran skor ----------

@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.49.0';
+const VERSION = '3.50.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -76,6 +76,7 @@ function pushSync() {
     }
     clubSubs().forEach(c => T.unshift('club:' + c));
     T.unshift('me:dev:' + devId());
+    if (cloud.state.role === 'owner') T.unshift('adm:owner');   // permohonan penganjur baharu
     try { await PUSH.syncTopics(T.slice(0, 30), !_pushForced); _pushForced = true; } catch (e) { console.warn('push', e); }
   }, 800);
 }
@@ -88,9 +89,13 @@ const canEdit = t => !asPeserta() && store.canEdit(t.id);
 const isAdm = () => !asPeserta() && cloud.isAdmin();
 // Pilihan kelab semasa cipta/ubah pertandingan. Admin (bukan pemilik) hanya nampak kelab pertandingan yang diurusnya
 // (+ Persendirian & Lain-lain); admin baharu tanpa pertandingan masih nampak semua.
+const CLUB_OPTS = { ksasall: 'KSAS', ksas: 'KSAS Kumpulan Rimau', kroni: 'Kroni Shell KSAS', kskpkpjb: 'KSKPKPJB', sendiri: '🙋 Persendirian (main santai)', lain: 'Lain-lain' };
+const clubLabel = k => (CLUB_OPTS[k] || k).replace('🙋 ', '').replace(' (main santai)', '');
 function clubChoices(t) {
-  const ALL = { ksasall: 'KSAS', ksas: 'KSAS Kumpulan Rimau', kroni: 'Kroni Shell KSAS', kskpkpjb: 'KSKPKPJB', sendiri: '🙋 Persendirian (main santai)', lain: 'Lain-lain', '': '— Tiada —' };
+  const ALL = { ...CLUB_OPTS, '': '— Tiada —' };
   if (cloud.state.role !== 'admin') return ALL;
+  // kelab yang disahkan pemilik (roles.clubs) — wajib diikut
+  if (Array.isArray(cloud.state.clubs) && cloud.state.clubs.length) return Object.fromEntries(Object.entries(CLUB_OPTS).filter(([k]) => cloud.state.clubs.includes(k)));
   const mine = new Set(store.list().filter(x => store.isCloud(x.id) && store.canAdmin(x.id) && x.clubId).map(x => x.clubId));
   if (t && t.clubId) mine.add(t.clubId);
   const own = [...mine].filter(k => CLUBS[k] && k !== 'sendiri');
@@ -3385,6 +3390,7 @@ function showAccount() {
     ${profileCard(true)}
     ${signed ? `<p>Log masuk sebagai <b>${esc(u.email)}</b><br><span class="role-chip">${ROLE[cloud.state.role] || (profile().name ? 'Peserta' : 'Penonton')}</span></p>
       ${!cloud.state.role ? (profile().name ? '' : '<p class="muted small">Akaun peserta. Penganjur: minta admin utama menambah e-mel anda di halaman Pentadbir.</p>') : ''}
+ ${!cloud.state.role && u.email && (u.verified || !u.pass) ? '<div id="admReq" class="adm-req"></div>' : ''}
       ${canPreview() ? `<div class="row" style="justify-content:space-between;margin:6px 0 10px;gap:8px"><span class="small">👁️ <b>Paparan peserta</b><br><span class="muted">Lihat app seperti peserta/penonton</span></span><button type="button" class="pill-btn small ${asPeserta() ? 'brand' : 'light'}" id="asP">${asPeserta() ? 'Keluar paparan' : 'Hidupkan'}</button></div>` : ''}
       <div class="btn-stack">${cloud.state.role === 'owner' ? '<a class="pill-btn brand" href="#/pentadbir" id="goAdm"><span class="dot"></span>Pentadbir &amp; peranan</a>' : ''}
       <button class="pill-btn light" id="out">Log keluar</button></div>`
@@ -3404,6 +3410,7 @@ function showAccount() {
   const ntf = document.getElementById('ntf');
   if (ntf) ntf.onclick = async () => { await askNotif(); showAccount(); };
   wireProfileCard(md);
+  if (document.getElementById('admReq')) admReqCard(document.getElementById('admReq'));
   const asP = document.getElementById('asP');
   if (asP) asP.onclick = () => { setAsPeserta(!asPeserta()); md.hidden = true; };
   const nt = document.getElementById('ntfTest');
@@ -3512,6 +3519,33 @@ function wireCoAdmin(t) {
   }));
 }
 let _rolesUnsub = null;
+// ---------- Permohonan menjadi penganjur ----------
+async function admReqCard(el) {
+  const r = await cloud.myAdminReq();
+  if (r) {
+    el.innerHTML = `<div class="notice small">⏳ <b>Permohonan penganjur dihantar</b><br>Kelab: ${(r.clubs || []).map(k => esc(clubLabel(k))).join(', ')}. Menunggu pengesahan admin utama.
+      <div class="row" style="margin-top:6px"><button type="button" class="pill-btn light small" id="arCancel">Batal permohonan</button></div></div>`;
+    document.getElementById('arCancel').onclick = async () => { await cloud.cancelAdminReq(); toast('Permohonan dibatalkan'); admReqCard(el); };
+    return;
+  }
+  el.innerHTML = `<details class="fold" style="margin:6px 0 10px"><summary>🛡️ Mohon jadi penganjur</summary>
+    <p class="muted small" style="margin:6px 0">Pilih kelab yang anda wakili. Admin utama akan mengesahkan sebelum anda boleh mencipta pertandingan.</p>
+    <div class="ar-clubs">${Object.entries(CLUB_OPTS).map(([k, v]) => `<label class="ar-ck"><input type="checkbox" value="${k}"> ${esc(v)}</label>`).join('')}</div>
+    <label>Catatan <small class="muted">(pilihan)</small></label><input id="arNote" maxlength="200" placeholder="cth. AJK sukan KSKPKPJB">
+    <div class="row" style="margin-top:8px"><button type="button" class="pill-btn brand small" id="arSend">Hantar permohonan</button></div></details>`;
+  document.getElementById('arSend').onclick = async () => {
+    const clubs = [...el.querySelectorAll('.ar-ck input:checked')].map(x => x.value);
+    if (!clubs.length) return toast('Pilih sekurang-kurangnya satu kelab');
+    const name = (cloud.state.user && cloud.state.user.name) || profile().name || '';
+    try {
+      await cloud.requestAdmin({ clubs, note: document.getElementById('arNote').value.trim(), name });
+      PUSH.send(['adm:owner'], '🛡️ Permohonan penganjur', `${name || cloud.state.user.email} · ${clubs.map(clubLabel).join(', ')}`, '#/pentadbir', 'admreq');
+      toast('Permohonan dihantar'); admReqCard(el);
+    } catch (e) { toast('Gagal: ' + (e.code || e.message), 4000); }
+  };
+}
+const clubTicks = (sel, name) => `<div class="ar-clubs">${Object.entries(CLUB_OPTS).map(([k, v]) => `<label class="ar-ck"><input type="checkbox" name="${name}" value="${k}" ${sel.includes(k) ? 'checked' : ''}> ${esc(v)}</label>`).join('')}</div>`;
+let _reqUnsub = null;
 function viewAdmin() {
   if (cloud.state.role !== 'owner') { $app.innerHTML = `${section('Pentadbir', 'Peranan')}<div class="card"><p class="muted">Hanya admin utama (${esc(cloud.ownerEmail())}) boleh membuka halaman ini.</p></div>`; return; }
   $app.innerHTML = `${section('Pentadbir', 'Peranan')}
@@ -3519,20 +3553,48 @@ function viewAdmin() {
       <div class="grid2"><div><label>E-mel <small class="muted">(Google, Yahoo, Outlook…)</small></label><input id="rEmail" type="email" placeholder="nama@gmail.com / nama@yahoo.com"></div>
       <div><label>Nama</label><input id="rName" placeholder="cth. Hatta"></div>
       <div><label>Peranan</label><select id="rRole">${opt({ verifier: 'Pengesah skor', admin: 'Admin pertandingan' }, 'verifier')}</select></div></div>
+      <div id="rClubs" hidden><label>Kelab admin ini</label>${clubTicks([], 'rnew')}</div>
       <button class="pill-btn brand" id="rAdd" style="margin-top:12px"><span class="dot"></span>Tambah / kemas kini</button></div>
+    <div class="card" id="reqCard" hidden><div class="section-title" style="margin-top:0">⏳ Permohonan penganjur</div><div id="reqList"></div></div>
     <div class="card"><div class="section-title" style="margin-top:0">Senarai</div><div id="rList" class="muted">Memuatkan…</div></div>`;
+  if (_reqUnsub) _reqUnsub();
+  _reqUnsub = cloud.watchAdminReqs(list => {
+    const card = document.getElementById('reqCard'), el = document.getElementById('reqList'); if (!el) return;
+    card.hidden = !list.length;
+    el.innerHTML = list.map((r, i) => `<div class="req-item"><b>${esc(r.name || r.email)}</b> <span class="muted small">${esc(r.email)}</span>
+      ${r.note ? `<div class="small"><i>${esc(r.note)}</i></div>` : ''}
+      <div class="small muted" style="margin-top:4px">Kelab (boleh diubah sebelum lulus):</div>${clubTicks(r.clubs || [], 'rq' + i)}
+      <div class="row" style="gap:6px;margin-top:6px"><button type="button" class="pill-btn brand small" data-rok="${i}">✅ Luluskan sebagai admin</button><button type="button" class="pill-btn no small" data-rno="${i}">✕ Tolak</button></div></div>`).join('');
+    el.querySelectorAll('[data-rok]').forEach(b => (b.onclick = async () => {
+      const r = list[+b.dataset.rok], clubs = [...el.querySelectorAll(`input[name="rq${b.dataset.rok}"]:checked`)].map(x => x.value);
+      if (!clubs.length) return toast('Pilih sekurang-kurangnya satu kelab');
+      try { await cloud.setRole(r.email, 'admin', r.name || '', clubs); await cloud.cancelAdminReq(r.email); toast(`${r.name || r.email} diluluskan`); } catch (e) { toast('Gagal: ' + (e.code || e.message), 4000); }
+    }));
+    el.querySelectorAll('[data-rno]').forEach(b => (b.onclick = async () => { const r = list[+b.dataset.rno]; if (confirm(`Tolak permohonan ${r.name || r.email}?`)) { await cloud.cancelAdminReq(r.email); toast('Ditolak'); } }));
+  });
   if (_rolesUnsub) _rolesUnsub();
   _rolesUnsub = cloud.watchRoles(list => {
     const el = document.getElementById('rList'); if (!el) return;
     el.innerHTML = `<div class="list-item"><span><b>${esc(cloud.ownerEmail())}</b><br><span class="muted small">Pemilik</span></span><span class="role-chip">Admin utama</span></div>` +
-      list.map(r => `<div class="list-item"><span><b>${esc(r.name || r.email)}</b><br><span class="muted small">${esc(r.email)}</span></span>
-      <span class="row"><span class="role-chip">${ROLE[r.role] || r.role}</span><button class="pill-btn no small" data-rm="${esc(r.email)}">Buang</button></span></div>`).join('');
+      list.map((r, i) => `<div class="list-item" style="flex-wrap:wrap"><span><b>${esc(r.name || r.email)}</b><br><span class="muted small">${esc(r.email)}</span>
+        ${r.role === 'admin' ? `<br><span class="small">${Array.isArray(r.clubs) && r.clubs.length ? '🏷️ ' + r.clubs.map(k => esc(clubLabel(k))).join(', ') : '<span class="tg warn">⚠️ kelab belum ditetapkan</span>'}</span>` : ''}</span>
+      <span class="row"><span class="role-chip">${ROLE[r.role] || r.role}</span>${r.role === 'admin' ? `<button class="pill-btn light small" data-rc="${i}">🏷️ Kelab</button>` : ''}<button class="pill-btn no small" data-rm="${esc(r.email)}">Buang</button></span>
+      ${r.role === 'admin' ? `<div class="rc-edit" id="rc${i}" hidden style="width:100%">${clubTicks(r.clubs || [], 'rc' + i)}<button class="pill-btn brand small" data-rcs="${i}" style="margin-top:6px">Simpan kelab</button></div>` : ''}</div>`).join('');
+    el.querySelectorAll('[data-rc]').forEach(b => (b.onclick = () => { const d = document.getElementById('rc' + b.dataset.rc); d.hidden = !d.hidden; }));
+    el.querySelectorAll('[data-rcs]').forEach(b => (b.onclick = async () => {
+      const r = list[+b.dataset.rcs], clubs = [...el.querySelectorAll(`input[name="rc${b.dataset.rcs}"]:checked`)].map(x => x.value);
+      if (!clubs.length) return toast('Pilih sekurang-kurangnya satu kelab');
+      try { await cloud.setRoleClubs(r.email, clubs); toast('Kelab dikemas kini'); } catch (e) { toast('Gagal: ' + (e.code || e.message), 4000); }
+    }));
     el.querySelectorAll('[data-rm]').forEach(b => (b.onclick = async () => { if (confirm(`Buang ${b.dataset.rm}?`)) await cloud.removeRole(b.dataset.rm); }));
   });
+  const rr = document.getElementById('rRole'); rr.onchange = () => (document.getElementById('rClubs').hidden = rr.value !== 'admin');
   document.getElementById('rAdd').onclick = async () => {
     const em = document.getElementById('rEmail').value.trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) return toast('E-mel tidak sah');
-    try { await cloud.setRole(em, document.getElementById('rRole').value, document.getElementById('rName').value.trim()); toast('Disimpan'); document.getElementById('rEmail').value = ''; document.getElementById('rName').value = ''; }
+    const rl = document.getElementById('rRole').value, cl = [...document.querySelectorAll('input[name="rnew"]:checked')].map(x => x.value);
+    if (rl === 'admin' && !cl.length) return toast('Pilih kelab untuk admin ini');
+    try { await cloud.setRole(em, rl, document.getElementById('rName').value.trim(), rl === 'admin' ? cl : undefined); toast('Disimpan'); document.getElementById('rEmail').value = ''; document.getElementById('rName').value = ''; }
     catch (err) { toast('Gagal: ' + (err.code || err.message), 4000); }
   };
 }
