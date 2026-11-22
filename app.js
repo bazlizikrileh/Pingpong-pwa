@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.48.0';
+const VERSION = '3.48.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2172,16 +2172,18 @@ const GUIDE = {
   },
   kalahmati: { penonton: ['Carta cermin terisi sebaik kedudukan kumpulan pasti, jadi kalah mati boleh bermula lebih awal.'], penganjur: ['Carta terisi sendiri. Bila tamat: 🏆 Kongsi poster juara.'] },
   pool: { penonton: ['Pool kalah untuk peserta yang tidak layak ke kalah mati utama.'] },
-  laporan: { penonton: ['Tekan <b>🖨️ Cetak / Simpan PDF</b>, kemudian pilih <b>Simpan sebagai PDF</b>.'] },
+  laporan: { penonton: ['Laporan dibuka selepas semua perlawanan tamat. Laporan rasmi (PDF), video ringkasan dan ringkasan WhatsApp dikongsi oleh penganjur.'], penganjur: ['Tekan <b>🖨️ Cetak / Simpan PDF</b>, kemudian pilih <b>Simpan sebagai PDF</b>.', '🎬 Video ringkasan dan 💬 ringkasan WhatsApp hanya untuk penganjur & co-admin.'] },
 };
 const roleOf = t => canAdmin(t) ? 'penganjur' : canEdit(t) ? 'pengesah' : ls.get('pingpong:scorer:' + t.id) ? 'pengadil' : (ls.get(meKey(t)) || ls.get('pingpong:regd:' + t.id)) ? 'peserta' : 'penonton';
 function guideCard(t, page) {
   const g = GUIDE[page]; if (!g) return;
   const open = ls.get('pingpong:guide') === '1';
-  let role = ls.get('pingpong:guideRole:' + t.id) || roleOf(t); if (!ROLES[role]) role = 'penonton';
+  // Peranan yang boleh dipilih ikut kuasa sebenar (paparan peserta: penonton/peserta/pengadil sahaja)
+  const allow = canAdmin(t) ? Object.keys(ROLES) : canEdit(t) ? ['penonton', 'peserta', 'pengadil', 'pengesah'] : ['penonton', 'peserta', 'pengadil'];
+  let role = ls.get('pingpong:guideRole:' + t.id); if (!allow.includes(role)) role = roleOf(t); if (!allow.includes(role)) role = 'penonton';
   const items = g[role] || g.penonton || [];
   const html = `<details class="card fold guide noprint" ${open ? 'open' : ''}><summary>📖 Panduan · ${ROLES[role]}</summary>
-    <div class="g-roles">${Object.entries(ROLES).map(([k, v]) => `<button type="button" class="chip ${k === role ? 'on' : ''}" data-grole="${k}">${v}</button>`).join('')}</div>
+    <div class="g-roles">${Object.entries(ROLES).filter(([k]) => allow.includes(k)).map(([k, v]) => `<button type="button" class="chip ${k === role ? 'on' : ''}" data-grole="${k}">${v}</button>`).join('')}</div>
     <ul class="g-list">${items.map(x => `<li>${x}</li>`).join('')}</ul>
     ${!g[role] && role !== 'penonton' ? '<p class="muted small" style="margin:4px 0 0">Tiada tindakan khas untuk peranan ini di halaman ini.</p>' : ''}</details>`;
   const old = $app.querySelector('details.guide'); if (old) old.remove();
