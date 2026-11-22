@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.48.1';
+const VERSION = '3.49.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -86,6 +86,17 @@ const asPeserta = () => ls.get('pingpong:asPeserta') === '1';
 const canAdmin = t => !asPeserta() && store.canAdmin(t.id);
 const canEdit = t => !asPeserta() && store.canEdit(t.id);
 const isAdm = () => !asPeserta() && cloud.isAdmin();
+// Pilihan kelab semasa cipta/ubah pertandingan. Admin (bukan pemilik) hanya nampak kelab pertandingan yang diurusnya
+// (+ Persendirian & Lain-lain); admin baharu tanpa pertandingan masih nampak semua.
+function clubChoices(t) {
+  const ALL = { ksasall: 'KSAS', ksas: 'KSAS Kumpulan Rimau', kroni: 'Kroni Shell KSAS', kskpkpjb: 'KSKPKPJB', sendiri: '🙋 Persendirian (main santai)', lain: 'Lain-lain', '': '— Tiada —' };
+  if (cloud.state.role !== 'admin') return ALL;
+  const mine = new Set(store.list().filter(x => store.isCloud(x.id) && store.canAdmin(x.id) && x.clubId).map(x => x.clubId));
+  if (t && t.clubId) mine.add(t.clubId);
+  const own = [...mine].filter(k => CLUBS[k] && k !== 'sendiri');
+  if (!own.length) return ALL;
+  return Object.fromEntries(Object.entries(ALL).filter(([k]) => own.includes(k) || k === 'sendiri' || k === 'lain'));
+}
 const canPreview = () => cloud.isAdmin() || cloud.isVerifier() || store.list().some(x => store.isCloud(x.id) && store.canAdmin(x.id));
 function setAsPeserta(on) { ls.set('pingpong:asPeserta', on ? '1' : null); toast(on ? '👁️ Paparan peserta dihidupkan' : 'Kembali ke paparan penganjur'); render(true); }
 function asBar() {
@@ -466,7 +477,9 @@ function playBracketDraw(t, b) {
 // ---------- Laman utama ----------
 let _homeClub = '', _drwKeep = false;
 function viewHome() {
-  const all = store.list().map(E.migrate).filter(t => (!asPeserta() && store.isLocal(t.id)) || canAdmin(t) || !isHidden(t));
+  // Admin (bukan pemilik): hanya pertandingan yang diurusnya (pengurus utama / co-admin) — kelab lain tidak dipaparkan
+  const scoped = cloud.state.role === 'admin' && !asPeserta();
+  const all = store.list().map(E.migrate).filter(t => scoped ? store.isLocal(t.id) || canAdmin(t) : (!asPeserta() && store.isLocal(t.id)) || canAdmin(t) || !isHidden(t));
   const clubs = [...new Map(all.filter(t => t.clubId && CLUBS[t.clubId]).map(t => [t.clubId, CLUBS[t.clubId].short])).entries()];
   if (_homeClub && !clubs.some(([k]) => k === _homeClub)) _homeClub = '';
   const list = all.filter(t => !_homeClub || t.clubId === _homeClub);
@@ -570,7 +583,7 @@ function settingsFormAll(t, locked) {
     <div class="section-title" style="margin-top:0">Maklumat</div>
     <label>Nama pertandingan</label><input name="name" value="${esc(t.name)}" required>
     <div class="grid2">
-      <div><label>Kelab / Penganjur</label><select name="clubId">${opt({ ksasall: 'KSAS', ksas: 'KSAS Kumpulan Rimau', kroni: 'Kroni Shell KSAS', kskpkpjb: 'KSKPKPJB', sendiri: '🙋 Persendirian (main santai)', lain: 'Lain-lain', '': '— Tiada —' }, clubOf(t).id)}</select></div>
+      <div><label>Kelab / Penganjur</label><select name="clubId">${opt(clubChoices(t), clubOf(t).id)}</select></div>
       <div><label>Tarikh</label><input name="date" type="date" value="${esc(t.date)}"></div>
       <div><label>Masa mula</label><input name="startTime" type="time" value="${esc(t.startTime)}"></div>
       <div><label>Minit setiap sesi</label><input name="sessionMin" type="number" min="10" max="90" step="5" value="${t.sessionMin}"></div>
