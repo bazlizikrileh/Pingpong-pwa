@@ -1,0 +1,256 @@
+// Halaman tempahan baju rasmi KSAS Rimau — berasingan daripada app pingpong.
+// Data: Firestore koleksi bajuOrders/{id} — { uid, name, size, sleeve, print, note, status: unpaid|claimed|paid, at }
+// id = uid peranti (tanpa nama) atau uid_1 … uid_9 (satu telefon boleh order beberapa helai / untuk orang lain).
+import { firebaseConfig } from './firebase-config.js';
+
+const BASE = 45, LONG = 5;
+const SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL', '9XL', '10XL'];
+const extra = s => (['4XL', '5XL'].includes(s) ? 5 : ['6XL', '7XL'].includes(s) ? 7 : ['8XL', '9XL', '10XL'].includes(s) ? 10 : 0);
+const price = o => BASE + (o.sleeve === 'Panjang' ? LONG : 0) + extra(o.size);
+const DEADLINE = Date.parse('2026-12-12T23:59:59+08:00');
+const ACC = '8881057822185';
+const OWNER_HASH = '775ee7a41c79e60559c753e4dd4a0f3db5737d1972d9d93934d4bc33ab5e13cb';
+const COL = 'bajuOrders';
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const rm = n => 'RM ' + n;
+const sha256 = async s => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))].map(b => b.toString(16).padStart(2, '0')).join('');
+const isOpen = () => Date.now() <= DEADLINE;
+let toastT;
+function toast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 2600); }
+const STATUS = { paid: '✅ Disahkan', claimed: '💰 Dah bayar', unpaid: '⏳ Belum bayar' };
+
+let F, auth, db, user = null, owner = false, orders = [], loaded = false, editing = '', filter = 'all';
+
+// ---------- Paparan ----------
+function shell() {
+  $('#app').innerHTML = `
+  <section class="card hero">
+    <img src="baju/jersi.jpg" alt="Contoh design jersi KSAS Rimau">
+    <h1>Order Baju Rasmi KSAS Rimau</h1>
+    <div>${isOpen() ? '<span class="pill">Order dibuka</span>' : '<span class="pill closed">Order ditutup</span>'}<span class="pill">Tutup 12/12/2026</span><span class="pill">Pakai: game Januari 2027</span></div>
+    <p class="muted">Hasil jualan menjadi dana group Rimau untuk jamuan &amp; hadiah game bulanan. Ringkasan kutipan &amp; perbelanjaan akan dikongsi dalam group.</p>
+  </section>
+  <section class="card">
+    <h2>👕 Butiran &amp; harga</h2>
+    <p class="muted" style="margin-top:0">Round neck · kain eyelet 165 gsm · nama belakang baju ikut pilihan sendiri</p>
+    <table>
+      <tr><td>Lengan pendek</td><td class="n"><b>${rm(BASE)}</b></td></tr>
+      <tr><td>Lengan panjang</td><td class="n">+${rm(LONG)}</td></tr>
+      <tr><td>4XL – 5XL</td><td class="n">+RM 5</td></tr>
+      <tr><td>6XL – 7XL</td><td class="n">+RM 7</td></tr>
+      <tr><td>8XL – 10XL</td><td class="n">+RM 10</td></tr>
+    </table>
+    <p class="note">Contoh: lengan panjang 6XL = 45 + 5 + 7 = <b>RM 57</b></p>
+  </section>
+  <section class="card" id="formCard"></section>
+  <section class="card" id="mine" hidden></section>
+  <section class="card">
+    <h2>💳 Bayaran</h2>
+    <div class="pay">
+      <img id="qr" src="baju/qr-duitnow.jpg" alt="QR DuitNow">
+      <div>
+        <div class="muted">AmBank Berhad</div>
+        <div style="font-weight:600">AHMAD BAZLI BIN AHMAD ZIKRILEH</div>
+        <div class="acc">${ACC}</div>
+        <button class="btn sm" id="copyAcc" style="margin-top:6px">📋 Salin no. akaun</button>
+      </div>
+    </div>
+    <p class="note">Ketik QR untuk besarkan / simpan. Selepas bayar, tekan <b>💰 Saya dah bayar</b> pada order anda dan hantar resit kepada Ahmad. Status jadi ✅ selepas disahkan.</p>
+  </section>
+  <section class="card" id="admin" hidden></section>
+  <section class="card" id="listCard"></section>`;
+  $('#copyAcc').onclick = () => copy(ACC, 'No. akaun disalin');
+  $('#qr').onclick = () => { const z = $('#zoom'); z.innerHTML = '<img src="baju/qr-duitnow.jpg" alt="QR DuitNow">'; z.hidden = false; };
+  $('#zoom').onclick = () => ($('#zoom').hidden = true);
+  renderForm();
+}
+
+function renderForm(o = null) {
+  const c = $('#formCard');
+  if (!isOpen() && !owner && !o) { c.innerHTML = '<h2>📝 Order</h2><p class="muted">Order telah ditutup pada 12/12/2026. Hubungi Ahmad jika ada pertanyaan.</p>'; return; }
+  const v = o || { name: '', size: 'L', sleeve: 'Pendek', print: '', note: '' };
+  c.innerHTML = `
+    <h2>📝 ${o ? 'Ubah order' : 'Order baju'}</h2>
+    <label for="fName">Nama penuh / nama panggilan</label>
+    <input id="fName" maxlength="50" autocomplete="name" value="${esc(v.name)}" placeholder="cth. Ahmad">
+    <div class="row2">
+      <div><label for="fSize">Saiz</label><select id="fSize">${SIZES.map(s => `<option${s === v.size ? ' selected' : ''}>${s}</option>`).join('')}</select></div>
+      <div><label for="fPrint">Nama atas baju</label><input id="fPrint" maxlength="20" value="${esc(v.print)}" placeholder="cth. AHMAD" style="text-transform:uppercase"></div>
+    </div>
+    <label>Lengan</label>
+    <div class="seg"><button type="button" class="btn${v.sleeve === 'Pendek' ? ' on' : ''}" data-sl="Pendek">Pendek</button><button type="button" class="btn${v.sleeve === 'Panjang' ? ' on' : ''}" data-sl="Panjang">Panjang (+RM 5)</button></div>
+    <label for="fNote">Catatan (pilihan)</label>
+    <input id="fNote" maxlength="100" value="${esc(v.note)}" placeholder="cth. untuk anak / ambil sendiri">
+    <div class="total"><span>Jumlah</span><b id="fTotal"></b></div>
+    <button class="btn main" id="fSave">${o ? 'Simpan perubahan' : 'Hantar order'}</button>
+    ${o ? '<button class="btn" id="fCancel" style="width:100%;margin-top:8px">Batal ubah</button>' : '<p class="note">Satu telefon boleh order beberapa helai (contoh untuk keluarga) — hantar satu per satu.</p>'}`;
+  let sleeve = v.sleeve;
+  const upd = () => ($('#fTotal').textContent = rm(price({ size: $('#fSize').value, sleeve })));
+  c.querySelectorAll('[data-sl]').forEach(b => (b.onclick = () => { sleeve = b.dataset.sl; c.querySelectorAll('[data-sl]').forEach(x => x.classList.toggle('on', x === b)); upd(); }));
+  $('#fSize').onchange = upd; upd();
+  $('#fSave').onclick = () => save({ name: $('#fName').value, size: $('#fSize').value, sleeve, print: $('#fPrint').value, note: $('#fNote').value });
+  if (o) $('#fCancel').onclick = () => { editing = ''; renderForm(); };
+}
+
+const line = (o, i) => `${i + 1}. ${o.name} – ${o.size} – ${o.sleeve}${o.print ? ' – ' + o.print : ''}${o.status === 'paid' ? ' 💰✅' : o.status === 'claimed' ? ' 💰' : ''}`;
+
+function renderLists() {
+  const mine = orders.filter(o => user && o.uid === user.uid);
+  const m = $('#mine');
+  m.hidden = !mine.length;
+  if (mine.length) {
+    m.innerHTML = `<h2>🧾 Order saya</h2><ul class="list">${mine.map(o => `
+      <li><div class="who"><b>${esc(o.name)}</b> · ${o.size} · ${o.sleeve}${o.print ? ' · ' + esc(o.print) : ''} — <b>${rm(price(o))}</b>
+        <small class="st ${o.status}">${STATUS[o.status]}</small>
+        ${o.status === 'paid' ? '' : `<div class="acts">
+          ${o.status === 'unpaid' ? `<button class="btn sm ok" data-claim="${o.id}">💰 Saya dah bayar</button>` : `<button class="btn sm" data-unclaim="${o.id}">↩ Belum bayar</button>`}
+          ${isOpen() ? `<button class="btn sm" data-edit="${o.id}">✏️ Ubah</button><button class="btn sm danger" data-del="${o.id}">🗑 Batal</button>` : ''}</div>`}
+      </div></li>`).join('')}</ul>
+      <p class="note">Jumlah saya: <b>${rm(mine.reduce((s, o) => s + price(o), 0))}</b></p>`;
+  }
+  // Senarai awam
+  const paid = orders.filter(o => o.status === 'paid').length, claimed = orders.filter(o => o.status === 'claimed').length;
+  const shown = orders.filter(o => filter === 'all' || o.status === filter);
+  $('#listCard').innerHTML = `
+    <h2>📋 Senarai order (${orders.length})</h2>
+    <div class="stats"><div><b>${paid}</b><span>✅ Disahkan</span></div><div><b>${claimed}</b><span>💰 Dah bayar</span></div><div><b>${orders.length - paid - claimed}</b><span>⏳ Belum bayar</span></div></div>
+    <div class="filters">${[['all', 'Semua'], ['unpaid', '⏳ Belum'], ['claimed', '💰 Dah bayar'], ['paid', '✅ Disahkan']].map(([k, t]) => `<button class="btn sm${filter === k ? ' on' : ''}" data-f="${k}">${t}</button>`).join('')}</div>
+    ${!loaded ? '<p class="muted">Memuatkan…</p>' : !shown.length ? '<p class="muted">Tiada order lagi.</p>' : `<ul class="list">${shown.map(o => `
+      <li><span class="no">${orders.indexOf(o) + 1}.</span><div class="who"><b>${esc(o.name)}</b> · ${o.size} · ${o.sleeve}${o.print ? ' · ' + esc(o.print) : ''}
+        ${owner ? `<small>${rm(price(o))}${o.note ? ' · ' + esc(o.note) : ''}</small><div class="acts">
+          ${o.status === 'paid' ? `<button class="btn sm" data-set="${o.id}:unpaid">↩ Batal sah</button>` : `<button class="btn sm ok" data-set="${o.id}:paid">✅ Sah bayar</button>`}
+          <button class="btn sm" data-edit="${o.id}">✏️</button><button class="btn sm danger" data-del="${o.id}">🗑</button></div>` : ''}
+      </div><span class="st ${o.status}">${STATUS[o.status]}</span></li>`).join('')}</ul>`}`;
+  renderAdmin();
+  bindActs();
+}
+
+function renderAdmin() {
+  const a = $('#admin');
+  $('#adminBtn').textContent = owner ? 'Log keluar' : 'Admin';
+  a.hidden = !owner;
+  if (!owner) return;
+  const tally = {};
+  orders.forEach(o => { const k = o.size + '|' + o.sleeve; tally[k] = (tally[k] || 0) + 1; });
+  const rows = SIZES.flatMap(s => ['Pendek', 'Panjang'].map(sl => [s, sl, tally[s + '|' + sl] || 0])).filter(r => r[2]);
+  const expect = orders.reduce((s, o) => s + price(o), 0);
+  const got = orders.filter(o => o.status === 'paid').reduce((s, o) => s + price(o), 0);
+  const claim = orders.filter(o => o.status === 'claimed').reduce((s, o) => s + price(o), 0);
+  a.innerHTML = `
+    <h2>🛠️ Panel admin</h2>
+    <div class="stats"><div><b>${rm(expect)}</b><span>Jumlah order</span></div><div><b>${rm(got)}</b><span>✅ Disahkan</span></div><div><b>${rm(expect - got)}</b><span>Belum sah (${rm(claim)} dakwa bayar)</span></div></div>
+    <h2 style="font-size:15px">Ringkasan untuk kilang (${orders.length} helai)</h2>
+    ${rows.length ? `<table><tr><th>Saiz</th><th>Lengan</th><th class="n">Helai</th></tr>${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="n">${r[2]}</td></tr>`).join('')}</table>` : '<p class="muted">Tiada order lagi.</p>'}
+    <div class="acts" style="margin-top:12px">
+      <button class="btn sm" id="cpWa">📋 Salin senarai WhatsApp</button>
+      <button class="btn sm" id="cpOwe">📋 Salin senarai belum bayar</button>
+      <button class="btn sm" id="dlCsv">⬇️ Muat turun CSV</button>
+    </div>
+    <p class="note">Admin boleh tambah order bagi pihak ahli (guna borang di atas) dan masih boleh tambah/ubah selepas order ditutup.</p>`;
+  $('#cpWa').onclick = () => copy(`🐯 *SENARAI ORDER BAJU RIMAU* (${orders.length})\n\n` + orders.map(line).join('\n') + `\n\n✅ Disahkan: ${orders.filter(o => o.status === 'paid').length}/${orders.length}`, 'Senarai disalin');
+  $('#cpOwe').onclick = () => { const l = orders.filter(o => o.status !== 'paid'); copy(`⏳ *BELUM DISAHKAN BAYARAN* (${l.length})\nTutup order & bayaran: 12/12/2026\n\n` + l.map((o, i) => `${i + 1}. ${o.name} – ${rm(price(o))}${o.status === 'claimed' ? ' (💰 semak resit)' : ''}`).join('\n'), 'Senarai disalin'); };
+  $('#dlCsv').onclick = () => {
+    const q = s => `"${String(s ?? '').replace(/"/g, '""')}"`;
+    const csv = ['No,Nama,Saiz,Lengan,Nama atas baju,Harga (RM),Status,Catatan', ...orders.map((o, i) => [i + 1, q(o.name), o.size, o.sleeve, q(o.print), price(o), q(STATUS[o.status].slice(2).trim()), q(o.note)].join(','))].join('\n');
+    const u = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
+    Object.assign(document.createElement('a'), { href: u, download: 'order-baju-rimau.csv' }).click();
+    setTimeout(() => URL.revokeObjectURL(u), 1000);
+  };
+}
+
+function bindActs() {
+  document.querySelectorAll('[data-f]').forEach(b => (b.onclick = () => { filter = b.dataset.f; renderLists(); }));
+  document.querySelectorAll('[data-claim]').forEach(b => (b.onclick = () => setStatus(b.dataset.claim, 'claimed')));
+  document.querySelectorAll('[data-unclaim]').forEach(b => (b.onclick = () => setStatus(b.dataset.unclaim, 'unpaid')));
+  document.querySelectorAll('[data-set]').forEach(b => (b.onclick = () => { const [id, s] = b.dataset.set.split(':'); setStatus(id, s); }));
+  document.querySelectorAll('[data-edit]').forEach(b => (b.onclick = () => {
+    const o = orders.find(x => x.id === b.dataset.edit); if (!o) return;
+    editing = o.id; renderForm(o); $('#formCard').scrollIntoView({ behavior: 'smooth' });
+  }));
+  document.querySelectorAll('[data-del]').forEach(b => (b.onclick = async () => {
+    const o = orders.find(x => x.id === b.dataset.del); if (!o || !confirm(`Batalkan order ${o.name} (${o.size} ${o.sleeve})?`)) return;
+    try { await F.deleteDoc(F.doc(db, COL, o.id)); toast('Order dibatalkan'); if (editing === o.id) { editing = ''; renderForm(); } } catch (e) { fail(e); }
+  }));
+}
+
+// ---------- Tindakan ----------
+async function copy(text, msg) {
+  try { await navigator.clipboard.writeText(text); toast(msg); }
+  catch { prompt('Salin teks ini:', text); }
+}
+function fail(e) {
+  console.error(e);
+  toast(e && e.code === 'permission-denied' ? 'Tidak dibenarkan (order mungkin sudah ditutup / disahkan)' : 'Gagal — semak internet dan cuba lagi');
+}
+async function ensureUser() {
+  if (auth.currentUser) return auth.currentUser;
+  await F.signInAnonymously(auth);
+  return auth.currentUser;
+}
+async function save(v) {
+  const d = { name: v.name.trim().replace(/\s+/g, ' ').slice(0, 50), size: v.size, sleeve: v.sleeve, print: v.print.trim().toUpperCase().slice(0, 20), note: v.note.trim().slice(0, 100) };
+  if (!d.name) return toast('Sila isi nama');
+  if (!SIZES.includes(d.size)) return toast('Pilih saiz');
+  const btn = $('#fSave'); btn.disabled = true;
+  try {
+    if (editing) {
+      await F.setDoc(F.doc(db, COL, editing), d, { merge: true });
+      toast('Order dikemas kini'); editing = '';
+    } else {
+      const u = await ensureUser();
+      const used = new Set(orders.map(o => o.id));
+      const id = owner ? 'adm_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+        : [u.uid, ...Array.from({ length: 9 }, (_, i) => `${u.uid}_${i + 1}`)].find(x => !used.has(x));
+      if (!id) { btn.disabled = false; return toast('Had 10 order dari satu telefon'); }
+      await F.setDoc(F.doc(db, COL, id), { ...d, uid: u.uid, status: 'unpaid', at: F.serverTimestamp() });
+      toast(`Order diterima — ${rm(price(d))}. Sila buat bayaran 💳`);
+    }
+    renderForm();
+  } catch (e) { btn.disabled = false; fail(e); }
+}
+async function setStatus(id, status) {
+  try { await F.setDoc(F.doc(db, COL, id), { status }, { merge: true }); toast(STATUS[status]); } catch (e) { fail(e); }
+}
+async function adminToggle() {
+  if (owner || (auth.currentUser && !auth.currentUser.isAnonymous)) { await F.signOut(auth); toast('Log keluar'); return; }
+  const p = new F.GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' });
+  try { await F.signInWithPopup(auth, p); }
+  catch (e) {
+    if (['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment', 'auth/cancelled-popup-request'].includes(e.code)) return F.signInWithRedirect(auth, p);
+    if (e.code !== 'auth/popup-closed-by-user') fail(e);
+  }
+}
+
+// ---------- Mula ----------
+async function start() {
+  shell(); renderLists();
+  try {
+    F = await import('./vendor/firebase.js');
+    const app = F.initializeApp(firebaseConfig);
+    auth = F.getAuth(app);
+    try { await F.setPersistence(auth, F.browserLocalPersistence); } catch {}
+    db = F.initializeFirestore(app, {});
+    try { await F.getRedirectResult(auth); } catch {}
+    $('#adminBtn').onclick = adminToggle;
+    F.onAuthStateChanged(auth, async u => {
+      user = u;
+      const was = owner;
+      owner = !!(u && !u.isAnonymous && u.email && u.emailVerified && (await sha256(u.email.toLowerCase())) === OWNER_HASH);
+      if (u && !u.isAnonymous && !owner) toast('Akaun ini bukan admin order baju');
+      if (was !== owner && !editing) renderForm();
+      renderLists();
+    });
+    F.onSnapshot(F.collection(db, COL), snap => {
+      orders = [];
+      snap.forEach(d => { const x = d.data(); orders.push({ id: d.id, ...x, status: STATUS[x.status] ? x.status : 'unpaid', t: x.at?.toMillis?.() || Date.now() }); });
+      orders.sort((a, b) => a.t - b.t);
+      loaded = true; renderLists();
+    }, e => { console.warn(e); loaded = true; $('#listCard').innerHTML = '<h2>📋 Senarai order</h2><p class="muted">Tidak dapat memuatkan senarai (semak internet / peraturan Firestore).</p>'; });
+  } catch (e) {
+    console.error(e);
+    $('#listCard').innerHTML = '<p class="muted">Tidak dapat bersambung. Semak internet dan muat semula.</p>';
+  }
+}
+start();

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Order Baju Rasmi KSAS Rimau</title>
+  <meta name="description" content="Tempahan jersi rasmi KSAS Kumpulan Rimau — tutup 12/12/2026.">
+  <meta property="og:title" content="🐯 Order Baju Rasmi KSAS Rimau">
+  <meta property="og:description" content="Jersi round neck eyelet 165 gsm · RM 45 · Tutup order & bayaran 12/12/2026">
+  <meta property="og:image" content="baju/jersi.jpg">
+  <meta name="theme-color" content="#173a86">
+  <link rel="icon" href="icons/pp-192.png">
+  <style>
+    :root { --brand:#173a86; --accent:#1f4aa8; --or:#ff7a1a; --bg:#eef2f8; --card:#fff; --line:#dde4ef; --ink:#0f172a; --muted:#64748b;
+      --win:#15803d; --warn:#b45309; --loss:#b3261e; --soft:#eaf1ff; --r:18px; --sh:0 1px 2px rgba(15,23,42,.05),0 8px 24px rgba(31,74,168,.07); }
+    @media (prefers-color-scheme: dark) { :root { --bg:#0a1122; --card:#121b31; --line:#22304d; --ink:#e8ebf1; --muted:#9aa2b1; --soft:#16233f; --accent:#ff8a33; --sh:none; } }
+    * { box-sizing:border-box; } [hidden] { display:none !important; }
+    html,body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+    .top { position:sticky; top:0; z-index:9; display:flex; justify-content:space-between; align-items:center; gap:8px;
+      padding:calc(10px + env(safe-area-inset-top)) 16px 10px; background:var(--brand); color:#fff; font-weight:700; }
+    .top button { background:rgba(255,255,255,.15); color:#fff; border:0; border-radius:999px; padding:6px 12px; font:600 13px inherit; }
+    main { max-width:720px; margin:0 auto; padding:14px 14px 80px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--sh); padding:16px; margin:0 0 14px; }
+    h1 { font-size:24px; margin:4px 0 2px; } h2 { font-size:18px; margin:0 0 10px; }
+    .muted { color:var(--muted); font-size:14px; }
+    .hero img { width:100%; border-radius:14px; display:block; }
+    .pill { display:inline-block; font-size:12px; font-weight:700; padding:3px 10px; border-radius:999px; background:var(--soft); color:var(--accent); margin:2px 4px 2px 0; }
+    .pill.closed { background:#fde2e1; color:var(--loss); }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    td,th { padding:6px 4px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
+    td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; }
+    label { display:block; font-weight:600; font-size:14px; margin:10px 0 4px; }
+    input,select { width:100%; padding:11px 12px; border:1.5px solid var(--line); border-radius:12px; background:var(--card); color:var(--ink); font:16px inherit; }
+    .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .seg { display:flex; gap:8px; } .seg button { flex:1; }
+    button { cursor:pointer; font:600 15px inherit; }
+    .btn { border:1.5px solid var(--line); background:var(--card); color:var(--ink); border-radius:999px; padding:10px 16px; }
+    .btn.on, .btn.main { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .btn.main { width:100%; padding:13px; font-size:16px; margin-top:14px; }
+    .btn.sm { padding:5px 10px; font-size:13px; }
+    .btn.ok { background:var(--win); border-color:var(--win); color:#fff; }
+    .btn.danger { color:var(--loss); }
+    .total { margin-top:12px; padding:12px; border-radius:12px; background:var(--soft); display:flex; justify-content:space-between; align-items:center; font-weight:700; }
+    .total b { font-size:22px; color:var(--accent); }
+    .pay { display:grid; grid-template-columns:120px 1fr; gap:14px; align-items:center; }
+    .pay img { width:120px; border-radius:10px; border:1px solid var(--line); cursor:zoom-in; }
+    .acc { font:700 20px ui-monospace,monospace; letter-spacing:.02em; }
+    .list li { padding:9px 0; border-bottom:1px solid var(--line); display:flex; gap:8px; align-items:flex-start; }
+    .list { list-style:none; margin:0; padding:0; }
+    .list .no { color:var(--muted); min-width:26px; font-variant-numeric:tabular-nums; }
+    .list .who { flex:1; min-width:0; } .list .who small { color:var(--muted); display:block; }
+    .st { font-size:13px; font-weight:700; white-space:nowrap; }
+    .st.paid { color:var(--win); } .st.claimed { color:var(--warn); } .st.unpaid { color:var(--muted); }
+    .acts { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+    .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
+    .stats div { background:var(--soft); border-radius:12px; padding:10px; text-align:center; }
+    .stats b { display:block; font-size:20px; } .stats span { font-size:12px; color:var(--muted); }
+    .filters { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+    .toast { position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom)); transform:translateX(-50%); background:#0f172a; color:#fff;
+      padding:10px 16px; border-radius:999px; font-size:14px; z-index:30; max-width:90vw; text-align:center; }
+    .zoom { position:fixed; inset:0; background:rgba(0,0,0,.85); display:flex; align-items:center; justify-content:center; z-index:40; padding:16px; }
+    .zoom img { max-width:100%; max-height:100%; border-radius:12px; }
+    .note { font-size:13px; color:var(--muted); margin-top:8px; }
+  </style>
+</head>
+<body>
+  <div class="top"><span>🐯 Baju Rasmi KSAS Rimau</span><button id="adminBtn">Admin</button></div>
+  <main id="app"><div class="card muted">Memuatkan…</div></main>
+  <div id="toast" class="toast" hidden></div>
+  <div id="zoom" class="zoom" hidden></div>
+  <script src="baju.js" type="module"></script>
+</body>
+</html>
