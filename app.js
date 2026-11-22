@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.52.1';
+const VERSION = '3.53.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -84,31 +84,38 @@ const clubSubs = () => { try { return JSON.parse(ls.get('pingpong:clubSubs') || 
 // 👁️ Paparan peserta: penganjur boleh melihat app seperti peserta/penonton (tiada kuasa urus dalam paparan).
 // Notifikasi & langganan penganjur kekal berjalan di belakang.
 const asPeserta = () => ls.get('pingpong:asPeserta') === '1';
-const canAdmin = t => !asPeserta() && store.canAdmin(t.id);
-const canEdit = t => !asPeserta() && store.canEdit(t.id);
-const isAdm = () => !asPeserta() && cloud.isAdmin();
+// 👁️ Paparan admin (pemilik sahaja): lihat app seperti admin tertentu — hanya pertandingan yang diurusnya & kelabnya
+const asAdmin = () => { if (cloud.state.role !== 'owner') return null; try { return JSON.parse(ls.get('pingpong:asAdmin') || 'null'); } catch { return null; } };
+const simManages = id => { const A = asAdmin(), o = cloud.managerOf(id); return !!(A && o && (o.email === A.email || (o.co || []).includes(A.email))); };
+const canAdmin = t => !asPeserta() && (asAdmin() ? store.isLocal(t.id) || (store.isCloud(t.id) && simManages(t.id)) : store.canAdmin(t.id));
+const canEdit = t => !asPeserta() && (asAdmin() ? canAdmin(t) : store.canEdit(t.id));
+const isAdm = () => !asPeserta() && (asAdmin() ? true : cloud.isAdmin());
+const effRole = () => (asPeserta() ? '' : asAdmin() ? 'admin' : cloud.state.role);
+const effClubs = () => (asAdmin() ? asAdmin().clubs : cloud.state.clubs);
 // Pilihan kelab semasa cipta/ubah pertandingan. Admin (bukan pemilik) hanya nampak kelab pertandingan yang diurusnya
 // (+ Persendirian & Lain-lain); admin baharu tanpa pertandingan masih nampak semua.
 const clubLabel = k => (CLUB_OPTS[k] || k).replace('🙋 ', '').replace(' (main santai)', '');
 function clubChoices(t) {
   const ALL = { ...CLUB_OPTS, '': '— Tiada —' };
-  if (cloud.state.role !== 'admin') return ALL;
+  if (effRole() !== 'admin') return ALL;
   // kelab yang disahkan pemilik (roles.clubs) — wajib diikut
-  if (Array.isArray(cloud.state.clubs) && cloud.state.clubs.length) return Object.fromEntries(Object.entries(CLUB_OPTS).filter(([k]) => cloud.state.clubs.includes(k)));
-  const mine = new Set(store.list().filter(x => store.isCloud(x.id) && store.canAdmin(x.id) && x.clubId).map(x => x.clubId));
+  const ec = effClubs();
+  if (Array.isArray(ec) && ec.length) return Object.fromEntries(Object.entries(CLUB_OPTS).filter(([k]) => ec.includes(k)));
+  const mine = new Set(store.list().filter(x => store.isCloud(x.id) && canAdmin(x) && x.clubId).map(x => x.clubId));
   if (t && t.clubId) mine.add(t.clubId);
   const own = [...mine].filter(k => CLUBS[k] && k !== 'sendiri');
   if (!own.length) return ALL;
   return Object.fromEntries(Object.entries(ALL).filter(([k]) => own.includes(k) || k === 'sendiri' || k === 'lain'));
 }
 const canPreview = () => cloud.isAdmin() || cloud.isVerifier() || store.list().some(x => store.isCloud(x.id) && store.canAdmin(x.id));
-function setAsPeserta(on) { ls.set('pingpong:asPeserta', on ? '1' : null); toast(on ? '👁️ Paparan peserta dihidupkan' : 'Kembali ke paparan penganjur'); render(true); }
+function setAsPeserta(on) { ls.set('pingpong:asPeserta', on ? '1' : null); if (on) ls.set('pingpong:asAdmin', null); toast(on ? '👁️ Paparan peserta dihidupkan' : 'Kembali ke paparan sebenar'); render(true); }
+function setAsAdmin(a) { ls.set('pingpong:asAdmin', a ? JSON.stringify(a) : null); if (a) ls.set('pingpong:asPeserta', null); toast(a ? `👁️ Paparan admin: ${a.name || a.email}` : 'Kembali ke paparan sebenar'); render(true); }
 function asBar() {
-  let b = document.getElementById('asBar');
-  if (!asPeserta()) { if (b) b.remove(); return; }
+  let b = document.getElementById('asBar'); const A = asAdmin();
+  if (!asPeserta() && !A) { if (b) b.remove(); return; }
   if (!b) { b = document.createElement('div'); b.id = 'asBar'; b.className = 'as-bar noprint'; document.body.appendChild(b); }
-  b.innerHTML = '👁️ <b>Paparan peserta</b> <button type="button" class="pill-btn small light">Keluar</button>';
-  b.querySelector('button').onclick = () => setAsPeserta(false);
+  b.innerHTML = `👁️ <b>${A ? `Paparan admin: ${esc(A.name || A.email.split('@')[0])}` : 'Paparan peserta'}</b> <button type="button" class="pill-btn small light">Keluar</button>`;
+  b.querySelector('button').onclick = () => (A ? setAsAdmin(null) : setAsPeserta(false));
 }
 const isHidden = t => t.hidden ?? !!t.test;
 // Pertandingan ujian: ditanda ujian, salinan di telefon ini, atau nama mengandungi ujian/test/testing/cubaan/demo/latihan.
@@ -502,7 +509,7 @@ function playBracketDraw(t, b) {
 let _homeClub = '', _drwKeep = false;
 function viewHome() {
   // Admin (bukan pemilik): hanya pertandingan yang diurusnya (pengurus utama / co-admin) — kelab lain tidak dipaparkan
-  const scoped = cloud.state.role === 'admin' && !asPeserta();
+  const scoped = effRole() === 'admin';
   const all = store.list().map(E.migrate).filter(t => scoped ? store.isLocal(t.id) || canAdmin(t) : (!asPeserta() && store.isLocal(t.id)) || canAdmin(t) || !isHidden(t));
   const clubs = [...new Map(all.filter(t => t.clubId && CLUBS[t.clubId]).map(t => [t.clubId, CLUBS[t.clubId].short])).entries()];
   if (_homeClub && !clubs.some(([k]) => k === _homeClub)) _homeClub = '';
@@ -861,7 +868,7 @@ function viewSetupCore(t, part = 'tetapan') {
       ${t.lastEdit ? `<p class="small" style="margin:4px 0 0">Kemas kini terakhir: <b>${esc(t.lastEdit.name)}</b> · ${esc(new Date(t.lastEdit.at).toLocaleString('ms-MY', { dateStyle: 'medium', timeStyle: 'short' }))}</p>` : ''}
       ${!t.createdBy ? '<p class="muted small" style="margin:4px 0 0">Pertandingan ini dicipta sebelum rekod pencipta wujud.</p>' : ''}
       ${store.isCloud(t.id) ? `<p class="small" style="margin:8px 0 0">Diurus oleh: <b>${esc((cloud.managerOf(t.id) || {}).name || (cloud.managerOf(t.id) ? cloud.managerOf(t.id).email.split('@')[0] : 'Pemilik sahaja'))}</b></p>` : ''}
-      ${store.isCloud(t.id) && cloud.state.role === 'owner' ? `<label style="margin-top:8px">Serahkan pengurusan kepada admin</label><select id="mgrSel"><option value="">— memuatkan senarai admin… —</option></select>
+      ${store.isCloud(t.id) && effRole() === 'owner' ? `<label style="margin-top:8px">Serahkan pengurusan kepada admin</label><select id="mgrSel"><option value="">— memuatkan senarai admin… —</option></select>
         <p class="muted small" style="margin:4px 0 0">Hanya admin yang mengurus (dan anda sebagai pemilik) boleh mengubah pertandingan ini. Admin lain boleh melihat sahaja.</p>` : ''}</div>` : ''}
     ${store.isCloud(t.id) && cloud.isMainManager(t.id) ? coAdminCard(t) : store.isCloud(t.id) && canAdmin(t) && !isAdm() ? '<div class="notice small">👥 Anda <b>admin bersama</b> untuk pertandingan ini.</div>' : ''}
     ${store.isCloud(t.id) && isAdm() && !canAdmin(t) ? `<div class="notice">👁️ <b>Lihat sahaja.</b> Pertandingan ini diurus oleh ${esc((cloud.managerOf(t.id) || {}).name || 'admin lain')}. Hanya pengurusnya dan pemilik boleh membuat perubahan.</div>` : ''}
@@ -3410,6 +3417,7 @@ function showAccount() {
       ${!cloud.state.role ? (profile().name ? '' : '<p class="muted small">Akaun peserta. Penganjur: minta admin utama menambah e-mel anda di halaman Pentadbir.</p>') : ''}
  ${!cloud.state.role && u.email && (u.verified || !u.pass) ? '<div id="admReq" class="adm-req"></div>' : ''}
       ${canPreview() ? `<div class="row" style="justify-content:space-between;margin:6px 0 10px;gap:8px"><span class="small">👁️ <b>Paparan peserta</b><br><span class="muted">Lihat app seperti peserta/penonton</span></span><button type="button" class="pill-btn small ${asPeserta() ? 'brand' : 'light'}" id="asP">${asPeserta() ? 'Keluar paparan' : 'Hidupkan'}</button></div>` : ''}
+      ${cloud.state.role === 'owner' ? `<div class="row" style="justify-content:space-between;margin:-2px 0 10px;gap:8px"><span class="small">👁️ <b>Paparan admin</b><br><span class="muted">${asAdmin() ? `Sedang melihat sebagai <b>${esc(asAdmin().name || asAdmin().email)}</b>` : 'Lihat app seperti admin pertandingan tertentu'}</span></span>${asAdmin() ? '<button type="button" class="pill-btn small brand" id="asAx">Keluar paparan</button>' : '<select id="asA" style="max-width:150px"><option value="">Pilih admin…</option></select>'}</div>` : ''}
       <div class="btn-stack">${cloud.state.role === 'owner' ? '<a class="pill-btn brand" href="#/pentadbir" id="goAdm"><span class="dot"></span>Pentadbir &amp; peranan</a>' : ''}
       <button class="pill-btn light" id="out">Log keluar</button></div>`
     : `<p class="muted">Penonton dan pemain tidak perlu log masuk. Pengadil menghantar skor dengan PIN acara pada kad perlawanan.</p>
@@ -3429,6 +3437,9 @@ function showAccount() {
   if (ntf) ntf.onclick = async () => { await askNotif(); showAccount(); };
   wireProfileCard(md);
   if (document.getElementById('admReq')) admReqCard(document.getElementById('admReq'));
+  const asA = document.getElementById('asA');
+  if (asA) { const un = cloud.watchRoles(list => { try { un && un(); } catch {} const ad = list.filter(r => r.role === 'admin'); asA.innerHTML = `<option value="">${ad.length ? 'Pilih admin…' : 'Tiada admin'}</option>` + ad.map(r => `<option value="${esc(r.email)}">${esc(r.name || r.email)}</option>`).join(''); asA.onchange = () => { const r = ad.find(x => x.email === asA.value); if (r) { setAsAdmin({ email: r.email, name: r.name || '', clubs: Array.isArray(r.clubs) ? r.clubs : null }); md.hidden = true; } }; }); }
+  const asAx = document.getElementById('asAx'); if (asAx) asAx.onclick = () => { setAsAdmin(null); md.hidden = true; };
   const asP = document.getElementById('asP');
   if (asP) asP.onclick = () => { setAsPeserta(!asPeserta()); md.hidden = true; };
   const nt = document.getElementById('ntfTest');
@@ -3540,7 +3551,7 @@ let _rolesUnsub = null;
 // ---------- 📒 Rekod pemain merentas pertandingan (rekod, bukan ranking) ----------
 // Daripada pertandingan sebenar (bukan ujian) yang dipaparkan kepada pengguna ini. Pemain dipadankan ikut nama (huruf besar/kecil diabaikan).
 function recordTournaments() {
-  const scoped = cloud.state.role === 'admin' && !asPeserta();
+  const scoped = effRole() === 'admin';
   return store.list().map(E.migrate).filter(t => !isTestT(t) && (scoped ? canAdmin(t) : !isHidden(t)) && t.matches.some(m => m.status === 'done'));
 }
 function playerRecords(club) {
