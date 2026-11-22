@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.46.0';
+const VERSION = '3.47.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1584,7 +1584,7 @@ function rankingHtml(t, brief) {
       <p><b>†</b> Bersemuka: jika rakan sekumpulan berada dalam Tempat yang sama, pemain yang lebih tinggi dalam kumpulan diletakkan terus di atas rakan sekumpulannya.</p>
       <p><b>Main:</b> perlawanan dimainkan (kumpulan, kalah mati dan pool; BYE tidak dikira). <b>(a)</b> Set ±/main = (set menang − set kalah) ÷ main. <b>(b)</b> Set menang/main, dipaparkan hanya jika (a) sama. Purata = jumlah ÷ bilangan perlawanan, bukan nisbah.</p>
     </div>`}</div>
-    <a class="pill-btn light small noprint" href="#/t/${t.id}/laporan">🖨️ Laporan PDF</a>`;
+    <a class="pill-btn light small noprint" href="#/t/${t.id}/laporan">${canAdmin(t) ? '🖨️ Laporan PDF' : '📄 Lihat laporan'}</a>`;
 }
 
 // ---------- Peraturan & panduan ----------
@@ -2086,6 +2086,7 @@ function viewDaftar(t) {
   wireReg(t);
 }
 function viewPemain(t) {
+  if (!canAdmin(t)) return viewParticipants(t);   // peserta/penonton/pengesah: senarai, maklumat & peraturan sahaja
   viewSetupCore(t, 'pemain');
   const rc = regCard(t);
   if (rc) { const h = $app.querySelector('.h-big'); h ? h.insertAdjacentHTML('afterend', rc) : $app.insertAdjacentHTML('afterbegin', rc); wireReg(t); }
@@ -3242,14 +3243,16 @@ function viewReport(t) {
     <section class="rp-sec pb"><h3>Peraturan &amp; Penentuan Kedudukan</h3><ol class="rules small">${[...rulesOf(t), ...(t.stage === 'done' && t.format !== 'rr' && !E.isMixer(t) ? [RANK_RULE] : [])].map(r => `<li>${esc(r)}</li>`).join('')}</ol>
       <div class="rp-sign"><div><div class="ln"></div>Disediakan oleh<br><small>Nama: ${esc((t.createdBy && t.createdBy.name) || '')}</small></div><div><div class="ln"></div>Disahkan oleh<br><small>Penganjur / Pengurus pertandingan</small></div></div></section>
     <p class="muted small rp-foot">Dijana oleh Pingpong Portal · ${new Date().toLocaleString('ms-MY')}</p>`;
+  const own = canAdmin(t);   // PDF, video ringkasan & WhatsApp: penganjur & co-admin sahaja
   $app.innerHTML = `${section('Laporan', 'Laporan Pertandingan')}
-    <div class="card noprint"><p class="muted small" style="margin-top:0">Laporan lengkap: maklumat, kedudukan, keputusan semua perlawanan${t.rounds.ko ? ', kalah mati' : ''}${t.stage === 'done' ? ' dan ranking' : ''}. Tekan butang di bawah dan pilih <b>Simpan sebagai PDF</b>.</p>
-      <button class="pill-btn brand" id="prt"><span class="dot"></span>🖨️ Cetak / Simpan PDF</button></div>
-    ${recapCard(t)}
-    ${t.matches.some(m => m.status === 'done') ? `<div class="card noprint"><b>💬 Ringkasan keputusan untuk WhatsApp</b><p class="muted small" style="margin:4px 0 8px">Johan, naib johan, tempat ketiga, statistik dan pautan laporan, sedia untuk dikongsi ke group.</p>
+    ${own ? '' : '<div class="card noprint"><p class="muted small" style="margin:0">📄 Laporan rasmi (PDF), video ringkasan dan ringkasan WhatsApp dikongsi oleh penganjur.</p></div>'}
+    ${!own ? '' : `<div class="card noprint"><p class="muted small" style="margin-top:0">Laporan lengkap: maklumat, kedudukan, keputusan semua perlawanan${t.rounds.ko ? ', kalah mati' : ''}${t.stage === 'done' ? ' dan ranking' : ''}. Tekan butang di bawah dan pilih <b>Simpan sebagai PDF</b>.</p>
+      <button class="pill-btn brand" id="prt"><span class="dot"></span>🖨️ Cetak / Simpan PDF</button></div>`}
+    ${own ? recapCard(t) : ''}
+    ${own && t.matches.some(m => m.status === 'done') ? `<div class="card noprint"><b>💬 Ringkasan keputusan untuk WhatsApp</b><p class="muted small" style="margin:4px 0 8px">Johan, naib johan, tempat ketiga, statistik dan pautan laporan, sedia untuk dikongsi ke group.</p>
       <div class="row" style="gap:6px;flex-wrap:wrap"><button type="button" class="pill-btn small" style="background:#25d366;color:#fff" id="resWa">💬 Kongsi ke WhatsApp</button><button type="button" class="pill-btn light small" id="resCp">📋 Salin</button><button type="button" class="pill-btn light small" id="resPv">👁️ Lihat mesej</button></div></div>` : ''}
     <div class="card report">${body}</div>`;
-  wireRecap(t);
+  if (own) wireRecap(t);
   const rw = document.getElementById('resWa');
   if (rw) {
     rw.onclick = () => window.open(waLink(resultsMessage(t)), '_blank');
@@ -3264,7 +3267,7 @@ function viewReport(t) {
       document.getElementById('pvCp').onclick = () => { md.hidden = true; document.getElementById('resCp').click(); };
     };
   }
-  document.getElementById('prt').onclick = () => { const old = document.title; document.title = `Laporan - ${t.name}`.replace(/[\\/:*?"<>|]/g, ''); window.print(); setTimeout(() => (document.title = old), 1500); };
+  if (own) document.getElementById('prt').onclick = () => { const old = document.title; document.title = `Laporan - ${t.name}`.replace(/[\\/:*?"<>|]/g, ''); window.print(); setTimeout(() => (document.title = old), 1500); };
 }
 
 // ---------- Mod ujian ----------
