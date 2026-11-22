@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.50.0';
+const VERSION = '3.51.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -302,6 +302,7 @@ function render(keep = false) {
   if (!parts.length) { viewHome(); if (keep) window.scrollTo(0, y); return; }
   if (parts[0] === 'baru') return viewNew();
   if (parts[0] === 'pentadbir') return viewAdmin();
+  if (parts[0] === 'rekod') { applyTheme(null); $head.hidden = true; $tabs.hidden = true; return viewRecords(parts[1] ? decodeURIComponent(parts[1]) : ''); }
   if (parts[0] === 'tv') {
     const t = load(parts[1]);
     if (!t) { $app.innerHTML = '<div class="empty">Memuatkan data…</div>'; return; }
@@ -534,13 +535,12 @@ function viewHome() {
     ${tests.length ? `<details class="card fold" ${ls.get('pingpong:testOpen') === '1' ? 'open' : ''} id="testF"><summary>🧪 Pertandingan ujian (${tests.length})</summary>
       <p class="muted small" style="margin:6px 0 0">Dikenal pasti daripada tanda "ujian", salinan di telefon ini, atau nama seperti <i>ujian, test, testing, cubaan, demo, latihan</i>. Tukar di Tetapan pertandingan → <b>Jenis</b> jika salah.</p>
       <div class="hc-list" style="margin-top:10px">${tests.map(card).join('')}</div></details>` : ''}
-    <a class="card noprint" href="https://carromsantai-portal.pages.dev/" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit">
-      <span style="font-size:34px">🎯</span><span style="flex:1"><b>Portal Carrom</b><br><span class="muted small">Pertandingan carrom kini di portal sendiri</span></span><span class="pill-btn light small">Buka →</span></a>
     <details class="card fold noprint"><summary>Sandaran data</summary>
       <p class="muted">Eksport untuk sandaran atau pindah ke peranti lain.</p>
       <div class="row"><button class="pill-btn light small" id="exp">Eksport</button>
       <label class="pill-btn light small" style="margin:0">Import<input type="file" id="imp" accept=".json,application/json" hidden></label></div>
     </details>
+    <p class="noprint" style="text-align:center;margin:18px 0 6px"><a class="pill-btn light small" href="#/rekod${_homeClub ? '/' + _homeClub : ''}">📒 Rekod pemain</a> <a class="pill-btn light small" href="https://carromsantai-portal.pages.dev/" target="_blank" rel="noopener">⚪ Portal Carrom</a></p>
     <p class="muted small" style="text-align:center">Pingpong Portal · Versi ${VERSION}</p>`;
   $app.querySelectorAll('[data-hclub]').forEach(b => (b.onclick = () => { _homeClub = b.dataset.hclub; viewHome(); }));
   const af = document.getElementById('arcF'); if (af) af.ontoggle = () => ls.set('pingpong:arcOpen', af.open ? '1' : '0');
@@ -3519,6 +3519,60 @@ function wireCoAdmin(t) {
   }));
 }
 let _rolesUnsub = null;
+// ---------- 📒 Rekod pemain merentas pertandingan (rekod, bukan ranking) ----------
+// Daripada pertandingan sebenar (bukan ujian) yang dipaparkan kepada pengguna ini. Pemain dipadankan ikut nama (huruf besar/kecil diabaikan).
+function recordTournaments() {
+  const scoped = cloud.state.role === 'admin' && !asPeserta();
+  return store.list().map(E.migrate).filter(t => !isTestT(t) && (scoped ? canAdmin(t) : !isHidden(t)) && t.matches.some(m => m.status === 'done'));
+}
+function playerRecords(club) {
+  const R = new Map(), key = n => String(n || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  const get = n => { const k = key(n); if (!k) return null; if (!R.has(k)) R.set(k, { name: String(n).trim(), t: [], p: 0, w: 0, l: 0, d: 0, sf: 0, sa: 0, pf: 0, pa: 0, gold: 0, silver: 0, bronze: 0 }); return R.get(k); };
+  const add = (r, st) => ['p', 'w', 'l', 'd', 'sf', 'sa', 'pf', 'pa'].forEach(k => (r[k] += st[k] || 0));
+  for (const t of recordTournaments().filter(t => !club || t.clubId === club)) {
+    const done = t.stage === 'done' || t.matches.every(m => m.status === 'done' || m.status === 'bye');
+    const medal = (r, pl) => { if (!done) return; if (pl === 1) r.gold++; else if (pl === 2) r.silver++; else if (pl === 3) r.bronze++; };
+    if (E.isMixer(t)) {
+      E.mixStandings(t).forEach((st, i) => { const x = (t.individuals || []).find(y => y.id === st.id); const r = x && get(x.name); if (!r) return;
+        add(r, st); medal(r, i + 1); r.t.push({ id: t.id, name: t.name, date: t.date || '', unit: 'Regu bertukar', place: done ? i + 1 : 0, done, w: st.w, l: st.l }); });
+      continue;
+    }
+    let R3 = []; try { R3 = done ? E.finalRanking(t) : []; } catch {}
+    const placeOf = id => { const x = R3.find(r => r.ids.includes(id)); return x ? x.place : 0; };
+    const seen = new Set();
+    for (const p of t.participants) {
+      const names = p.members && p.members.length ? p.members : [p.name], st = E.playerStats(t, p.id), pl = placeOf(p.id);
+      for (const n of names) { const r = get(n); if (!r || seen.has(key(n))) continue; seen.add(key(n));
+        add(r, st); medal(r, pl); r.t.push({ id: t.id, name: t.name, date: t.date || '', unit: p.name, place: pl, done, w: st.w, l: st.l }); }
+    }
+  }
+  return [...R.values()].filter(r => r.p).sort((a, b) => a.name.localeCompare(b.name, 'ms'));
+}
+function viewRecords(club = '') {
+  const ts = recordTournaments(), clubs = [...new Map(ts.filter(t => t.clubId && CLUBS[t.clubId]).map(t => [t.clubId, CLUBS[t.clubId].short])).entries()];
+  if (club && !clubs.some(([k]) => k === club)) club = '';
+  const all = playerRecords(club); let q = '';
+  const sg = n => (n > 0 ? '+' : '') + n;
+  const draw = () => {
+    const k = q.trim().toLowerCase(), rows = k ? all.filter(r => r.name.toLowerCase().includes(k)) : all;
+    document.getElementById('rkList').innerHTML = rows.length ? rows.map(r => `<details class="card rk"><summary><b>${esc(r.name)}</b>
+      <span class="rk-s">${r.gold ? `🥇${r.gold} ` : ''}${r.silver ? `🥈${r.silver} ` : ''}${r.bronze ? `🥉${r.bronze} ` : ''}· ${r.t.length} pertandingan · ${r.w}M ${r.l}K${r.d ? ` ${r.d}S` : ''}</span></summary>
+      <div class="stat-grid" style="margin:8px 0">
+        <div class="stat"><b>${r.p}</b><span>Main</span></div><div class="stat"><b>${r.p ? Math.round(r.w / r.p * 100) : 0}%</b><span>% menang</span></div>
+        <div class="stat"><b>${r.sf}-${r.sa}</b><span>Set (${sg(r.sf - r.sa)})</span></div><div class="stat"><b>${r.pf}-${r.pa}</b><span>Mata (${sg(r.pf - r.pa)})</span></div></div>
+      <div class="rk-t">${r.t.sort((a, b) => String(b.date).localeCompare(String(a.date))).map(x => `<a href="#/t/${x.id}"><span>${esc(x.name)}${x.unit && x.unit.toLowerCase() !== r.name.toLowerCase() ? ` <small class="muted">· ${esc(x.unit)}</small>` : ''}<br><small class="muted">${esc(fmtDate(x.date) || '')} · ${x.w}M ${x.l}K</small></span><span>${x.place === 1 ? '🥇 Johan' : x.place === 2 ? '🥈 Naib johan' : x.place === 3 ? '🥉 Ketiga' : x.done ? (x.place ? `Tempat ${x.place}` : '') : '⏳ Berlangsung'}</span></a>`).join('')}</div></details>`).join('')
+      : `<p class="muted">${all.length ? 'Tiada nama sepadan.' : 'Belum ada pertandingan sebenar yang direkod.'}</p>`;
+  };
+  $app.innerHTML = `${section('Rekod', 'Rekod Pemain')}
+    ${clubs.length > 1 ? `<div class="hc-chips"><a class="chip ${!club ? 'on' : ''}" href="#/rekod">Semua kelab</a>${clubs.map(([k, n]) => `<a class="chip ${club === k ? 'on' : ''}" href="#/rekod/${k}">${esc(n)}</a>`).join('')}</div>` : ''}
+    <p class="muted small" style="margin-top:4px">Rekod setiap pemain daripada ${club ? `pertandingan <b>${esc(CLUBS[club].short)}</b>` : 'semua pertandingan'} (pertandingan ujian tidak dikira). Disusun ikut nama — ini rekod, bukan ranking. Nama mesti dieja sama dalam setiap pertandingan. ${all.length} pemain.</p>
+    <input id="rkQ" placeholder="🔍 Cari nama pemain" style="margin-bottom:10px">
+    <div id="rkList"></div>
+    <p style="text-align:center"><a class="muted" href="#/">← Semua pertandingan</a></p>`;
+  const inp = document.getElementById('rkQ'); inp.oninput = () => { q = inp.value; draw(); };
+  draw();
+}
+
 // ---------- Permohonan menjadi penganjur ----------
 async function admReqCard(el) {
   const r = await cloud.myAdminReq();
