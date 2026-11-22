@@ -118,6 +118,10 @@ function renderForm(o = null) {
     <div class="seg"><button type="button" class="btn${v.sleeve === 'Pendek' ? ' on' : ''}" data-sl="Pendek">Pendek</button><button type="button" class="btn${v.sleeve === 'Panjang' ? ' on' : ''}" data-sl="Panjang">Panjang (+RM 5)</button></div>
     <label for="fNote">Catatan (pilihan)</label>
     <input id="fNote" maxlength="100" value="${esc(v.note)}" placeholder="cth. untuk anak / ambil sendiri">
+    <label>Resit bayaran (pilihan)</label>
+    <input type="file" id="fRcpt" accept="image/*,application/pdf,.pdf" hidden>
+    <button type="button" class="btn" id="fRcptBtn" style="width:100%">📎 ${o && o.rcpt ? 'Tukar resit' : 'Lampirkan resit'} (gambar / screenshot / PDF)</button>
+    <p class="note" style="margin-top:4px">Belum bayar? Boleh lampir kemudian dalam <b>Order saya</b>. Had fail 3 MB.</p>
     <div class="total"><span>Jumlah</span><b id="fTotal"></b></div>
     <button class="btn main" id="fSave">${o ? 'Simpan perubahan' : 'Hantar order'}</button>
     ${o ? '<button class="btn" id="fCancel" style="width:100%;margin-top:8px">Batal ubah</button>' : '<p class="note">Satu telefon boleh order beberapa helai (contoh untuk keluarga) — hantar satu per satu.</p>'}`;
@@ -125,7 +129,9 @@ function renderForm(o = null) {
   const upd = () => ($('#fTotal').textContent = rm(price({ size: $('#fSize').value, sleeve, collar: $('#fCollar').value })));
   c.querySelectorAll('[data-sl]').forEach(b => (b.onclick = () => { sleeve = b.dataset.sl; c.querySelectorAll('[data-sl]').forEach(x => x.classList.toggle('on', x === b)); upd(); }));
   $('#fSize').onchange = upd; $('#fCollar').onchange = upd; upd();
-  $('#fSave').onclick = () => save({ name: $('#fName').value, collar: $('#fCollar').value, size: $('#fSize').value, sleeve, print: $('#fPrint').value, note: $('#fNote').value });
+  $('#fRcptBtn').onclick = () => $('#fRcpt').click();
+  $('#fRcpt').onchange = () => { const f = $('#fRcpt').files[0]; $('#fRcptBtn').textContent = f ? `📎 ${f.name.length > 28 ? f.name.slice(0, 25) + '…' : f.name} ✓` : '📎 Lampirkan resit (gambar / screenshot / PDF)'; };
+  $('#fSave').onclick = () => save({ file: $('#fRcpt').files[0] || null, name: $('#fName').value, collar: $('#fCollar').value, size: $('#fSize').value, sleeve, print: $('#fPrint').value, note: $('#fNote').value });
   if (o) $('#fCancel').onclick = () => { editing = ''; renderForm(); };
 }
 
@@ -149,6 +155,8 @@ function renderLists() {
   // Senarai awam
   const paid = orders.filter(o => o.status === 'paid').length, claimed = orders.filter(o => o.status === 'claimed').length;
   const shown = orders.filter(o => filter === 'all' || o.status === filter);
+  $('#listCard').hidden = !adm();
+  if (!adm()) { renderAdmin(); bindActs(); return; }
   $('#listCard').innerHTML = `
     <h2>📋 Senarai order (${orders.length})</h2>
     <div class="stats"><div><b>${paid}</b><span>✅ Disahkan</span></div><div><b>${claimed}</b><span>💰 Dah bayar</span></div><div><b>${orders.length - paid - claimed}</b><span>⏳ Belum bayar</span></div></div>
@@ -236,24 +244,42 @@ function bindActs() {
   }));
   document.querySelectorAll('[data-del]').forEach(b => (b.onclick = async () => {
     const o = orders.find(x => x.id === b.dataset.del); if (!o || !confirm(`Batalkan order ${o.name} (${desc(o, ', ')})?`)) return;
-    try { if (o.rcpt) await F.deleteDoc(F.doc(db, RCOL, o.id)).catch(() => {}); await F.deleteDoc(F.doc(db, COL, o.id)); toast('Order dibatalkan'); if (editing === o.id) { editing = ''; renderForm(); } } catch (e) { fail(e); }
+    try { if (o.rcpt) await deleteReceipt(o.id); await F.deleteDoc(F.doc(db, COL, o.id)); toast('Order dibatalkan'); if (editing === o.id) { editing = ''; renderForm(); } } catch (e) { fail(e); }
   }));
 }
 
 // ---------- Resit bayaran ----------
-// bajuReceipts/{orderId}: { uid, img (JPEG dataURL dimampatkan, < ~700 KB), at } — dibaca oleh pemilik order & admin sahaja
-const RCOL = 'bajuReceipts';
+// bajuReceipts/{orderId}: { uid, img, at, n } — dibaca oleh pemilik order & admin sahaja.
+// Fail besar dipecah: img dalam {orderId} (bahagian 1) + {orderId}__1 … __4 (bahagian 2–5), n = bilangan bahagian.
+const RCOL = 'bajuReceipts', CHUNK = 880000, MAXPARTS = 5, PDF_MAX = 3 * 1024 * 1024;
+async function readReceipt(f) {
+  const pdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+  if (!pdf && !f.type.startsWith('image/')) throw new Error('jenis');
+  if (pdf && f.size > PDF_MAX) throw new Error('pdfbesar');
+  return pdf ? new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).replace(/^data:[^;,]*/, 'data:application/pdf')); r.onerror = no; r.readAsDataURL(f); }) : shrink(f);
+}
+async function uploadReceipt(id, f, uid) {
+  const data = await readReceipt(f);
+  const parts = []; for (let i = 0; i < data.length; i += CHUNK) parts.push(data.slice(i, i + CHUNK));
+  if (parts.length > MAXPARTS) throw new Error('pdfbesar');
+  for (let k = 1; k < parts.length; k++) await F.setDoc(F.doc(db, RCOL, `${id}__${k}`), { uid, img: parts[k], at: F.serverTimestamp() });
+  await F.setDoc(F.doc(db, RCOL, id), { uid, img: parts[0], at: F.serverTimestamp(), n: parts.length });
+}
+async function deleteReceipt(id) {
+  for (const x of [id, ...Array.from({ length: MAXPARTS - 1 }, (_, k) => `${id}__${k + 1}`)]) await F.deleteDoc(F.doc(db, RCOL, x)).catch(() => {});
+}
+const rcptErr = e => (e && e.message === 'jenis' ? 'Sila pilih gambar, screenshot atau PDF resit' : e && e.message === 'pdfbesar' ? 'Fail terlalu besar (had 3 MB) — cuba screenshot resit' : e && e.message === 'besar' ? 'Gambar terlalu besar — cuba screenshot' : null);
 function zoom(src) { const z = $('#zoom'); z.innerHTML = ''; const i = new Image(); i.src = src; i.alt = 'Gambar'; z.append(i); z.hidden = false; }
 async function shrink(file) {
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
-    for (const [max, q] of [[1400, 0.72], [1100, 0.62], [900, 0.55], [700, 0.5]]) {
+    for (const [max, q] of [[2000, 0.82], [1600, 0.75], [1300, 0.68], [1000, 0.6]]) {
       const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
       const c = Object.assign(document.createElement('canvas'), { width: Math.round(img.naturalWidth * k), height: Math.round(img.naturalHeight * k) });
       const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
       const d = c.toDataURL('image/jpeg', q);
-      if (d.length < 700000) return d;
+      if (d.length < 1700000) return d;
     }
     throw new Error('besar');
   } finally { URL.revokeObjectURL(url); }
@@ -262,25 +288,23 @@ function pickReceipt(id) {
   const inp = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*,application/pdf,.pdf' });
   inp.onchange = async () => {
     const f = inp.files && inp.files[0]; if (!f) return;
-    const pdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
-    if (!pdf && !f.type.startsWith('image/')) return toast('Sila pilih gambar, screenshot atau PDF resit');
-    if (pdf && f.size > 640 * 1024) return toast('PDF terlalu besar (had 640 KB) — cuba screenshot resit');
     toast('Memuat naik resit…');
     try {
-      const img = pdf ? await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).replace(/^data:[^;,]*/, 'data:application/pdf')); r.onerror = no; r.readAsDataURL(f); }) : await shrink(f);
       const o = orders.find(x => x.id === id);
-      await F.setDoc(F.doc(db, RCOL, id), { uid: o ? o.uid : auth.currentUser.uid, img, at: F.serverTimestamp() });
+      await uploadReceipt(id, f, o ? o.uid : auth.currentUser.uid);
       await F.setDoc(F.doc(db, COL, id), o && o.status === 'paid' ? { rcpt: true } : { rcpt: true, status: 'claimed' }, { merge: true });
       toast('Resit dihantar 📎 — menunggu pengesahan admin');
-    } catch (e) { if (e && e.message === 'besar') toast('Gambar terlalu besar — cuba screenshot'); else fail(e); }
+    } catch (e) { const m = rcptErr(e); if (m) toast(m); else fail(e); }
   };
   inp.click();
 }
 async function viewReceipt(id) {
   try {
+    toast('Memuatkan resit…');
     const d = await F.getDoc(F.doc(db, RCOL, id));
     if (!d.exists()) return toast('Resit tidak dijumpai');
-    const src = d.data().img;
+    let src = d.data().img;
+    for (let k = 1; k < Math.min(d.data().n || 1, MAXPARTS); k++) src += (await F.getDoc(F.doc(db, RCOL, `${id}__${k}`))).data().img;
     if (src.startsWith('data:application/pdf')) {
       // PDF: buka sebagai fail (pelayar telefon tidak papar PDF dalam gambar)
       const bin = atob(src.split(',')[1]), u8 = new Uint8Array(bin.length);
@@ -319,11 +343,20 @@ async function save(v) {
   if (!SIZES.includes(d.size)) return toast('Pilih saiz');
   if (!COLLARS.some(c => c[0] === d.collar)) return toast('Pilih kolar');
   if (d.size[0] === 'K' && d.collar === 'Polo V / Retro') return toast('Saiz budak hanya untuk Round neck, V neck & Polo button');
+  if (v.file) { try { await readReceipt(v.file); } catch (e) { return toast(rcptErr(e) || 'Fail resit tidak dapat dibaca'); } }
   const btn = $('#fSave'); btn.disabled = true;
+  // Lampir resit selepas order disimpan; status terus 💰 (kecuali sudah ✅)
+  const attach = async (id, uid, wasPaid) => {
+    if (!v.file) return '';
+    toast('Memuat naik resit…');
+    try { await uploadReceipt(id, v.file, uid); await F.setDoc(F.doc(db, COL, id), wasPaid ? { rcpt: true } : { rcpt: true, status: 'claimed' }, { merge: true }); return ' Resit dihantar 📎'; }
+    catch (e) { console.error(e); return ' (Resit gagal dimuat naik — cuba lagi dalam Order saya)'; }
+  };
   try {
     if (editing) {
+      const o = orders.find(x => x.id === editing);
       await F.setDoc(F.doc(db, COL, editing), d, { merge: true });
-      toast('Order dikemas kini'); editing = '';
+      toast('Order dikemas kini.' + await attach(editing, o ? o.uid : auth.currentUser.uid, o && o.status === 'paid')); editing = '';
     } else {
       const u = await ensureUser();
       const used = new Set(orders.map(o => o.id));
@@ -331,7 +364,8 @@ async function save(v) {
         : [u.uid, ...Array.from({ length: 9 }, (_, i) => `${u.uid}_${i + 1}`)].find(x => !used.has(x));
       if (!id) { btn.disabled = false; return toast('Had 10 order dari satu telefon'); }
       await F.setDoc(F.doc(db, COL, id), { ...d, uid: u.uid, status: 'unpaid', at: F.serverTimestamp() });
-      toast(`Order diterima — ${rm(price(d))}. Sila buat bayaran 💳`);
+      const r = await attach(id, u.uid, false);
+      toast(`Order diterima — ${rm(price(d))}.` + (r || ' Sila buat bayaran 💳'));
     }
     renderForm();
   } catch (e) { btn.disabled = false; fail(e); }
@@ -351,6 +385,25 @@ async function adminToggle() {
 }
 
 // ---------- Mula ----------
+// Admin: semua order. Ahli: hanya order sendiri (id = uid atau uid_1 … uid_9) — senarai penuh tidak dibaca umum.
+let unsubOrders = [];
+const toOrder = d => { const x = d.data(); return { id: d.id, ...x, status: STATUS[x.status] ? x.status : 'unpaid', t: x.at?.toMillis?.() || Date.now() }; };
+function watchOrders() {
+  unsubOrders.forEach(f => f()); unsubOrders = []; orders = []; loaded = false;
+  const done = () => { orders.sort((a, b) => a.t - b.t); loaded = true; renderLists(); };
+  if (owner) {
+    unsubOrders.push(F.onSnapshot(F.collection(db, COL), snap => { orders = []; snap.forEach(d => orders.push(toOrder(d))); done(); },
+      e => { console.warn(e); loaded = true; renderLists(); toast('Tidak dapat memuatkan senarai order'); }));
+    return;
+  }
+  if (!user) { loaded = true; renderLists(); return; }
+  const mine = new Map();
+  for (const id of [user.uid, ...Array.from({ length: 9 }, (_, i) => `${user.uid}_${i + 1}`)]) {
+    unsubOrders.push(F.onSnapshot(F.doc(db, COL, id), d => { if (d.exists()) mine.set(id, toOrder(d)); else mine.delete(id); orders = [...mine.values()]; done(); },
+      e => { console.warn(id, e); done(); }));
+  }
+}
+
 async function start() {
   shell(); renderLists();
   try {
@@ -373,14 +426,9 @@ async function start() {
       if (u && !u.isAnonymous && !owner) toast('Akaun ini bukan admin order baju');
       else if (owner && !was) toast(realOwner ? 'Log masuk sebagai pemilik' : 'Log masuk sebagai admin order');
       if (was !== owner && !editing) renderForm();
+      watchOrders();
       renderLists();
     });
-    F.onSnapshot(F.collection(db, COL), snap => {
-      orders = [];
-      snap.forEach(d => { const x = d.data(); orders.push({ id: d.id, ...x, status: STATUS[x.status] ? x.status : 'unpaid', t: x.at?.toMillis?.() || Date.now() }); });
-      orders.sort((a, b) => a.t - b.t);
-      loaded = true; renderLists();
-    }, e => { console.warn(e); loaded = true; $('#listCard').innerHTML = '<h2>📋 Senarai order</h2><p class="muted">Tidak dapat memuatkan senarai (semak internet / peraturan Firestore).</p>'; });
   } catch (e) {
     console.error(e);
     $('#listCard').innerHTML = '<p class="muted">Tidak dapat bersambung. Semak internet dan muat semula.</p>';
