@@ -31,6 +31,8 @@ let toastT;
 function toast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 2600); }
 const STATUS = { paid: '✅ Disahkan', claimed: '💰 Dah bayar', unpaid: '⏳ Belum bayar' };
 
+// owner = boleh urus order (pemilik ATAU admin dalam bajuAdmins); realOwner = pemilik sebenar (boleh urus senarai admin)
+let realOwner = false, admins = [], unsubAdmins = null;
 let F, auth, db, user = null, owner = false, orders = [], loaded = false, editing = '', filter = 'all';
 
 // ---------- Paparan ----------
@@ -160,6 +162,7 @@ function renderAdmin() {
   $('#adminBtn').textContent = owner ? 'Log keluar' : 'Admin';
   a.hidden = !owner;
   if (!owner) return;
+  const keep = [$('#aEmail')?.value || '', $('#aName')?.value || ''];   // jangan hilang teks yang sedang ditaip bila senarai dikemas kini
   const tally = {};
   orders.forEach(o => { const k = collarOf(o) + '|' + o.size + '|' + o.sleeve; tally[k] = (tally[k] || 0) + 1; });
   const rows = COLLARS.flatMap(([c]) => SIZES.flatMap(s => ['Pendek', 'Panjang'].map(sl => [c, sz(s), sl, tally[c + '|' + s + '|' + sl] || 0]))).filter(r => r[3]);
@@ -176,7 +179,26 @@ function renderAdmin() {
       <button class="btn sm" id="cpOwe">📋 Salin senarai belum bayar</button>
       <button class="btn sm" id="dlCsv">⬇️ Muat turun CSV</button>
     </div>
-    <p class="note">Admin boleh tambah order bagi pihak ahli (guna borang di atas) dan masih boleh tambah/ubah selepas order ditutup.</p>`;
+    <p class="note">Admin boleh tambah order bagi pihak ahli (guna borang di atas) dan masih boleh tambah/ubah selepas order ditutup.</p>
+    ${realOwner ? `<h2 style="font-size:15px;margin-top:16px">👥 Admin order</h2>
+      ${admins.length ? `<ul class="list">${admins.map(x => `<li><div class="who"><b>${esc(x.name || '—')}</b><small>${esc(x.id)}</small></div><button class="btn sm danger" data-rmadm="${esc(x.id)}">Buang</button></li>`).join('')}</ul>` : '<p class="muted">Belum ada admin tambahan.</p>'}
+      <div class="row2"><div><label for="aEmail">E-mel Google</label><input id="aEmail" type="email" placeholder="nama@gmail.com" autocomplete="off"></div>
+      <div><label for="aName">Nama</label><input id="aName" maxlength="50" placeholder="cth. Ali"></div></div>
+      <button class="btn sm on" id="aAdd" style="margin-top:10px">➕ Tambah admin</button>
+      <p class="note">Admin tambahan boleh sah bayaran, ubah/padam order dan muat turun senarai, tetapi tidak boleh urus senarai admin. Mereka log masuk dengan akaun Google e-mel tersebut.</p>` : ''}`;
+  if (realOwner) {
+    $('#aEmail').value = keep[0]; $('#aName').value = keep[1];
+    $('#aAdd').onclick = async () => {
+      const email = $('#aEmail').value.trim().toLowerCase(), name = $('#aName').value.trim().slice(0, 50);
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return toast('E-mel tidak sah');
+      $('#aEmail').value = ''; $('#aName').value = '';
+      try { await F.setDoc(F.doc(db, 'bajuAdmins', email), { name, at: F.serverTimestamp() }); toast('Admin ditambah'); } catch (e) { fail(e); }
+    };
+    document.querySelectorAll('[data-rmadm]').forEach(b => (b.onclick = async () => {
+      if (!confirm(`Buang ${b.dataset.rmadm} daripada admin order?`)) return;
+      try { await F.deleteDoc(F.doc(db, 'bajuAdmins', b.dataset.rmadm)); toast('Admin dibuang'); } catch (e) { fail(e); }
+    }));
+  }
   $('#cpWa').onclick = () => copy(`🐯 *SENARAI ORDER BAJU RIMAU* (${orders.length})\n\n` + orders.map(line).join('\n') + `\n\n✅ Disahkan: ${orders.filter(o => o.status === 'paid').length}/${orders.length}`, 'Senarai disalin');
   $('#cpOwe').onclick = () => { const l = orders.filter(o => o.status !== 'paid'); copy(`⏳ *BELUM DISAHKAN BAYARAN* (${l.length})\nTutup order & bayaran: 12/12/2026\n\n` + l.map((o, i) => `${i + 1}. ${o.name} – ${rm(price(o))}${o.status === 'claimed' ? ' (💰 semak resit)' : ''}`).join('\n'), 'Senarai disalin'); };
   $('#dlCsv').onclick = () => {
@@ -267,8 +289,14 @@ async function start() {
     F.onAuthStateChanged(auth, async u => {
       user = u;
       const was = owner;
-      owner = !!(u && !u.isAnonymous && u.email && u.emailVerified && (await sha256(u.email.toLowerCase())) === OWNER_HASH);
+      if (unsubAdmins) { unsubAdmins(); unsubAdmins = null; } admins = [];
+      const email = u && !u.isAnonymous && u.emailVerified && u.email ? u.email.toLowerCase() : '';
+      realOwner = !!email && (await sha256(email)) === OWNER_HASH;
+      owner = realOwner;
+      if (email && !realOwner) { try { owner = (await F.getDoc(F.doc(db, 'bajuAdmins', email))).exists(); } catch { owner = false; } }
+      if (realOwner) unsubAdmins = F.onSnapshot(F.collection(db, 'bajuAdmins'), snap => { admins = []; snap.forEach(d => admins.push({ id: d.id, ...d.data() })); admins.sort((a, b) => a.id.localeCompare(b.id)); renderLists(); }, e => console.warn(e));
       if (u && !u.isAnonymous && !owner) toast('Akaun ini bukan admin order baju');
+      else if (owner && !was) toast(realOwner ? 'Log masuk sebagai pemilik' : 'Log masuk sebagai admin order');
       if (was !== owner && !editing) renderForm();
       renderLists();
     });
