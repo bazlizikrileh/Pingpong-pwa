@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.51.0';
+const VERSION = '3.52.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -89,7 +89,6 @@ const canEdit = t => !asPeserta() && store.canEdit(t.id);
 const isAdm = () => !asPeserta() && cloud.isAdmin();
 // Pilihan kelab semasa cipta/ubah pertandingan. Admin (bukan pemilik) hanya nampak kelab pertandingan yang diurusnya
 // (+ Persendirian & Lain-lain); admin baharu tanpa pertandingan masih nampak semua.
-const CLUB_OPTS = { ksasall: 'KSAS', ksas: 'KSAS Kumpulan Rimau', kroni: 'Kroni Shell KSAS', kskpkpjb: 'KSKPKPJB', sendiri: '🙋 Persendirian (main santai)', lain: 'Lain-lain' };
 const clubLabel = k => (CLUB_OPTS[k] || k).replace('🙋 ', '').replace(' (main santai)', '');
 function clubChoices(t) {
   const ALL = { ...CLUB_OPTS, '': '— Tiada —' };
@@ -140,6 +139,22 @@ const CLUBS = {
   sendiri: { short: 'Persendirian', name: 'Penganjur persendirian · main santai', logos: [], ownLogo: true, theme: { tb: '#0f766e', tb2: '#0b5a54', or: '#f59e0b', w: '#e6f6f4', hd1: '#062e2b', hd2: '#0f5f58' }, waGroup: '' },
   kskpkpjb: { short: 'KSKPKPJB', name: 'Kelab Sukan Kebajikan Perubatan Kesihatan dan Pergigian Johor Bahru', logos: ['logos/kskpkpjb.webp'], theme: { tb: '#16803c', tb2: '#0d5a2a', or: '#e3262e', w: '#e8f6ec', hd1: '#07301b', hd2: '#0f5a2c' }, waGroup: '' },
 };
+const CLUB_OPTS = { ksasall: 'KSAS', ksas: 'KSAS Kumpulan Rimau', kroni: 'Kroni Shell KSAS', kskpkpjb: 'KSKPKPJB', sendiri: '🙋 Persendirian (main santai)', lain: 'Lain-lain' };
+// ---- Kelab tambahan (Pentadbir → Urus kelab) ----
+const BUILTIN_CLUBS = new Set(Object.keys(CLUBS));
+const hexMix = (a, b, k) => { const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)); const x = p(a), y = p(b); return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * k).toString(16).padStart(2, '0')).join(''); };
+const themeFrom = (c, acc) => ({ tb: c, tb2: hexMix(c, '#000000', .22), or: acc || '#ff7a1a', w: hexMix(c, '#ffffff', .9), hd1: hexMix(c, '#000000', .72), hd2: hexMix(c, '#000000', .3) });
+let _clubDefs = [];
+function applyClubDefs(list) {
+  _clubDefs = list.filter(d => d && d.id && d.short && !BUILTIN_CLUBS.has(d.id));
+  for (const k of Object.keys(CLUBS)) if (!BUILTIN_CLUBS.has(k)) delete CLUBS[k];
+  for (const d of _clubDefs) CLUBS[d.id] = { short: d.short, name: d.name || d.short, logos: d.logo ? [d.logo] : [], thumb: d.logo || '', theme: themeFrom(d.color || '#1f4aa8', d.accent), waGroup: '', custom: true };
+  const tail = { sendiri: CLUB_OPTS.sendiri, lain: CLUB_OPTS.lain };
+  for (const k of Object.keys(CLUB_OPTS)) if (!['ksasall', 'ksas', 'kroni', 'kskpkpjb'].includes(k)) delete CLUB_OPTS[k];
+  for (const d of _clubDefs) CLUB_OPTS[d.id] = d.short;
+  Object.assign(CLUB_OPTS, tail);
+}
+try { applyClubDefs(JSON.parse(ls.get('pingpong:clubDefs') || '[]')); } catch {}
 function clubOf(t) {
   if (t.clubId === undefined || t.clubId === null) t.clubId = /ksas|rimau/i.test(t.club || '') ? 'ksas' : /kskp/i.test(t.club || '') ? 'kskpkpjb' : (t.club ? 'lain' : '');
   const c = CLUBS[t.clubId];
@@ -192,7 +207,10 @@ function pn(t, id, cls = '', ph = '') {
 // ---------- Penghala ----------
 document.addEventListener('click', e => { const b = e.target.closest('[data-rcard]'); if (!b) return; const [tid, mid] = b.dataset.rcard.split('|'), t = load(tid), m = t && t.matches.find(x => x.id === mid); if (m) shareResultCard(t, m).catch(err => toast('Gagal: ' + (err.message || err))); });
 window.addEventListener('hashchange', () => { { const dw = document.getElementById('drw'); if (dw && !_drwKeep) dw.remove(); } if (window._lsWake && !/\/ls\//.test(location.hash)) window._lsWake.release().catch(() => {}); const md = document.getElementById('modal'); if (md) md.hidden = true; render(); });
-window.addEventListener('load', () => { render(); cloud.init(); });
+window.addEventListener('load', () => {
+  render(); cloud.init();
+  cloud.watchClubDefs(list => { const j = JSON.stringify(list.map(({ at, ...d }) => d)); if (j === ls.get('pingpong:clubDefs')) return; ls.set('pingpong:clubDefs', j); applyClubDefs(JSON.parse(j)); render(true); });
+});
 let _dirty = false;
 const busy = () => {
   const a = document.activeElement;
@@ -3600,6 +3618,36 @@ async function admReqCard(el) {
 }
 const clubTicks = (sel, name) => `<div class="ar-clubs">${Object.entries(CLUB_OPTS).map(([k, v]) => `<label class="ar-ck"><input type="checkbox" name="${name}" value="${k}" ${sel.includes(k) ? 'checked' : ''}> ${esc(v)}</label>`).join('')}</div>`;
 let _reqUnsub = null;
+function wireClubDefs() {
+  const $ = id => document.getElementById(id); let logo = '';
+  const showLogo = () => { $('cdLogoV').innerHTML = logo ? `<img src="${logo}" alt="">` : '<span class="muted small">tiada</span>'; $('cdLogoX').hidden = !logo; };
+  const fill = d => { $('cdId').value = d ? d.id : ''; $('cdShort').value = d ? d.short : ''; $('cdName').value = d ? d.name || '' : ''; $('cdColor').value = d ? d.color || '#1f4aa8' : '#1f4aa8'; $('cdAcc').value = d ? d.accent || '#ff7a1a' : '#ff7a1a'; logo = d ? d.logo || '' : ''; showLogo(); $('cdForm').querySelector('summary').textContent = d ? `✏️ Ubah ${d.short}` : '➕ Tambah kelab'; };
+  const list = () => {
+    const ts = store.list();
+    $('cdList').innerHTML = _clubDefs.length ? _clubDefs.map(d => `<div class="list-item"><span class="row" style="flex-wrap:nowrap;gap:10px"><span class="cd-logo" style="border-color:${esc(d.color || '#1f4aa8')}">${d.logo ? `<img src="${d.logo}" alt="">` : ''}</span><span><b>${esc(d.short)}</b><br><span class="muted small">${esc(d.name || '')} · ${ts.filter(t => t.clubId === d.id).length} pertandingan</span></span></span>
+      <span class="row"><button class="pill-btn light small" data-cde="${esc(d.id)}">✏️</button><button class="pill-btn no small" data-cdd="${esc(d.id)}">🗑</button></span></div>`).join('') : '<p class="muted small">Belum ada kelab tambahan.</p>';
+    $('cdList').querySelectorAll('[data-cde]').forEach(b => (b.onclick = () => { fill(_clubDefs.find(d => d.id === b.dataset.cde)); $('cdForm').open = true; $('cdForm').scrollIntoView({ behavior: 'smooth' }); }));
+    $('cdList').querySelectorAll('[data-cdd]').forEach(b => (b.onclick = async () => {
+      const d = _clubDefs.find(x => x.id === b.dataset.cdd), n = ts.filter(t => t.clubId === d.id).length;
+      if (!confirm(`Padam kelab ${d.short}?${n ? `\n\n${n} pertandingan masih menggunakan kelab ini; ia akan dipaparkan tanpa logo/tema.` : ''}`)) return;
+      try { await cloud.deleteClubDef(d.id); toast('Kelab dipadam'); } catch (e) { toast('Gagal: ' + (e.code || e.message), 4000); }
+    }));
+  };
+  list(); showLogo();
+  $('cdLogo').onchange = async e => { const f = e.target.files[0]; if (!f) return; try { logo = await resizeLogo(f); showLogo(); } catch { toast('Gambar tidak dapat dibaca'); } e.target.value = ''; };
+  $('cdLogoX').onclick = () => { logo = ''; showLogo(); };
+  $('cdNew').onclick = () => fill(null);
+  $('cdSave').onclick = async () => {
+    const short = $('cdShort').value.trim(); if (!short) return toast('Isi nama pendek');
+    let id = $('cdId').value;
+    if (!id) { const base = short.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '').slice(0, 16) || 'kelab'; id = base; let i = 2; while (CLUBS[id] || BUILTIN_CLUBS.has(id) || ['lain', 'semua'].includes(id)) id = base + i++; }
+    const d = { short, name: $('cdName').value.trim() || short, color: $('cdColor').value, accent: $('cdAcc').value, logo };
+    if (logo.length > 280000) return toast('Logo terlalu besar');
+    try { await cloud.saveClubDef(id, d); toast(`Kelab ${short} disimpan`); fill(null); $('cdForm').open = false; } catch (e) { toast('Gagal: ' + (e.code || e.message), 4000); }
+  };
+  _cdRefresh = list;
+}
+let _cdRefresh = null;
 function viewAdmin() {
   if (cloud.state.role !== 'owner') { $app.innerHTML = `${section('Pentadbir', 'Peranan')}<div class="card"><p class="muted">Hanya admin utama (${esc(cloud.ownerEmail())}) boleh membuka halaman ini.</p></div>`; return; }
   $app.innerHTML = `${section('Pentadbir', 'Peranan')}
@@ -3609,8 +3657,22 @@ function viewAdmin() {
       <div><label>Peranan</label><select id="rRole">${opt({ verifier: 'Pengesah skor', admin: 'Admin pertandingan' }, 'verifier')}</select></div></div>
       <div id="rClubs" hidden><label>Kelab admin ini</label>${clubTicks([], 'rnew')}</div>
       <button class="pill-btn brand" id="rAdd" style="margin-top:12px"><span class="dot"></span>Tambah / kemas kini</button></div>
+    <div class="card"><div class="section-title" style="margin-top:0">🏷️ Urus kelab</div>
+      <p class="muted small" style="margin-top:0">Kelab terbina: KSAS, KSAS Kumpulan Rimau, Kroni Shell KSAS, KSKPKPJB, Persendirian. Tambah kelab/penganjur lain di sini — terus muncul dalam pilihan kelab, cip penapis, poster &amp; laporan.</p>
+      <div id="cdList"></div>
+      <details class="fold" id="cdForm"><summary>➕ Tambah kelab</summary>
+        <input type="hidden" id="cdId">
+        <div class="grid2"><div><label>Nama pendek</label><input id="cdShort" maxlength="30" placeholder="cth. KSHSI"></div>
+        <div><label>Nama penuh</label><input id="cdName" maxlength="100" placeholder="cth. Kelab Sukan Hospital Sultan Ismail"></div></div>
+        <div class="grid2"><div><label>Warna utama</label><input id="cdColor" type="color" value="#1f4aa8" style="height:42px"></div>
+        <div><label>Warna aksen</label><input id="cdAcc" type="color" value="#ff7a1a" style="height:42px"></div></div>
+        <label>Logo <small class="muted">(PNG/JPG, latar lutsinar lebih baik)</small></label>
+        <div class="row" style="gap:10px"><span class="cd-logo" id="cdLogoV"></span><label class="pill-btn light small" style="margin:0">Pilih logo<input type="file" id="cdLogo" accept="image/*" hidden></label><button type="button" class="pill-btn light small" id="cdLogoX" hidden>Buang logo</button></div>
+        <div class="row" style="gap:6px;margin-top:10px"><button type="button" class="pill-btn brand small" id="cdSave">Simpan kelab</button><button type="button" class="pill-btn light small" id="cdNew">Kosongkan</button></div>
+      </details></div>
     <div class="card" id="reqCard" hidden><div class="section-title" style="margin-top:0">⏳ Permohonan penganjur</div><div id="reqList"></div></div>
     <div class="card"><div class="section-title" style="margin-top:0">Senarai</div><div id="rList" class="muted">Memuatkan…</div></div>`;
+  wireClubDefs();
   if (_reqUnsub) _reqUnsub();
   _reqUnsub = cloud.watchAdminReqs(list => {
     const card = document.getElementById('reqCard'), el = document.getElementById('reqList'); if (!el) return;

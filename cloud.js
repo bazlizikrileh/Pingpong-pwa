@@ -192,6 +192,12 @@ export async function setRole(email, role, name = '', clubs) {
   await init(); await F.setDoc(F.doc(db, 'roles', email.trim().toLowerCase()), { role, name, ...(Array.isArray(clubs) ? { clubs } : {}) });
 }
 export async function setRoleClubs(email, clubs) { await init(); await F.setDoc(F.doc(db, 'roles', email.trim().toLowerCase()), { clubs }, { merge: true }); }
+// Kelab tambahan yang dicipta pemilik (Pentadbir → Urus kelab): semua boleh baca, pemilik sahaja tulis
+export function watchClubDefs(cb) {
+  init().then(() => F.onSnapshot(F.collection(db, 'clubDefs'), snap => { const out = []; snap.forEach(d => out.push({ id: d.id, ...d.data() })); cb(out); }, () => {})).catch(() => {});
+}
+export async function saveClubDef(id, d) { await init(); await F.setDoc(F.doc(db, 'clubDefs', id), { ...d, at: F.serverTimestamp() }); }
+export async function deleteClubDef(id) { await init(); await F.deleteDoc(F.doc(db, 'clubDefs', id)); }
 // Permohonan menjadi penganjur (admin): pemohon pilih kelab; pemilik luluskan/tolak di halaman Pentadbir
 export async function requestAdmin({ clubs, note, name }) {
   await init(); const u = auth.currentUser; if (!u || u.isAnonymous || !u.email) throw new Error('Log masuk dahulu');

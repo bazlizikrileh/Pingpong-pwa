@@ -853,3 +853,7 @@ body.tv .as-bar { display:none; }
 .rk-t a > span:last-child { white-space:nowrap; font-weight:600; }
 .hc-chips a.chip { text-decoration:none; }
 .rk .stat-grid { grid-template-columns: repeat(4, 1fr); gap:6px; } .rk .stat b { font-size:15px; } .rk .stat span { font-size:9.5px; }
+
+/* Urus kelab */
+.cd-logo { width:42px; height:42px; border-radius:10px; border:2px solid var(--line); background:#fff; display:inline-flex; align-items:center; justify-content:center; overflow:hidden; flex:none; }
+.cd-logo img { max-width:100%; max-height:100%; object-fit:contain; }
