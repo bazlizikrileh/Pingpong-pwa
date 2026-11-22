@@ -4,9 +4,19 @@
 import { firebaseConfig } from './firebase-config.js';
 
 const BASE = 45, LONG = 5;
-const SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL', '9XL', '10XL'];
+// Kolar: nama → caj tambahan (order lama tanpa kolar = Round neck)
+const COLLARS = [['Round neck', 0], ['V neck', 3], ['Polo button', 6], ['Polo V / Retro', 12]];
+const collarOf = o => (COLLARS.some(c => c[0] === o.collar) ? o.collar : 'Round neck');
+const collarExtra = o => COLLARS.find(c => c[0] === collarOf(o))[1];
+// Saiz dewasa + saiz budak (disimpan K20 … K36)
+const ADULT = [['3XS', 16, 23], ['2XS', 17, 24], ['XS', 18, 25], ['S', 19, 26], ['M', 20, 27], ['L', 21, 28], ['XL', 22, 29], ['2XL', 23, 30], ['3XL', 24, 31],
+  ['4XL', 25, 32], ['5XL', 26, 33], ['6XL', 27, 34], ['7XL', 28, 35], ['8XL', 29, 36], ['9XL', 30, 36.5], ['10XL', 31, 36.5]];
+const KIDS = [['K20', 10.5, 14.5], ['K22', 11.5, 15.5], ['K24', 12.5, 16.5], ['K26', 13.5, 17.5], ['K28', 14.5, 18.5], ['K30', 15.5, 20], ['K32', 16.5, 21.5], ['K34', 17.5, 22.5], ['K36', 18.5, 23.5]];
+const SIZES = [...ADULT, ...KIDS].map(s => s[0]);
+const sz = s => (s && s[0] === 'K' ? 'Budak ' + s.slice(1) : s);
 const extra = s => (['4XL', '5XL'].includes(s) ? 5 : ['6XL', '7XL'].includes(s) ? 7 : ['8XL', '9XL', '10XL'].includes(s) ? 10 : 0);
-const price = o => BASE + (o.sleeve === 'Panjang' ? LONG : 0) + extra(o.size);
+const price = o => BASE + collarExtra(o) + (o.sleeve === 'Panjang' ? LONG : 0) + extra(o.size);
+const desc = (o, sep = ' · ') => [collarOf(o), sz(o.size), o.sleeve].join(sep);
 const DEADLINE = Date.parse('2026-12-12T23:59:59+08:00');
 const ACC = '8881057822185';
 const OWNER_HASH = '775ee7a41c79e60559c753e4dd4a0f3db5737d1972d9d93934d4bc33ab5e13cb';
@@ -34,15 +44,30 @@ function shell() {
   </section>
   <section class="card">
     <h2>👕 Butiran &amp; harga</h2>
-    <p class="muted" style="margin-top:0">Round neck · kain eyelet 165 gsm · nama belakang baju ikut pilihan sendiri</p>
+    <p class="muted" style="margin-top:0">Kain eyelet 165 gsm · nama belakang baju ikut pilihan sendiri</p>
     <table>
-      <tr><td>Lengan pendek</td><td class="n"><b>${rm(BASE)}</b></td></tr>
+      <tr><td>Round neck, lengan pendek</td><td class="n"><b>${rm(BASE)}</b></td></tr>
+      <tr><th colspan="2">Kolar</th></tr>
+      ${COLLARS.slice(1).map(c => `<tr><td>${c[0]}</td><td class="n">+${rm(c[1])}</td></tr>`).join('')}
+      <tr><th colspan="2">Lengan</th></tr>
       <tr><td>Lengan panjang</td><td class="n">+${rm(LONG)}</td></tr>
+      <tr><th colspan="2">Big size</th></tr>
       <tr><td>4XL – 5XL</td><td class="n">+RM 5</td></tr>
       <tr><td>6XL – 7XL</td><td class="n">+RM 7</td></tr>
       <tr><td>8XL – 10XL</td><td class="n">+RM 10</td></tr>
     </table>
-    <p class="note">Contoh: lengan panjang 6XL = 45 + 5 + 7 = <b>RM 57</b></p>
+    <p class="note">Contoh: Polo button, lengan panjang, 6XL = 45 + 6 + 5 + 7 = <b>RM 63</b></p>
+    <details style="margin-top:10px"><summary style="font-weight:600;cursor:pointer">👔 Rupa kolar</summary>
+      <img src="baju/kolar.jpg" alt="Jenis kolar baju" style="width:100%;border-radius:12px;margin-top:8px">
+      <p class="note">Pilihan yang ada: <b>Round neck</b>, <b>V neck</b>, <b>Polo</b> (button) dan <b>Premium Retro</b> (Polo V / Retro).</p>
+    </details>
+    <details style="margin-top:8px"><summary style="font-weight:600;cursor:pointer">📏 Carta saiz (inci)</summary>
+      <p class="note">Lebar = ketiak ke ketiak · Panjang = bahu ke bawah. Saiz budak untuk Round neck, Polo button &amp; V neck.</p>
+      <div class="row2" style="align-items:start;font-size:12px;gap:8px">
+        <table><tr><th>Dewasa</th><th class="n">Lebar</th><th class="n">Panjang</th></tr>${ADULT.map(s => `<tr><td>${s[0]}</td><td class="n">${s[1]}"</td><td class="n">${s[2]}"</td></tr>`).join('')}</table>
+        <table><tr><th>Budak</th><th class="n">Lebar</th><th class="n">Panjang</th></tr>${KIDS.map(s => `<tr><td>${s[0].slice(1)}</td><td class="n">${s[1]}"</td><td class="n">${s[2]}"</td></tr>`).join('')}</table>
+      </div>
+    </details>
   </section>
   <section class="card" id="formCard"></section>
   <section class="card" id="mine" hidden></section>
@@ -70,13 +95,16 @@ function shell() {
 function renderForm(o = null) {
   const c = $('#formCard');
   if (!isOpen() && !owner && !o) { c.innerHTML = '<h2>📝 Order</h2><p class="muted">Order telah ditutup pada 12/12/2026. Hubungi Ahmad jika ada pertanyaan.</p>'; return; }
-  const v = o || { name: '', size: 'L', sleeve: 'Pendek', print: '', note: '' };
+  const v = o || { name: '', size: 'L', sleeve: 'Pendek', print: '', note: '', collar: 'Round neck' };
+  const opt = (s, l) => `<option value="${s}"${s === v.size ? ' selected' : ''}>${l}</option>`;
   c.innerHTML = `
     <h2>📝 ${o ? 'Ubah order' : 'Order baju'}</h2>
     <label for="fName">Nama penuh / nama panggilan</label>
     <input id="fName" maxlength="50" autocomplete="name" value="${esc(v.name)}" placeholder="cth. Ahmad">
+    <label for="fCollar">Kolar</label>
+    <select id="fCollar">${COLLARS.map(([k, x]) => `<option value="${k}"${k === collarOf(v) ? ' selected' : ''}>${k}${x ? ` (+RM ${x})` : ''}</option>`).join('')}</select>
     <div class="row2">
-      <div><label for="fSize">Saiz</label><select id="fSize">${SIZES.map(s => `<option${s === v.size ? ' selected' : ''}>${s}</option>`).join('')}</select></div>
+      <div><label for="fSize">Saiz</label><select id="fSize"><optgroup label="Dewasa">${ADULT.map(s => opt(s[0], s[0] + (extra(s[0]) ? ` (+RM ${extra(s[0])})` : ''))).join('')}</optgroup><optgroup label="Budak">${KIDS.map(s => opt(s[0], 'Budak ' + s[0].slice(1))).join('')}</optgroup></select></div>
       <div><label for="fPrint">Nama atas baju</label><input id="fPrint" maxlength="20" value="${esc(v.print)}" placeholder="cth. AHMAD" style="text-transform:uppercase"></div>
     </div>
     <label>Lengan</label>
@@ -87,14 +115,14 @@ function renderForm(o = null) {
     <button class="btn main" id="fSave">${o ? 'Simpan perubahan' : 'Hantar order'}</button>
     ${o ? '<button class="btn" id="fCancel" style="width:100%;margin-top:8px">Batal ubah</button>' : '<p class="note">Satu telefon boleh order beberapa helai (contoh untuk keluarga) — hantar satu per satu.</p>'}`;
   let sleeve = v.sleeve;
-  const upd = () => ($('#fTotal').textContent = rm(price({ size: $('#fSize').value, sleeve })));
+  const upd = () => ($('#fTotal').textContent = rm(price({ size: $('#fSize').value, sleeve, collar: $('#fCollar').value })));
   c.querySelectorAll('[data-sl]').forEach(b => (b.onclick = () => { sleeve = b.dataset.sl; c.querySelectorAll('[data-sl]').forEach(x => x.classList.toggle('on', x === b)); upd(); }));
-  $('#fSize').onchange = upd; upd();
-  $('#fSave').onclick = () => save({ name: $('#fName').value, size: $('#fSize').value, sleeve, print: $('#fPrint').value, note: $('#fNote').value });
+  $('#fSize').onchange = upd; $('#fCollar').onchange = upd; upd();
+  $('#fSave').onclick = () => save({ name: $('#fName').value, collar: $('#fCollar').value, size: $('#fSize').value, sleeve, print: $('#fPrint').value, note: $('#fNote').value });
   if (o) $('#fCancel').onclick = () => { editing = ''; renderForm(); };
 }
 
-const line = (o, i) => `${i + 1}. ${o.name} – ${o.size} – ${o.sleeve}${o.print ? ' – ' + o.print : ''}${o.status === 'paid' ? ' 💰✅' : o.status === 'claimed' ? ' 💰' : ''}`;
+const line = (o, i) => `${i + 1}. ${o.name} – ${desc(o, ' – ')}${o.print ? ' – ' + o.print : ''}${o.status === 'paid' ? ' 💰✅' : o.status === 'claimed' ? ' 💰' : ''}`;
 
 function renderLists() {
   const mine = orders.filter(o => user && o.uid === user.uid);
@@ -102,7 +130,7 @@ function renderLists() {
   m.hidden = !mine.length;
   if (mine.length) {
     m.innerHTML = `<h2>🧾 Order saya</h2><ul class="list">${mine.map(o => `
-      <li><div class="who"><b>${esc(o.name)}</b> · ${o.size} · ${o.sleeve}${o.print ? ' · ' + esc(o.print) : ''} — <b>${rm(price(o))}</b>
+      <li><div class="who"><b>${esc(o.name)}</b> · ${desc(o)}${o.print ? ' · ' + esc(o.print) : ''} — <b>${rm(price(o))}</b>
         <small class="st ${o.status}">${STATUS[o.status]}</small>
         ${o.status === 'paid' ? '' : `<div class="acts">
           ${o.status === 'unpaid' ? `<button class="btn sm ok" data-claim="${o.id}">💰 Saya dah bayar</button>` : `<button class="btn sm" data-unclaim="${o.id}">↩ Belum bayar</button>`}
@@ -118,7 +146,7 @@ function renderLists() {
     <div class="stats"><div><b>${paid}</b><span>✅ Disahkan</span></div><div><b>${claimed}</b><span>💰 Dah bayar</span></div><div><b>${orders.length - paid - claimed}</b><span>⏳ Belum bayar</span></div></div>
     <div class="filters">${[['all', 'Semua'], ['unpaid', '⏳ Belum'], ['claimed', '💰 Dah bayar'], ['paid', '✅ Disahkan']].map(([k, t]) => `<button class="btn sm${filter === k ? ' on' : ''}" data-f="${k}">${t}</button>`).join('')}</div>
     ${!loaded ? '<p class="muted">Memuatkan…</p>' : !shown.length ? '<p class="muted">Tiada order lagi.</p>' : `<ul class="list">${shown.map(o => `
-      <li><span class="no">${orders.indexOf(o) + 1}.</span><div class="who"><b>${esc(o.name)}</b> · ${o.size} · ${o.sleeve}${o.print ? ' · ' + esc(o.print) : ''}
+      <li><span class="no">${orders.indexOf(o) + 1}.</span><div class="who"><b>${esc(o.name)}</b> · ${desc(o)}${o.print ? ' · ' + esc(o.print) : ''}
         ${owner ? `<small>${rm(price(o))}${o.note ? ' · ' + esc(o.note) : ''}</small><div class="acts">
           ${o.status === 'paid' ? `<button class="btn sm" data-set="${o.id}:unpaid">↩ Batal sah</button>` : `<button class="btn sm ok" data-set="${o.id}:paid">✅ Sah bayar</button>`}
           <button class="btn sm" data-edit="${o.id}">✏️</button><button class="btn sm danger" data-del="${o.id}">🗑</button></div>` : ''}
@@ -133,8 +161,8 @@ function renderAdmin() {
   a.hidden = !owner;
   if (!owner) return;
   const tally = {};
-  orders.forEach(o => { const k = o.size + '|' + o.sleeve; tally[k] = (tally[k] || 0) + 1; });
-  const rows = SIZES.flatMap(s => ['Pendek', 'Panjang'].map(sl => [s, sl, tally[s + '|' + sl] || 0])).filter(r => r[2]);
+  orders.forEach(o => { const k = collarOf(o) + '|' + o.size + '|' + o.sleeve; tally[k] = (tally[k] || 0) + 1; });
+  const rows = COLLARS.flatMap(([c]) => SIZES.flatMap(s => ['Pendek', 'Panjang'].map(sl => [c, sz(s), sl, tally[c + '|' + s + '|' + sl] || 0]))).filter(r => r[3]);
   const expect = orders.reduce((s, o) => s + price(o), 0);
   const got = orders.filter(o => o.status === 'paid').reduce((s, o) => s + price(o), 0);
   const claim = orders.filter(o => o.status === 'claimed').reduce((s, o) => s + price(o), 0);
@@ -142,7 +170,7 @@ function renderAdmin() {
     <h2>🛠️ Panel admin</h2>
     <div class="stats"><div><b>${rm(expect)}</b><span>Jumlah order</span></div><div><b>${rm(got)}</b><span>✅ Disahkan</span></div><div><b>${rm(expect - got)}</b><span>Belum sah (${rm(claim)} dakwa bayar)</span></div></div>
     <h2 style="font-size:15px">Ringkasan untuk kilang (${orders.length} helai)</h2>
-    ${rows.length ? `<table><tr><th>Saiz</th><th>Lengan</th><th class="n">Helai</th></tr>${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="n">${r[2]}</td></tr>`).join('')}</table>` : '<p class="muted">Tiada order lagi.</p>'}
+    ${rows.length ? `<table><tr><th>Kolar</th><th>Saiz</th><th>Lengan</th><th class="n">Helai</th></tr>${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td class="n">${r[3]}</td></tr>`).join('')}</table>` : '<p class="muted">Tiada order lagi.</p>'}
     <div class="acts" style="margin-top:12px">
       <button class="btn sm" id="cpWa">📋 Salin senarai WhatsApp</button>
       <button class="btn sm" id="cpOwe">📋 Salin senarai belum bayar</button>
@@ -153,7 +181,7 @@ function renderAdmin() {
   $('#cpOwe').onclick = () => { const l = orders.filter(o => o.status !== 'paid'); copy(`⏳ *BELUM DISAHKAN BAYARAN* (${l.length})\nTutup order & bayaran: 12/12/2026\n\n` + l.map((o, i) => `${i + 1}. ${o.name} – ${rm(price(o))}${o.status === 'claimed' ? ' (💰 semak resit)' : ''}`).join('\n'), 'Senarai disalin'); };
   $('#dlCsv').onclick = () => {
     const q = s => `"${String(s ?? '').replace(/"/g, '""')}"`;
-    const csv = ['No,Nama,Saiz,Lengan,Nama atas baju,Harga (RM),Status,Catatan', ...orders.map((o, i) => [i + 1, q(o.name), o.size, o.sleeve, q(o.print), price(o), q(STATUS[o.status].slice(2).trim()), q(o.note)].join(','))].join('\n');
+    const csv = ['No,Nama,Kolar,Saiz,Lengan,Nama atas baju,Harga (RM),Status,Catatan', ...orders.map((o, i) => [i + 1, q(o.name), q(collarOf(o)), q(sz(o.size)), o.sleeve, q(o.print), price(o), q(STATUS[o.status].slice(2).trim()), q(o.note)].join(','))].join('\n');
     const u = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
     Object.assign(document.createElement('a'), { href: u, download: 'order-baju-rimau.csv' }).click();
     setTimeout(() => URL.revokeObjectURL(u), 1000);
@@ -170,7 +198,7 @@ function bindActs() {
     editing = o.id; renderForm(o); $('#formCard').scrollIntoView({ behavior: 'smooth' });
   }));
   document.querySelectorAll('[data-del]').forEach(b => (b.onclick = async () => {
-    const o = orders.find(x => x.id === b.dataset.del); if (!o || !confirm(`Batalkan order ${o.name} (${o.size} ${o.sleeve})?`)) return;
+    const o = orders.find(x => x.id === b.dataset.del); if (!o || !confirm(`Batalkan order ${o.name} (${desc(o, ', ')})?`)) return;
     try { await F.deleteDoc(F.doc(db, COL, o.id)); toast('Order dibatalkan'); if (editing === o.id) { editing = ''; renderForm(); } } catch (e) { fail(e); }
   }));
 }
@@ -190,9 +218,11 @@ async function ensureUser() {
   return auth.currentUser;
 }
 async function save(v) {
-  const d = { name: v.name.trim().replace(/\s+/g, ' ').slice(0, 50), size: v.size, sleeve: v.sleeve, print: v.print.trim().toUpperCase().slice(0, 20), note: v.note.trim().slice(0, 100) };
+  const d = { name: v.name.trim().replace(/\s+/g, ' ').slice(0, 50), collar: v.collar, size: v.size, sleeve: v.sleeve, print: v.print.trim().toUpperCase().slice(0, 20), note: v.note.trim().slice(0, 100) };
   if (!d.name) return toast('Sila isi nama');
   if (!SIZES.includes(d.size)) return toast('Pilih saiz');
+  if (!COLLARS.some(c => c[0] === d.collar)) return toast('Pilih kolar');
+  if (d.size[0] === 'K' && d.collar === 'Polo V / Retro') return toast('Saiz budak hanya untuk Round neck, V neck & Polo button');
   const btn = $('#fSave'); btn.disabled = true;
   try {
     if (editing) {
