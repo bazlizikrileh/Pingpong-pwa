@@ -33,6 +33,9 @@ const STATUS = { paid: '✅ Disahkan', claimed: '💰 Dah bayar', unpaid: '⏳ B
 
 // owner = boleh urus order (pemilik ATAU admin dalam bajuAdmins); realOwner = pemilik sebenar (boleh urus senarai admin)
 let realOwner = false, admins = [], unsubAdmins = null;
+// viewAs = pemilik/admin melihat halaman seperti ahli biasa (paparan sahaja; tiada perubahan kuasa)
+let viewAs = false;
+const adm = () => owner && !viewAs;
 let F, auth, db, user = null, owner = false, orders = [], loaded = false, editing = '', filter = 'all';
 
 // ---------- Paparan ----------
@@ -98,7 +101,7 @@ function shell() {
 
 function renderForm(o = null) {
   const c = $('#formCard');
-  if (!isOpen() && !owner && !o) { c.innerHTML = '<h2>📝 Order</h2><p class="muted">Order telah ditutup pada 12/12/2026. Hubungi Ahmad jika ada pertanyaan.</p>'; return; }
+  if (!isOpen() && !adm() && !o) { c.innerHTML = '<h2>📝 Order</h2><p class="muted">Order telah ditutup pada 12/12/2026. Hubungi Ahmad jika ada pertanyaan.</p>'; return; }
   const v = o || { name: '', size: 'L', sleeve: 'Pendek', print: '', note: '', collar: 'Round neck' };
   const opt = (s, l) => `<option value="${s}"${s === v.size ? ' selected' : ''}>${l}</option>`;
   c.innerHTML = `
@@ -141,7 +144,7 @@ function renderLists() {
           ${o.status === 'unpaid' ? `<button class="btn sm ok" data-claim="${o.id}">💰 Saya dah bayar</button>` : `<button class="btn sm" data-unclaim="${o.id}">↩ Belum bayar</button>`}
           ${isOpen() ? `<button class="btn sm" data-edit="${o.id}">✏️ Ubah</button><button class="btn sm danger" data-del="${o.id}">🗑 Batal</button>` : ''}</div>`}
       </div></li>`).join('')}</ul>
-      <p class="note">Jumlah saya: <b>${rm(mine.reduce((s, o) => s + price(o), 0))}</b>. Selepas bayar, muat naik gambar / screenshot resit — status terus jadi 💰 dan admin akan sahkan. Resit hanya boleh dilihat oleh anda dan admin.</p>`;
+      <p class="note">Jumlah saya: <b>${rm(mine.reduce((s, o) => s + price(o), 0))}</b>. Selepas bayar, muat naik gambar, screenshot atau PDF resit — status terus jadi 💰 dan admin akan sahkan. Resit hanya boleh dilihat oleh anda dan admin.</p>`;
   }
   // Senarai awam
   const paid = orders.filter(o => o.status === 'paid').length, claimed = orders.filter(o => o.status === 'claimed').length;
@@ -152,7 +155,7 @@ function renderLists() {
     <div class="filters">${[['all', 'Semua'], ['unpaid', '⏳ Belum'], ['claimed', '💰 Dah bayar'], ['paid', '✅ Disahkan']].map(([k, t]) => `<button class="btn sm${filter === k ? ' on' : ''}" data-f="${k}">${t}</button>`).join('')}</div>
     ${!loaded ? '<p class="muted">Memuatkan…</p>' : !shown.length ? '<p class="muted">Tiada order lagi.</p>' : `<ul class="list">${shown.map(o => `
       <li><span class="no">${orders.indexOf(o) + 1}.</span><div class="who"><b>${esc(o.name)}</b> · ${desc(o)}${o.print ? ' · ' + esc(o.print) : ''}
-        ${owner ? `<small>${rm(price(o))}${o.note ? ' · ' + esc(o.note) : ''}</small><div class="acts">
+        ${adm() ? `<small>${rm(price(o))}${o.note ? ' · ' + esc(o.note) : ''}</small><div class="acts">
           ${o.rcpt ? `<button class="btn sm" data-rview="${o.id}">📎 Resit</button>` : ''}
           ${o.status === 'paid' ? `<button class="btn sm" data-set="${o.id}:unpaid">↩ Batal sah</button>` : `<button class="btn sm ok" data-set="${o.id}:paid">✅ Sah bayar</button>`}
           <button class="btn sm" data-edit="${o.id}">✏️</button><button class="btn sm danger" data-del="${o.id}">🗑</button></div>` : ''}
@@ -163,9 +166,13 @@ function renderLists() {
 
 function renderAdmin() {
   const a = $('#admin');
-  $('#adminBtn').textContent = owner ? 'Log keluar' : 'Admin';
-  a.hidden = !owner;
-  if (!owner) return;
+  $('#adminBtn').textContent = viewAs ? '↩ Kembali ke admin' : owner ? 'Log keluar' : 'Admin';
+  // Paparan ahli: bar atas bertukar warna supaya jelas sedang pratonton
+  const top = document.querySelector('.top');
+  top.style.background = viewAs ? '#b45309' : '';
+  top.firstElementChild.textContent = viewAs ? '👁 Paparan ahli' : '🐯 Baju Rasmi KSAS Rimau';
+  a.hidden = !adm();
+  if (!adm()) return;
   const keep = [$('#aEmail')?.value || '', $('#aName')?.value || ''];   // jangan hilang teks yang sedang ditaip bila senarai dikemas kini
   const tally = {};
   orders.forEach(o => { const k = collarOf(o) + '|' + o.size + '|' + o.sleeve; tally[k] = (tally[k] || 0) + 1; });
@@ -183,6 +190,7 @@ function renderAdmin() {
       <button class="btn sm" id="cpOwe">📋 Salin senarai belum bayar</button>
       <button class="btn sm" id="dlCsv">⬇️ Muat turun CSV</button>
     </div>
+    <button class="btn sm" id="viewAsBtn" style="margin-top:10px">👁 Lihat sebagai ahli</button>
     <p class="note">Admin boleh tambah order bagi pihak ahli (guna borang di atas) dan masih boleh tambah/ubah selepas order ditutup.</p>
     ${realOwner ? `<h2 style="font-size:15px;margin-top:16px">👥 Admin order</h2>
       ${admins.length ? `<ul class="list">${admins.map(x => `<li><div class="who"><b>${esc(x.name || '—')}</b><small>${esc(x.id)}</small></div><button class="btn sm danger" data-rmadm="${esc(x.id)}">Buang</button></li>`).join('')}</ul>` : '<p class="muted">Belum ada admin tambahan.</p>'}
@@ -190,6 +198,7 @@ function renderAdmin() {
       <div><label for="aName">Nama</label><input id="aName" maxlength="50" placeholder="cth. Ali"></div></div>
       <button class="btn sm on" id="aAdd" style="margin-top:10px">➕ Tambah admin</button>
       <p class="note">Admin tambahan boleh sah bayaran, ubah/padam order dan muat turun senarai, tetapi tidak boleh urus senarai admin. Mereka log masuk dengan akaun Google e-mel tersebut.</p>` : ''}`;
+  $('#viewAsBtn').onclick = () => { viewAs = true; if (!editing) renderForm(); renderLists(); scrollTo({ top: 0, behavior: 'smooth' }); };
   if (realOwner) {
     $('#aEmail').value = keep[0]; $('#aName').value = keep[1];
     $('#aAdd').onclick = async () => {
@@ -250,13 +259,15 @@ async function shrink(file) {
   } finally { URL.revokeObjectURL(url); }
 }
 function pickReceipt(id) {
-  const inp = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*' });
+  const inp = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*,application/pdf,.pdf' });
   inp.onchange = async () => {
     const f = inp.files && inp.files[0]; if (!f) return;
-    if (!f.type.startsWith('image/')) return toast('Sila pilih gambar / screenshot resit (bukan PDF)');
+    const pdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+    if (!pdf && !f.type.startsWith('image/')) return toast('Sila pilih gambar, screenshot atau PDF resit');
+    if (pdf && f.size > 640 * 1024) return toast('PDF terlalu besar (had 640 KB) — cuba screenshot resit');
     toast('Memuat naik resit…');
     try {
-      const img = await shrink(f);
+      const img = pdf ? await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).replace(/^data:[^;,]*/, 'data:application/pdf')); r.onerror = no; r.readAsDataURL(f); }) : await shrink(f);
       const o = orders.find(x => x.id === id);
       await F.setDoc(F.doc(db, RCOL, id), { uid: o ? o.uid : auth.currentUser.uid, img, at: F.serverTimestamp() });
       await F.setDoc(F.doc(db, COL, id), o && o.status === 'paid' ? { rcpt: true } : { rcpt: true, status: 'claimed' }, { merge: true });
@@ -269,7 +280,22 @@ async function viewReceipt(id) {
   try {
     const d = await F.getDoc(F.doc(db, RCOL, id));
     if (!d.exists()) return toast('Resit tidak dijumpai');
-    zoom(d.data().img);
+    const src = d.data().img;
+    if (src.startsWith('data:application/pdf')) {
+      // PDF: buka sebagai fail (pelayar telefon tidak papar PDF dalam gambar)
+      const bin = atob(src.split(',')[1]), u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([u8], { type: 'application/pdf' }));
+      const o = orders.find(x => x.id === id);
+      const z = $('#zoom'); z.innerHTML = '';
+      const box = document.createElement('div'); box.style.cssText = 'background:var(--card);color:var(--ink);border-radius:16px;padding:20px;text-align:center;max-width:320px';
+      box.innerHTML = `<div style="font-size:40px">📄</div><b>Resit PDF</b><p class="muted">${esc(o ? o.name : '')}</p>`;
+      const a = Object.assign(document.createElement('a'), { href: url, target: '_blank', rel: 'noopener', download: `resit-${(o ? o.name : id).replace(/[^\w-]+/g, '_')}.pdf`, className: 'btn on', textContent: '📥 Buka / muat turun PDF' });
+      a.style.cssText = 'display:inline-block;text-decoration:none;margin-top:8px'; a.onclick = e => e.stopPropagation();
+      box.append(a); z.append(box); z.hidden = false;
+      return;
+    }
+    zoom(src);
   } catch (e) { fail(e); }
 }
 
@@ -314,6 +340,7 @@ async function setStatus(id, status) {
   try { await F.setDoc(F.doc(db, COL, id), { status }, { merge: true }); toast(STATUS[status]); } catch (e) { fail(e); }
 }
 async function adminToggle() {
+  if (viewAs) { viewAs = false; if (!editing) renderForm(); renderLists(); $('#admin').scrollIntoView({ behavior: 'smooth' }); return; }
   if (owner || (auth.currentUser && !auth.currentUser.isAnonymous)) { await F.signOut(auth); toast('Log keluar'); return; }
   const p = new F.GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' });
   try { await F.signInWithPopup(auth, p); }
@@ -336,7 +363,7 @@ async function start() {
     $('#adminBtn').onclick = adminToggle;
     F.onAuthStateChanged(auth, async u => {
       user = u;
-      const was = owner;
+      const was = owner; viewAs = false;
       if (unsubAdmins) { unsubAdmins(); unsubAdmins = null; } admins = [];
       const email = u && !u.isAnonymous && u.emailVerified && u.email ? u.email.toLowerCase() : '';
       realOwner = !!email && (await sha256(email)) === OWNER_HASH;
