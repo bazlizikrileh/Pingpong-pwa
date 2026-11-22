@@ -194,8 +194,8 @@ function renderAdmin() {
     <h2 style="font-size:15px">Ringkasan untuk kilang (${orders.length} helai)</h2>
     ${rows.length ? `<table><tr><th>Kolar</th><th>Saiz</th><th>Lengan</th><th class="n">Helai</th></tr>${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td class="n">${r[3]}</td></tr>`).join('')}</table>` : '<p class="muted">Tiada order lagi.</p>'}
     <div class="acts" style="margin-top:12px">
-      <button class="btn sm" id="cpWa">📋 Salin senarai WhatsApp</button>
-      <button class="btn sm" id="cpOwe">📋 Salin senarai belum bayar</button>
+      <button class="btn sm on" data-msg="list">💬 Mesej senarai order</button>
+      <button class="btn sm" data-msg="owe">💬 Mesej peringatan bayar</button>
       <button class="btn sm" id="dlCsv">⬇️ Muat turun CSV</button>
     </div>
     <button class="btn sm" id="viewAsBtn" style="margin-top:10px">👁 Lihat sebagai ahli</button>
@@ -220,8 +220,7 @@ function renderAdmin() {
       try { await F.deleteDoc(F.doc(db, 'bajuAdmins', b.dataset.rmadm)); toast('Admin dibuang'); } catch (e) { fail(e); }
     }));
   }
-  $('#cpWa').onclick = () => copy(`🐯 *SENARAI ORDER BAJU RIMAU* (${orders.length})\n\n` + orders.map(line).join('\n') + `\n\n✅ Disahkan: ${orders.filter(o => o.status === 'paid').length}/${orders.length}`, 'Senarai disalin');
-  $('#cpOwe').onclick = () => { const l = orders.filter(o => o.status !== 'paid'); copy(`⏳ *BELUM DISAHKAN BAYARAN* (${l.length})\nTutup order & bayaran: 12/12/2026\n\n` + l.map((o, i) => `${i + 1}. ${o.name} – ${rm(price(o))}${o.status === 'claimed' ? ' (💰 semak resit)' : ''}`).join('\n'), 'Senarai disalin'); };
+  document.querySelectorAll('[data-msg]').forEach(b => (b.onclick = () => showMsg(b.dataset.msg)));
   $('#dlCsv').onclick = () => {
     const q = s => `"${String(s ?? '').replace(/"/g, '""')}"`;
     const csv = ['No,Nama,Kolar,Saiz,Lengan,Nama atas baju,Harga (RM),Status,Catatan', ...orders.map((o, i) => [i + 1, q(o.name), q(collarOf(o)), q(sz(o.size)), o.sleeve, q(o.print), price(o), q(STATUS[o.status].slice(2).trim()), q(o.note)].join(','))].join('\n');
@@ -246,6 +245,41 @@ function bindActs() {
     const o = orders.find(x => x.id === b.dataset.del); if (!o || !confirm(`Batalkan order ${o.name} (${desc(o, ', ')})?`)) return;
     try { if (o.rcpt) await deleteReceipt(o.id); await F.deleteDoc(F.doc(db, COL, o.id)); toast('Order dibatalkan'); if (editing === o.id) { editing = ''; renderForm(); } } catch (e) { fail(e); }
   }));
+}
+
+// ---------- Mesej WhatsApp untuk group (pratonton sebelum hantar) ----------
+const ORGANISER = 'Ahmad', LINK = 'https://pingpongsantai-portal.pages.dev/baju.html';
+const ICON = { paid: '✅', claimed: '💰', unpaid: '⏳' };
+function buildMsg(kind) {
+  const n = orders.length, ok = orders.filter(o => o.status === 'paid').length;
+  const head = `🐯 *Order Baju Rasmi KSAS Rimau*\n_Anjuran ${ORGANISER}_\n━━━━━━━━━━━━━━\n⏰ Tutup order & bayaran: Sabtu, 12 Dis 2026\n🎯 Pakai pada game Januari 2027\n`;
+  if (kind === 'owe') {
+    const l = orders.filter(o => o.status !== 'paid');
+    return head + `\n⏳ *Belum disahkan bayaran (${l.length})*\n` + (l.length ? l.map((o, i) => `${i + 1}. ${o.name} – ${rm(price(o))} ${ICON[o.status]}`).join('\n') : '_Semua bayaran telah disahkan_ 🎉') +
+      `\n\n💳 AmBank · AHMAD BAZLI BIN AHMAD ZIKRILEH\n*${ACC}*\n📎 Muat naik resit dalam link 👇\n🔗 ${LINK}\n_💰 resit diterima, menunggu semakan · ⏳ belum bayar_`;
+  }
+  return head + `\n👕 *Senarai order (${n} helai)*\n` + (n ? orders.map((o, i) => `${i + 1}. ${o.name} – ${desc(o, ' – ')} ${ICON[o.status]}`).join('\n') : '_Belum ada order_') +
+    `\n\n✅ Disahkan bayar: ${ok}/${n}\n🔗 ${LINK}\n_✅ disahkan · 💰 menunggu semakan · ⏳ belum bayar_`;
+}
+// *tebal* _condong_ ~coret~ → HTML untuk pratonton ala WhatsApp
+const waHtml = t => esc(t).replace(/\*([^*\n]+)\*/g, '<b>$1</b>').replace(/(^|[\s(])_([^_\n]+)_/g, '$1<i>$2</i>').replace(/~([^~\n]+)~/g, '<s>$1</s>')
+  .replace(/(https?:\/\/[^\s<]+)/g, '<span style="color:#53bdeb">$1</span>').replace(/\n/g, '<br>');
+function showMsg(kind) {
+  const text = buildMsg(kind), z = $('#zoom');
+  z.innerHTML = `<div style="width:100%;max-width:420px;max-height:100%;display:flex;flex-direction:column;gap:10px" onclick="event.stopPropagation()">
+    <div style="color:#fff;font-weight:700;text-align:center">👁 Pratonton mesej — ${kind === 'owe' ? 'peringatan bayar' : 'senarai order'}</div>
+    <div style="background:#0b141a;border-radius:14px;padding:12px;overflow:auto;flex:1">
+      <div style="background:#005c4b;color:#e9edef;border-radius:10px 0 10px 10px;padding:8px 10px;font:14.5px/1.4 system-ui,sans-serif;margin-left:24px;word-break:break-word">${waHtml(text)}</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" id="mCopy" style="flex:1">📋 Salin</button>
+      <button class="btn on" id="mWa" style="flex:1;background:#25d366;border-color:#25d366">Hantar ke WhatsApp</button>
+    </div>
+    <button class="btn" id="mClose">Tutup</button></div>`;
+  z.hidden = false;
+  $('#mCopy').onclick = () => copy(text, 'Mesej disalin');
+  $('#mWa').onclick = () => window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+  $('#mClose').onclick = () => (z.hidden = true);
 }
 
 // ---------- Resit bayaran ----------
