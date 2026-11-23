@@ -150,6 +150,8 @@ function renderLists() {
           ${o.status === 'unpaid' ? `<button class="btn sm ok" data-claim="${o.id}">💰 Saya dah bayar</button>` : `<button class="btn sm" data-unclaim="${o.id}">↩ Belum bayar</button>`}
           ${isOpen() ? `<button class="btn sm" data-edit="${o.id}">✏️ Ubah</button><button class="btn sm danger" data-del="${o.id}">🗑 Batal</button>` : ''}</div>`}
       </div></li>`).join('')}</ul>
+      ${user ? `<button class="btn sm${pushIsOn(tMember(user.uid)) ? ' ok' : ''}" id="memPush" style="margin-top:8px">${pushIsOn(tMember(user.uid)) ? '🔔 Notifikasi pengesahan: HIDUP' : '🔔 Beritahu saya bila bayaran disahkan'}</button>` : ''}
+      <p class="note">Order anda disimpan pada telefon / pelayar ini — buka link yang sama untuk semak status.</p>
       <p class="note">Jumlah saya: <b>${rm(mine.reduce((s, o) => s + price(o), 0))}</b>. Selepas bayar, muat naik gambar, screenshot atau PDF resit — status terus jadi 💰 dan admin akan sahkan. Resit hanya boleh dilihat oleh anda dan admin.</p>`;
   }
   // Senarai awam
@@ -198,7 +200,10 @@ function renderAdmin() {
       <button class="btn sm" data-msg="owe">💬 Mesej peringatan bayar</button>
       <button class="btn sm" id="dlCsv">⬇️ Muat turun CSV</button>
     </div>
-    <button class="btn sm" id="viewAsBtn" style="margin-top:10px">👁 Lihat sebagai ahli</button>
+    <div class="acts" style="margin-top:10px">
+      <button class="btn sm${pushIsOn(T_ADMIN) ? ' ok' : ''}" id="admPush">${pushIsOn(T_ADMIN) ? '🔔 Notifikasi order baru: HIDUP' : '🔕 Hidupkan notifikasi order baru'}</button>
+      <button class="btn sm" id="viewAsBtn">👁 Lihat sebagai ahli</button>
+    </div>
     <p class="note">Admin boleh tambah order bagi pihak ahli (guna borang di atas) dan masih boleh tambah/ubah selepas order ditutup.</p>
     ${realOwner ? `<h2 style="font-size:15px;margin-top:16px">👥 Admin order</h2>
       ${admins.length ? `<ul class="list">${admins.map(x => `<li><div class="who"><b>${esc(x.name || '—')}</b><small>${esc(x.id)}</small></div><button class="btn sm danger" data-rmadm="${esc(x.id)}">Buang</button></li>`).join('')}</ul>` : '<p class="muted">Belum ada admin tambahan.</p>'}
@@ -206,6 +211,7 @@ function renderAdmin() {
       <div><label for="aName">Nama</label><input id="aName" maxlength="50" placeholder="cth. Ali"></div></div>
       <button class="btn sm on" id="aAdd" style="margin-top:10px">➕ Tambah admin</button>
       <p class="note">Admin tambahan boleh sah bayaran, ubah/padam order dan muat turun senarai, tetapi tidak boleh urus senarai admin. Mereka log masuk dengan akaun Google e-mel tersebut.</p>` : ''}`;
+  $('#admPush').onclick = () => (pushIsOn(T_ADMIN) ? pushOff(T_ADMIN) : pushOn(T_ADMIN));
   $('#viewAsBtn').onclick = () => { viewAs = true; if (!editing) renderForm(); renderLists(); scrollTo({ top: 0, behavior: 'smooth' }); };
   if (realOwner) {
     $('#aEmail').value = keep[0]; $('#aName').value = keep[1];
@@ -232,6 +238,7 @@ function renderAdmin() {
 
 function bindActs() {
   document.querySelectorAll('[data-f]').forEach(b => (b.onclick = () => { filter = b.dataset.f; renderLists(); }));
+  if ($('#memPush')) $('#memPush').onclick = () => { const t = tMember(user.uid); pushIsOn(t) ? pushOff(t) : pushOn(t); };
   document.querySelectorAll('[data-rup]').forEach(b => (b.onclick = () => pickReceipt(b.dataset.rup)));
   document.querySelectorAll('[data-rview]').forEach(b => (b.onclick = () => viewReceipt(b.dataset.rview)));
   document.querySelectorAll('[data-claim]').forEach(b => (b.onclick = () => setStatus(b.dataset.claim, 'claimed')));
@@ -246,6 +253,38 @@ function bindActs() {
     try { if (o.rcpt) await deleteReceipt(o.id); await F.deleteDoc(F.doc(db, COL, o.id)); toast('Order dibatalkan'); if (editing === o.id) { editing = ''; renderForm(); } } catch (e) { fail(e); }
   }));
 }
+
+// ---------- Notifikasi push (guna Worker & sw.js app pingpong; topik adm:baju & reg:baju:<uid>) ----------
+// /sub menggantikan semua topik peranti, jadi topik baju disimpan dalam localStorage 'baju:topics' dan digabung
+// dengan topik app pingpong (app pingpong juga menambah 'baju:topics' semasa pushSync).
+const T_ADMIN = 'adm:baju', tMember = uid => 'reg:baju:' + uid, NLINK = 'baju';
+let P = null;
+const lsGet = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const bajuTopics = () => lsGet('baju:topics', []);
+async function pushMod() {
+  if (!P) P = await import('./push.js');
+  return P.pushAvailable() ? P : null;
+}
+async function syncBaju(list) {
+  try { localStorage.setItem('baju:topics', JSON.stringify(list)); } catch {}
+  const m = await pushMod(); if (!m) return;
+  const prev = localStorage.getItem('pingpong:pushTopics') || '';
+  let app = []; try { app = JSON.parse(prev.slice(0, prev.indexOf(']') + 1)) || []; } catch {}
+  app = app.filter(t => t !== T_ADMIN && !t.startsWith('reg:baju:'));
+  await m.syncTopics([...new Set([...app, ...list])].slice(0, 30), true);
+}
+async function pushOn(topic) {
+  const m = await pushMod();
+  if (!m) return toast('Telefon / pelayar ini tidak menyokong notifikasi. Di iPhone: Tambah ke Skrin Utama dahulu.');
+  if (!(await navigator.serviceWorker.getRegistration())) await navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
+  if ((await Notification.requestPermission()) !== 'granted') return toast('Notifikasi tidak dibenarkan — semak tetapan pelayar');
+  await m.subscribe();
+  await syncBaju([...new Set([...bajuTopics(), topic])]);
+  renderLists(); toast('🔔 Notifikasi dihidupkan');
+}
+async function pushOff(topic) { await syncBaju(bajuTopics().filter(t => t !== topic)); renderLists(); toast('🔕 Notifikasi dimatikan'); }
+const pushIsOn = topic => bajuTopics().includes(topic) && 'Notification' in window && Notification.permission === 'granted';
+async function notify(topics, title, body, tag) { try { const m = await pushMod(); if (m) m.send(topics, title, body, NLINK, tag); } catch {} }
 
 // ---------- Mesej WhatsApp untuk group (pratonton sebelum hantar) ----------
 const ORGANISER = 'Ahmad', LINK = 'https://pingpongsantai-portal.pages.dev/baju.html';
@@ -327,6 +366,7 @@ function pickReceipt(id) {
       const o = orders.find(x => x.id === id);
       await uploadReceipt(id, f, o ? o.uid : auth.currentUser.uid);
       await F.setDoc(F.doc(db, COL, id), o && o.status === 'paid' ? { rcpt: true } : { rcpt: true, status: 'claimed' }, { merge: true });
+      if (!adm() && o) notify([T_ADMIN], '📎 Resit baju baru', `${o.name} · ${rm(price(o))} — sila semak & sahkan`, 'baju-rcpt-' + id);
       toast('Resit dihantar 📎 — menunggu pengesahan admin');
     } catch (e) { const m = rcptErr(e); if (m) toast(m); else fail(e); }
   };
@@ -399,13 +439,36 @@ async function save(v) {
       if (!id) { btn.disabled = false; return toast('Had 10 order dari satu telefon'); }
       await F.setDoc(F.doc(db, COL, id), { ...d, uid: u.uid, status: 'unpaid', at: F.serverTimestamp() });
       const r = await attach(id, u.uid, false);
+      if (!owner) notify([T_ADMIN], '🐯 Order baju baru', `${d.name} · ${desc(d)} · ${rm(price(d))}${r.includes('📎') ? ' · 📎 resit dilampir' : ''}`, 'baju-new-' + id);
       toast(`Order diterima — ${rm(price(d))}.` + (r || ' Sila buat bayaran 💳'));
+      if (!owner) return renderDone({ ...d, id, rcpt: r.includes('📎') });
     }
     renderForm();
   } catch (e) { btn.disabled = false; fail(e); }
 }
+// Pengesahan selepas order dihantar (ahli)
+function renderDone(o) {
+  const c = $('#formCard');
+  c.innerHTML = `
+    <div style="text-align:center"><div style="font-size:46px;line-height:1">✅</div><h2 style="margin:6px 0 2px">Order diterima!</h2>
+    <p class="muted" style="margin:0">Terima kasih, ${esc(o.name)} 🐯</p></div>
+    <div class="total"><span>${esc(desc(o))}${o.print ? ' · ' + esc(o.print) : ''}</span><b>${rm(price(o))}</b></div>
+    <p style="margin:12px 0 4px"><b>Langkah seterusnya:</b></p>
+    <p class="muted" style="margin:0">${o.rcpt ? '📎 Resit diterima — admin akan semak &amp; sahkan. Status jadi ✅ selepas disahkan.' : '1. Bayar ke AmBank <b>' + ACC + '</b> atau scan QR di bawah.<br>2. Lampirkan resit dalam <b>Order saya</b>.'}<br>Tutup order &amp; bayaran: <b>12/12/2026</b>.</p>
+    <button class="btn main" id="dNotif">🔔 Beritahu saya bila bayaran disahkan</button>
+    <button class="btn" id="dMore" style="width:100%;margin-top:8px">➕ Order baju lain</button>
+    <p class="note">Tip: screenshot skrin ini sebagai rekod. Order anda juga tersimpan dalam <b>Order saya</b> pada telefon ini.</p>`;
+  if (pushIsOn(tMember(auth.currentUser.uid))) $('#dNotif').remove();
+  else $('#dNotif').onclick = () => pushOn(tMember(auth.currentUser.uid)).then(() => $('#dNotif') && $('#dNotif').remove());
+  $('#dMore').onclick = () => renderForm();
+  c.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 async function setStatus(id, status) {
-  try { await F.setDoc(F.doc(db, COL, id), { status }, { merge: true }); toast(STATUS[status]); } catch (e) { fail(e); }
+  try {
+    await F.setDoc(F.doc(db, COL, id), { status }, { merge: true }); toast(STATUS[status]);
+    const o = orders.find(x => x.id === id);
+    if (status === 'paid' && adm() && o) notify([tMember(o.uid)], '✅ Bayaran baju disahkan', `${o.name} · ${desc(o)} · ${rm(price(o))}. Terima kasih! 🐯`, 'baju-paid-' + id);
+  } catch (e) { fail(e); }
 }
 async function adminToggle() {
   if (viewAs) { viewAs = false; if (!editing) renderForm(); renderLists(); $('#admin').scrollIntoView({ behavior: 'smooth' }); return; }
