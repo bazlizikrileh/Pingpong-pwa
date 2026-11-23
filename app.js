@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.54.0';
+const VERSION = '3.54.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -77,6 +77,8 @@ function pushSync() {
     clubSubs().forEach(c => T.unshift('club:' + c));
     T.unshift('me:dev:' + devId());
     if (cloud.state.role === 'owner') T.unshift('adm:owner');   // permohonan penganjur baharu
+    // topik halaman order baju (baju.html simpan dalam 'baju:topics') — di depan supaya tidak terpotong oleh had 30
+    try { const B = JSON.parse(localStorage.getItem('baju:topics') || '[]'); if (Array.isArray(B)) T.unshift(...B.filter(x => typeof x === 'string' && /^(adm:baju|reg:baju:[\w-]+)$/.test(x))); } catch {}
     try { await PUSH.syncTopics(T.slice(0, 30), !_pushForced); _pushForced = true; } catch (e) { console.warn('push', e); }
   }, 800);
 }
