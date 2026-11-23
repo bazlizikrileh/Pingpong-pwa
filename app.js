@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.53.0';
+const VERSION = '3.54.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -219,9 +219,10 @@ window.addEventListener('load', () => {
   cloud.watchClubDefs(list => { const j = JSON.stringify(list.map(({ at, ...d }) => d)); if (j === ls.get('pingpong:clubDefs')) return; ls.set('pingpong:clubDefs', j); applyClubDefs(JSON.parse(j)); render(true); });
 });
 let _dirty = false;
+let _recBusy = false;   // video ringkasan sedang dijana: jangan lukis semula halaman
 const busy = () => {
   const a = document.activeElement;
-  return !!document.getElementById('drw') || (a && $app.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) || !document.getElementById('modal').hidden;
+  return _recBusy || !!document.getElementById('drw') || (a && $app.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) || !document.getElementById('modal').hidden;
 };
 function softRender() {
   if (/^#\/(pentadbir|baru)/.test(location.hash)) return;   // borang: jangan lukis semula
@@ -236,6 +237,7 @@ cloud.onChange(what => {
   updateTop();
   if (_cur && store.isCloud(_cur) && store.canEdit(_cur)) cloud.watchSubmissions(_cur);
   if (['pending', 'tournaments', 'role', 'auth', 'error', 'regs', 'poster'].includes(what)) softRender();
+  else if (what === 'photos' && /^#\/t\/[^/]+\/laporan/.test(location.hash)) softRender();
   else if (what === 'live' && /^#\/tv\//.test(location.hash)) tvLiveRefresh();
   else if (what === 'live' && /^#\/t\/[^/]+\/ls\//.test(location.hash)) { if (_lsOnLive) _lsOnLive(); }
   else if (what === 'live' && !/^#\/t\/[^/]+\/(ls|m)\//.test(location.hash)) softRender();
@@ -3118,6 +3120,69 @@ function mixReport(t, played, resTable) {
             <td class="l ${wa ? 'win' : ''}">${esc(E.pname(t, m.a))}</td><td><b>${r.sa}-${r.sb}</b></td><td class="l ${!wa ? 'win' : ''}">${esc(E.pname(t, m.b))}</td><td class="l small sets">${m.rubbers[0].sets.map(x => `<span>${x[0]}-${x[1]}</span>`).join(' ')}</td></tr>`; }).join('')}</tbody>`; }).join('')}
     </table></section>`;
 }
+// ---------- 📸 Gambar pertandingan (galeri laporan & video ringkasan) ----------
+const PHOTO_MAX = 12;
+const photosOf = t => (store.isCloud(t.id) ? (cloud.watchPhotos(t.id), cloud.state.photos[t.id] || []) : []);
+const phSrc = p => (p && typeof p.img === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(p.img) ? p.img : '');
+// kecilkan ke ≤1280px (sisi panjang) & mampatkan JPEG supaya ringan dibuka peserta (<~450KB)
+async function shrinkPhoto(file) {
+  const url = URL.createObjectURL(file); let im;
+  try { im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; }); } finally { URL.revokeObjectURL(url); }
+  for (const [mx, qs] of [[1280, [0.8, 0.7, 0.6]], [1024, [0.7, 0.6, 0.5]], [800, [0.6, 0.5]]]) {
+    const k = Math.min(1, mx / Math.max(im.width, im.height)), cv = document.createElement('canvas');
+    cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k);
+    const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height); g.drawImage(im, 0, 0, cv.width, cv.height);
+    for (const q of qs) { const d = cv.toDataURL('image/jpeg', q); if (d.length < 450000) return d; }
+  }
+  throw new Error('Gambar terlalu besar');
+}
+function photoCard(t) {
+  if (!store.isCloud(t.id)) return `<div class="card noprint"><b>📸 Gambar pertandingan</b><p class="muted small" style="margin:4px 0 0">Simpan pertandingan ke awan dahulu untuk memuat naik gambar ke laporan & video.</p></div>`;
+  const P = photosOf(t);
+  return `<div class="card noprint"><div class="row" style="justify-content:space-between;align-items:center"><b>📸 Gambar pertandingan</b><span class="muted small">${P.length}/${PHOTO_MAX}</span></div>
+    <p class="muted small" style="margin:4px 0 8px">Gambar dimasukkan ke laporan (bahagian <b>Galeri</b>) dan video ringkasan. Sesiapa yang membuka laporan boleh melihatnya.</p>
+    ${P.length ? `<div class="ph-ed">${P.map((p, i) => `<div class="ph-it"><img src="${phSrc(p)}" alt=""><input type="text" maxlength="80" placeholder="Kapsyen (pilihan)" value="${esc(p.cap || '')}" data-phcap="${esc(p.id)}">
+      <div class="row" style="gap:4px"><button type="button" class="pill-btn light small" data-phup="${i}"${i ? '' : ' disabled'} title="Ke depan">⬆️</button><button type="button" class="pill-btn light small" data-phdel="${esc(p.id)}" title="Buang">🗑️</button></div></div>`).join('')}</div>` : ''}
+    ${P.length < PHOTO_MAX ? `<label class="pill-btn brand small" style="cursor:pointer;margin-top:${P.length ? 8 : 0}px"><span class="dot"></span>📤 Tambah gambar<input type="file" accept="image/*" multiple id="phUp" hidden></label>` : '<p class="muted small" style="margin:6px 0 0">Had gambar dicapai. Buang gambar untuk tambah yang lain.</p>'}</div>`;
+}
+function wirePhotos(t) {
+  const up = document.getElementById('phUp');
+  if (up) up.onchange = async () => {
+    const P = photosOf(t), files = [...up.files].slice(0, PHOTO_MAX - P.length); if (!files.length) return;
+    if (up.files.length > files.length) toast(`Had ${PHOTO_MAX} gambar: ${files.length} gambar pertama sahaja dimuat naik`, 3000);
+    let ord = P.reduce((m, p) => Math.max(m, p.ord ?? 0), 0), ok = 0, bad = '';
+    for (const [i, f] of files.entries()) {
+      toast(`📤 Memuat naik gambar ${i + 1}/${files.length}…`, 60000);
+      try { await cloud.addPhoto(t.id, await shrinkPhoto(f), ++ord); ok++; } catch (e) { console.warn(e); bad = e.code || e.message || String(e); }
+    }
+    toast(bad ? `${ok}/${files.length} gambar dimuat naik. Gagal: ${bad}` : `✅ ${ok} gambar ditambah ke laporan`, bad ? 5000 : 2500);
+  };
+  $app.querySelectorAll('[data-phcap]').forEach(el => el.onchange = async () => {
+    try { await cloud.setPhotoMeta(t.id, el.dataset.phcap, { cap: el.value.trim().slice(0, 80) }); toast('Kapsyen disimpan'); } catch (e) { toast('Gagal: ' + (e.code || e.message), 4000); }
+  });
+  $app.querySelectorAll('[data-phup]').forEach(b => b.onclick = async () => {
+    const P = [...photosOf(t)], i = +b.dataset.phup; if (i < 1) return;
+    [P[i - 1], P[i]] = [P[i], P[i - 1]];
+    try { await Promise.all(P.map((p, k) => (p.ord === k + 1 ? null : cloud.setPhotoMeta(t.id, p.id, { ord: k + 1 }))).filter(Boolean)); } catch (e) { toast('Gagal: ' + (e.code || e.message), 4000); }
+  });
+  $app.querySelectorAll('[data-phdel]').forEach(b => b.onclick = async () => {
+    if (!confirm('Buang gambar ini daripada laporan & video?')) return;
+    try { await cloud.delPhoto(t.id, b.dataset.phdel); toast('Gambar dibuang'); } catch (e) { toast('Gagal: ' + (e.code || e.message), 4000); }
+  });
+}
+function galleryHtml(t) {
+  const P = photosOf(t).filter(phSrc); if (!P.length) return '';
+  return `<section class="rp-sec pb rp-gal"><h3>📸 Galeri</h3><div class="gal-grid">${P.map(p => `<figure><img src="${phSrc(p)}" alt="">${p.cap ? `<figcaption>${esc(p.cap)}</figcaption>` : ''}</figure>`).join('')}</div></section>`;
+}
+// muatkan gambar untuk video (dikecilkan ≤720px supaya ringan dilukis setiap bingkai)
+async function recapPhotos(t, max = 8) {
+  const P = photosOf(t).filter(phSrc).slice(0, max);
+  const out = await Promise.all(P.map(p => new Promise(r => { const im = new Image(); im.onload = () => {
+    const k = Math.min(1, 720 / Math.max(im.width, im.height)), cv = document.createElement('canvas');
+    cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k); cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+    r({ im: cv, cap: p.cap || '' }); }; im.onerror = () => r(null); im.src = phSrc(p); })));
+  return out.filter(Boolean);
+}
 // ---------- 🎬 Video ringkasan pertandingan ----------
 function recapData(t) {
   const c = clubOf(t), played = t.matches.filter(m => m.status === 'done' && m.a !== 'BYE' && m.b !== 'BYE');
@@ -3171,10 +3236,11 @@ function recapData(t) {
 }
 function recapCard(t) {
   if (!t.matches.some(m => m.status === 'done')) return '';
-  return `<div class="card noprint"><b>🎬 Video ringkasan</b><p class="muted small" style="margin:4px 0 8px">Video menegak (~40 saat) berserta muzik: angka, kedudukan, detik menarik, kalah mati dan podium. Dijana dalam telefon ini.</p>
+  return `<div class="card noprint"><b>🎬 Video ringkasan</b><p class="muted small" style="margin:4px 0 8px">Video menegak (~40 saat) berserta muzik: angka, kedudukan, detik menarik, kalah mati, gambar dan podium. Dijana dalam telefon ini.</p>
     <div class="grid2"><div><label style="margin-top:0">🎨 Gaya pembukaan</label><select id="rcOpen"><option value="">🎲 Rawak</option></select></div>
       <div><label style="margin-top:0">🎵 Muzik</label><select id="rcSty"><option value="">🎲 Rawak</option></select></div></div>
     <label class="check" style="margin:8px 0"><input type="checkbox" id="rcAw" ${ls.get('pingpong:rcAw') === '0' ? '' : 'checked'}> <span>Sertakan <b>detik menarik</b> <small class="muted">(jika tidak, matriks kumpulan dipapar lebih lama)</small></span></label>
+    ${(() => { const n = photosOf(t).filter(phSrc).length; return n ? `<label class="check" style="margin:0 0 8px"><input type="checkbox" id="rcPh" ${ls.get('pingpong:rcPh') === '0' ? '' : 'checked'}> <span>Sertakan <b>📸 ${Math.min(n, 8)} gambar</b> pertandingan${n > 8 ? ' <small class="muted">(8 pertama)</small>' : ''}</span></label>` : ''; })()}
     <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
     <button type="button" class="pill-btn light small" id="rcPv">👁️ Pratonton</button>
     <button type="button" class="pill-btn brand small" id="rcGo"><span class="dot"></span>🎬 Jana video</button></div>
@@ -3187,6 +3253,7 @@ function wireRecap(t) {
   import('./recap-video.js').then(R => { op.insertAdjacentHTML('beforeend', R.OPEN_NAMES.map((n, i) => `<option value="${i}">${i + 1}. ${esc(n)}</option>`).join('')); op.value = ls.get('pingpong:rcOpen') || ''; });
   op.onchange = () => ls.set('pingpong:rcOpen', op.value || null);
   awc.onchange = () => ls.set('pingpong:rcAw', awc.checked ? null : '0');
+  const phc = document.getElementById('rcPh'); if (phc) phc.onchange = () => ls.set('pingpong:rcPh', phc.checked ? null : '0');
   import('./sound.js').then(S => { sel.insertAdjacentHTML('beforeend', S.RECAP.map(([i, x]) => `<option value="${i}">🎵 ${esc(x.name)}</option>`).join('')); try { sel.value = ls.get('pingpong:rcSty') || ''; } catch {} });
   sel.onchange = () => ls.set('pingpong:rcSty', sel.value || null);
   // 👁️ Pratonton: main babak pembukaan + angka secara langsung di skrin dengan muzik pilihan (tanpa menjana video)
@@ -3226,11 +3293,12 @@ function wireRecap(t) {
   };
   go.onclick = async () => {
     const DA = await import('./draw-anim.js'); DA.keepAwake(true);
-    go.disabled = true; out.innerHTML = ''; msg.textContent = 'Menyediakan video dalam telefon ini. Jangan tutup skrin…';
+    go.disabled = true; out.innerHTML = ''; msg.textContent = 'Menyediakan video dalam telefon ini. Jangan tutup skrin…'; _recBusy = true;
     try {
       const [{ buildRecap }, V, S] = await Promise.all([import('./recap-video.js'), import('./draw-video.js'), import('./sound.js')]);
       const RD = recapData(t), tpl = op.value !== '' ? +op.value : Math.floor(Math.random() * 10);
       RD.style = tpl; RD.noAwards = !awc.checked;
+      if (phc && phc.checked) RD.photos = await recapPhotos(t);
       const R = buildRecap(RD), style = sel.value !== '' ? +sel.value : S.RECAP[Math.floor(Math.random() * S.RECAP.length)][0];
       const made = await V.prepareDrawVideo({ custom: R, logos: recapData(t).logos, music: true, musicStyle: style, title: `Ringkasan ${t.name}`, subtitle: '' }, (p, mode) => {
         go.textContent = mode === 'audio' ? '🎵 Menyediakan muzik…' : mode === 'shrink' ? `🗜️ Mengecilkan saiz… ${Math.round(p * 100)}%` : `⏳ ${mode === 'rec' ? 'Merakam' : 'Menyediakan'} video… ${Math.round(p * 100)}%`;
@@ -3243,7 +3311,7 @@ function wireRecap(t) {
       document.getElementById('rcShare').onclick = async () => { const r = await made.share(); msg.textContent = r.shared ? '✅ Video dikongsi.' : r.cancelled ? 'Dibatalkan.' : '⬇️ Video dimuat turun. Hantar dari galeri / Fail ke WhatsApp.'; };
       document.getElementById('rcDl').onclick = () => { made.download(); msg.textContent = '⬇️ Video dimuat turun ke telefon.'; };
     } catch (e) { msg.textContent = 'Gagal menyediakan video: ' + (e && e.message || e); }
-    go.disabled = false; go.innerHTML = '<span class="dot"></span>🎬 Jana semula'; DA.keepAwake(false);
+    go.disabled = false; go.innerHTML = '<span class="dot"></span>🎬 Jana semula'; DA.keepAwake(false); _recBusy = false;
   };
 }
 // Ringkasan keputusan untuk group WhatsApp: podium, anugerah, statistik, pautan laporan
@@ -3296,6 +3364,7 @@ function viewReport(t) {
     ${!E.isMixer(t) && t.groups.length && played.some(m => m.stage === 'group') ? `<section class="rp-sec mxs"><h3>Matriks Keputusan</h3><div class="mx-grid${t.groups.length > 1 && Math.max(...t.groups.map(g => g.members.length)) <= 6 ? ' two' : ''}">${t.groups.map(g => `<div class="mx-mat"><h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${matrixHtml(t, g, true, true)}</div>`).join('')}</div><p class="muted small">Baca mengikut baris: skor set ${UNIT(t).toLowerCase()} di baris itu menentang ${UNIT(t).toLowerCase()} di lajur. Hijau = menang. Mata: menang 3, kalah 0.</p></section>` : ''}
     ${t.rounds.ko && played.some(m => m.bracket === 'ko') ? `<section class="rp-sec pb">${chart('ko')}${chart('pool')}</section>` : ''}
     ${E.isMixer(t) ? '' : unitAwards(t, played)}
+    ${galleryHtml(t)}
     ${t.groups.length ? `<section class="rp-sec pb"><h3>Keputusan Peringkat ${t.format === 'rr' ? 'Liga' : 'Kumpulan'}</h3>${t.groups.map(g => { const ms = played.filter(m => m.stage === 'group' && m.group === g.name).sort((x, y) => x.gn - y.gn); return ms.length ? `<h4>${t.format === 'rr' ? 'Liga' : 'Kumpulan ' + esc(g.name)}</h4>${resTable(ms)}` : ''; }).join('') || '<p class="muted small">Belum ada keputusan.</p>'}</section>` : ''}
     ${ko('ko')}${ko('pool')}
     ${t.stage === 'done' && t.format !== 'rr' ? `<section class="rp-sec pb rk-sec">${rankingHtml(t, true).replace(/<button[^>]*>Cetak<\/button>/, '')}</section>` : ''}
@@ -3307,11 +3376,12 @@ function viewReport(t) {
     ${own ? '' : '<div class="card noprint"><p class="muted small" style="margin:0">📄 Laporan rasmi (PDF), video ringkasan dan ringkasan WhatsApp dikongsi oleh penganjur.</p></div>'}
     ${!own ? '' : `<div class="card noprint"><p class="muted small" style="margin-top:0">Laporan lengkap: maklumat, kedudukan, keputusan semua perlawanan${t.rounds.ko ? ', kalah mati' : ''}${t.stage === 'done' ? ' dan ranking' : ''}. Tekan butang di bawah dan pilih <b>Simpan sebagai PDF</b>.</p>
       <button class="pill-btn brand" id="prt"><span class="dot"></span>🖨️ Cetak / Simpan PDF</button></div>`}
+    ${own ? photoCard(t) : ''}
     ${own ? recapCard(t) : ''}
     ${own && t.matches.some(m => m.status === 'done') ? `<div class="card noprint"><b>💬 Ringkasan keputusan untuk WhatsApp</b><p class="muted small" style="margin:4px 0 8px">Johan, naib johan, tempat ketiga, statistik dan pautan laporan, sedia untuk dikongsi ke group.</p>
       <div class="row" style="gap:6px;flex-wrap:wrap"><button type="button" class="pill-btn small" style="background:#25d366;color:#fff" id="resWa">💬 Kongsi ke WhatsApp</button><button type="button" class="pill-btn light small" id="resCp">📋 Salin</button><button type="button" class="pill-btn light small" id="resPv">👁️ Lihat mesej</button></div></div>` : ''}
     <div class="card report">${body}</div>`;
-  if (own) wireRecap(t);
+  if (own) { wirePhotos(t); wireRecap(t); }
   const rw = document.getElementById('resWa');
   if (rw) {
     rw.onclick = () => window.open(waLink(resultsMessage(t)), '_blank');

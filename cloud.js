@@ -21,6 +21,7 @@ export const state = {
   regs: {},            // tid → [pendaftaran peserta]
   live: {},            // tid → { mid: skor langsung }
   posters: {},         // tid → dataURL poster sendiri ('' = tiada)
+  photos: {},          // tid → [{ id, img, cap, ord }] gambar pertandingan
 };
 const emit = what => listeners.forEach(f => { try { f(what); } catch (e) { console.error(e); } });
 export const onChange = f => { listeners.add(f); return () => listeners.delete(f); };
@@ -406,3 +407,20 @@ export function watchPoster(tid) {
 }
 export async function setPoster(tid, img) { await init(); await F.setDoc(F.doc(db, 'posters', tid), { img, at: F.serverTimestamp() }); }
 export async function delPoster(tid) { await init(); await F.deleteDoc(F.doc(db, 'posters', tid)); }
+
+// ---------- 📸 Gambar pertandingan (laporan & video ringkasan) ----------
+// tournaments/{tid}/photos/{pid}: { img: dataURL ≤ ~450KB, cap ≤ 80, ord, at } — semua boleh baca, pengurus pertandingan tulis
+const unsubPhotos = {};
+export function watchPhotos(tid) {
+  if (unsubPhotos[tid] || !F) return;
+  unsubPhotos[tid] = F.onSnapshot(F.collection(db, 'tournaments', tid, 'photos'), snap => {
+    const out = []; snap.forEach(d => out.push({ id: d.id, ...d.data() }));
+    out.sort((a, b) => (a.ord ?? 0) - (b.ord ?? 0) || String(a.id).localeCompare(String(b.id)));
+    state.photos[tid] = out; emit('photos');
+  }, () => { state.photos[tid] = state.photos[tid] || []; emit('photos'); });
+}
+export async function addPhoto(tid, img, ord) {
+  await init(); await F.setDoc(F.doc(db, 'tournaments', tid, 'photos', 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)), { img, cap: '', ord, at: F.serverTimestamp() });
+}
+export async function setPhotoMeta(tid, pid, meta) { await init(); await F.setDoc(F.doc(db, 'tournaments', tid, 'photos', pid), meta, { merge: true }); }
+export async function delPhoto(tid, pid) { await init(); await F.deleteDoc(F.doc(db, 'tournaments', tid, 'photos', pid)); }

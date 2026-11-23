@@ -41,6 +41,9 @@ export function buildRecap(d) {
   brk(d.ko, 'KALAH MATI'); brk(d.pool, 'POOL KALAH');
   // detik menarik selepas liga / bracket, sebelum podium
   if (aw.length) S.push({ k: 'awards', dur: 0.9 + aw.length * 2.3, chap: 'DETIK MENARIK' });
+  // 📸 gambar pertandingan dimuat naik penganjur (paling banyak 8)
+  const ph = (d.photos || []).filter(p => p && p.im && p.im.width).slice(0, 8), PER = 2.4;
+  if (ph.length) S.push({ k: 'photos', dur: 0.8 + ph.length * PER + 0.2, chap: 'GALERI' });
   if (d.podium && d.podium.length) S.push({ k: 'podium', dur: 7, chap: 'PODIUM' });
   S.push({ k: 'end', dur: 4.6 });
   let acc = 0; S.forEach(x => { x.t0 = acc; acc += x.dur; });
@@ -55,6 +58,7 @@ export function buildRecap(d) {
     if (x.k === 'matrix') { const n = Math.max(...x.gs.map(g => g.rows.length)); for (let i = 0; i < n; i++) ev.push({ t: x.t0 + 0.9 + i * x.st, kind: 'tick', i }); }
     if (x.k === 'table') x.k && d.table.rows.slice(0, 10).forEach((_, i) => ev.push({ t: x.t0 + 1.1 + i * 0.28, kind: 'tick', i }));
     if (x.k === 'awards') aw.forEach((_, i) => ev.push({ t: x.t0 + 0.8 + i * 2.3, kind: 'card', i: 3 + i * 3 }));
+    if (x.k === 'photos') ph.forEach((_, i) => ev.push({ t: x.t0 + 0.8 + i * PER, kind: 'card', i: 4 + i * 2 }));
     if (x.k === 'bracket') x.vis.forEach((_, i) => ev.push({ t: x.t0 + 1.1 + i * 1.45 + 0.7, kind: i === x.vis.length - 1 ? 'done' : 'card', i: 5 + i }));
     if (x.k === 'podium') [[1.0, 'card'], [2.4, 'card'], [3.9, 'boom']].forEach(([t, k], i) => ev.push({ t: x.t0 + t, kind: k, i: 8 + i }));
     if (x.k === 'end') ev.push({ t: x.t0 + 0.3, kind: 'end' });
@@ -249,6 +253,26 @@ export function buildRecap(d) {
         const nl = wrap(c, a.n, W - 150, 24, 600, 3); nl.forEach((ln, k) => { c.font = F(600, 24); c.fillStyle = 'rgba(255,255,255,.8)'; c.fillText(ln, W / 2, 712 + wl.length * 58 + k * 32); });
         c.restore(); c.textAlign = 'left';
         aw.forEach((_, k) => { c.fillStyle = k === i ? GOLD : 'rgba(255,255,255,.3)'; rr(c, W / 2 + (k - (aw.length - 1) / 2) * 44 - 15, 1010, 30, 8, 4); c.fill(); });
+      },
+      photos(t) {
+        const i = Math.min(ph.length - 1, Math.floor(Math.max(0, t - 0.8) / PER)), lt = t - 0.8 - i * PER, p = ph[i];
+        if (!p || lt < 0) return;
+        const side = i % 2 ? 1 : -1, q = ease(lt / 0.45), o = i < ph.length - 1 ? cl((lt - PER + 0.35) / 0.35) : 0;
+        const im = p.im, k = Math.min((W - 100) / im.width, (H * 0.55) / im.height), w = im.width * k, h = im.height * k, cy = 590, pad = 14;
+        c.save(); c.globalAlpha = 1 - o; c.translate(W / 2 + (1 - q) * W * 0.7 * side + o * W * 0.25 * -side, cy); c.rotate(side * 0.03 * (1 - 0.5 * q));
+        c.fillStyle = 'rgba(0,0,0,.4)'; rr(c, -w / 2 - pad + 12, -h / 2 - pad + 16, w + pad * 2, h + pad * 2, 12); c.fill();
+        c.fillStyle = WHITE; rr(c, -w / 2 - pad, -h / 2 - pad, w + pad * 2, h + pad * 2, 12); c.fill();
+        // zum perlahan (Ken Burns) di dalam bingkai
+        const z = 1 + 0.08 * cl(lt / PER);
+        c.save(); c.beginPath(); c.rect(-w / 2, -h / 2, w, h); c.clip(); c.drawImage(im, -w * z / 2, -h * z / 2, w * z, h * z); c.restore();
+        c.restore();
+        if (p.cap) {
+          const cq = cl((lt - 0.35) / 0.35) * (1 - o); c.save(); c.globalAlpha = cq; c.textAlign = 'center';
+          const ls = wrap(c, p.cap, W - 120, 34, 800, 2, true), y0 = cy + h / 2 + pad + 70;
+          ls.forEach((ln, j) => { c.font = F(800, 34, true); c.fillStyle = HOT; c.fillText(ln, W / 2 + 3, y0 + j * 44 + 3); c.fillStyle = WHITE; c.fillText(ln, W / 2, y0 + j * 44); });
+          c.restore(); c.textAlign = 'left';
+        }
+        if (ph.length > 1) ph.forEach((_, j) => { c.fillStyle = j === i ? GOLD : 'rgba(255,255,255,.3)'; rr(c, W / 2 + (j - (ph.length - 1) / 2) * 40 - 13, 1150, 26, 8, 4); c.fill(); });
       },
       bracket(t, x) {
         const V = x.vis, nR = V.length, top = 200, bot = H - 215, colW = (W - 50) / nR, m0 = V[0].ms.length, sp = (bot - top) / m0;
