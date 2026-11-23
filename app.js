@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.54.1';
+const VERSION = '3.55.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -239,7 +239,7 @@ cloud.onChange(what => {
   updateTop();
   if (_cur && store.isCloud(_cur) && store.canEdit(_cur)) cloud.watchSubmissions(_cur);
   if (['pending', 'tournaments', 'role', 'auth', 'error', 'regs', 'poster'].includes(what)) softRender();
-  else if (what === 'photos' && /^#\/t\/[^/]+\/laporan/.test(location.hash)) softRender();
+  else if (what === 'photos' && /^#\/t\//.test(location.hash)) softRender();
   else if (what === 'live' && /^#\/tv\//.test(location.hash)) tvLiveRefresh();
   else if (what === 'live' && /^#\/t\/[^/]+\/ls\//.test(location.hash)) { if (_lsOnLive) _lsOnLive(); }
   else if (what === 'live' && !/^#\/t\/[^/]+\/(ls|m)\//.test(location.hash)) softRender();
@@ -360,6 +360,9 @@ function render(keep = false) {
     updateTop();
     if (page === 'qr') viewQR(t); else if (page === 'status') viewStatus(t); else if (page === 'm') viewMatch(t, parts[3]); else if (page === 'ls') viewLiveScore(t, parts[3]); else if (page === 'kadskor') viewKadSkor(t); else if (views[page]) views[page](t); else { location.hash = '#/'; return; }
     if (page === 'kumpulan' && t.format === 'rr' && t.stage === 'done') { $app.insertAdjacentHTML('beforeend', '<div class="row" style="margin:12px 0"><button class="pill-btn orange" id="posterBtn"><span class="dot"></span>🏆 Kongsi poster juara</button></div>'); wirePoster(t); }
+    // 🏆 kad juara + 📸 galeri: di halaman utama pertandingan selepas tamat; galeri juga di tab Pemain
+    if (t.stage === 'done' && page === defaultPage(t)) { $app.insertAdjacentHTML('afterbegin', champHero(t) + galleryBlock(t)); wireGallery(t); }
+    else if (page === 'pemain') { $app.insertAdjacentHTML('beforeend', galleryBlock(t)); wireGallery(t); }
     guideCard(t, page);
     if (store.isCloud(t.id)) cloud.loadOwner(t.id);
     autoMe(t);
@@ -3138,14 +3141,70 @@ async function shrinkPhoto(file) {
   }
   throw new Error('Gambar terlalu besar');
 }
+const PH_TAGS = { johan: '🥇 Johan', naib: '🥈 Naib Johan', ketiga: '🥉 Tempat Ketiga' };
+const phTag = p => (PH_TAGS[p && p.tag] ? `<span class="ph-tag t-${p.tag}">${PH_TAGS[p.tag]}</span>` : '');
 function photoCard(t) {
   if (!store.isCloud(t.id)) return `<div class="card noprint"><b>📸 Gambar pertandingan</b><p class="muted small" style="margin:4px 0 0">Simpan pertandingan ke awan dahulu untuk memuat naik gambar ke laporan & video.</p></div>`;
   const P = photosOf(t);
-  return `<div class="card noprint"><div class="row" style="justify-content:space-between;align-items:center"><b>📸 Gambar pertandingan</b><span class="muted small">${P.length}/${PHOTO_MAX}</span></div>
-    <p class="muted small" style="margin:4px 0 8px">Gambar dimasukkan ke laporan (bahagian <b>Galeri</b>) dan video ringkasan. Sesiapa yang membuka laporan boleh melihatnya.</p>
+  return `<div class="card noprint"><div class="row" style="justify-content:space-between;align-items:center"><b>📸 Gambar pertandingan</b><span class="muted small">${P.length}/${PHOTO_MAX}</span></div>${photoEditor(t)}</div>`;
+}
+function photoEditor(t) {
+  const P = photosOf(t);
+  return `<p class="muted small" style="margin:4px 0 8px">Gambar dipaparkan di halaman pertandingan (Galeri), laporan dan video ringkasan. Sesiapa yang membuka pautan boleh melihatnya.</p>
     ${P.length ? `<div class="ph-ed">${P.map((p, i) => `<div class="ph-it"><img src="${phSrc(p)}" alt=""><input type="text" maxlength="80" placeholder="Kapsyen (pilihan)" value="${esc(p.cap || '')}" data-phcap="${esc(p.id)}">
+      <select data-phtag="${esc(p.id)}"><option value="">Tiada label</option>${Object.entries(PH_TAGS).map(([k, v]) => `<option value="${k}"${p.tag === k ? ' selected' : ''}>${v}</option>`).join('')}</select>
       <div class="row" style="gap:4px"><button type="button" class="pill-btn light small" data-phup="${i}"${i ? '' : ' disabled'} title="Ke depan">⬆️</button><button type="button" class="pill-btn light small" data-phdel="${esc(p.id)}" title="Buang">🗑️</button></div></div>`).join('')}</div>` : ''}
-    ${P.length < PHOTO_MAX ? `<label class="pill-btn brand small" style="cursor:pointer;margin-top:${P.length ? 8 : 0}px"><span class="dot"></span>📤 Tambah gambar<input type="file" accept="image/*" multiple id="phUp" hidden></label>` : '<p class="muted small" style="margin:6px 0 0">Had gambar dicapai. Buang gambar untuk tambah yang lain.</p>'}</div>`;
+    ${P.length < PHOTO_MAX ? `<label class="pill-btn brand small" style="cursor:pointer;margin-top:${P.length ? 8 : 0}px"><span class="dot"></span>📤 Tambah gambar<input type="file" accept="image/*" multiple id="phUp" hidden></label>` : '<p class="muted small" style="margin:6px 0 0">Had gambar dicapai. Buang gambar untuk tambah yang lain.</p>'}`;
+}
+// 🏆 Kad juara (halaman pertandingan selepas tamat)
+function champHero(t) {
+  let w = [], n2 = [], n3 = [];
+  if (E.isMixer(t)) { const S = E.mixStandings(t).filter(r => r.p); if (!S.length) return ''; w = [S[0].id]; n2 = S[1] ? [S[1].id] : []; n3 = S[2] ? [S[2].id] : []; }
+  else { const R = E.finalRanking(t), at = p => (R.find(x => x.place === p) || { ids: [] }).ids; w = at(1); n2 = at(2); n3 = at(3); }
+  if (!w.length) return '';
+  const nm = ids => ids.map(id => esc(E.pname(t, id))).join(', ');
+  return `<div class="champ-hero"><div class="ch-cup">🏆</div><small>${E.isMixer(t) ? 'JUARA INDIVIDU' : 'JOHAN'}</small><b>${nm(w)}</b>
+    ${n2.length || n3.length ? `<div class="ch-sub">${n2.length ? `<span>🥈 ${nm(n2)}</span>` : ''}${n3.length ? `<span>🥉 ${nm(n3)}${n3.length > 1 && !E.isMixer(t) ? ' <small>(bersama)</small>' : ''}</span>` : ''}</div>` : ''}</div>`;
+}
+// 📸 Galeri di halaman pertandingan: gambar utama besar + grid kecil + "+N"; tekan untuk paparan penuh
+function galleryBlock(t) {
+  const P = photosOf(t).filter(phSrc), adm = canAdmin(t) && store.isCloud(t.id);
+  if (!P.length && !adm) return '';
+  const SH = 5, sh = P.slice(0, SH), more = P.length - SH;
+  return `<section class="card gbx noprint"><div class="gbx-h"><div><small>GALERI</small><b>Detik-detik pertandingan</b></div>${P.length ? `<span class="muted small">${P.length} foto</span>` : ''}</div>
+    ${P.length ? `<div class="gbx-grid">${sh.map((p, i) => `<button type="button" class="gbx-it${i ? '' : ' big'}" data-gal="${i}"><img src="${phSrc(p)}" alt="" loading="lazy">${phTag(p)}${i === SH - 1 && more > 0 ? `<span class="gbx-more">+${more}</span>` : ''}</button>`).join('')}</div>
+    ${P.length > 1 ? `<button type="button" class="pill-btn light small" data-gal="0" style="margin-top:8px"><span class="dot"></span>Lihat semua ${P.length} foto</button>` : ''}` : '<p class="muted small" style="margin:6px 0 0">Belum ada gambar.</p>'}
+    ${adm ? `<details class="fold gbx-ed" data-fold="phed"${P.length ? '' : ' open'}><summary>✏️ Urus gambar (${photosOf(t).length}/${PHOTO_MAX})</summary>${photoEditor(t)}</details>` : ''}</section>`;
+}
+function wireGallery(t) {
+  $app.querySelectorAll('[data-gal]').forEach(b => b.onclick = () => openLightbox(photosOf(t).filter(phSrc), +b.dataset.gal));
+  if (canAdmin(t) && store.isCloud(t.id)) wirePhotos(t);
+  const d = $app.querySelector('details[data-fold=phed]'); if (d) { if (ls.get('pingpong:phed') === '1') d.open = true; d.ontoggle = () => ls.set('pingpong:phed', d.open ? '1' : null); }
+}
+// paparan penuh: leret / anak panah untuk tukar gambar
+function openLightbox(P, i0) {
+  if (!P.length) return;
+  document.getElementById('lbx')?.remove();
+  let i = Math.max(0, Math.min(P.length - 1, i0 || 0));
+  const el = document.createElement('div'); el.id = 'lbx'; el.className = 'lbx'; el.setAttribute('role', 'dialog');
+  const draw = () => { const p = P[i];
+    el.innerHTML = `<button type="button" class="lbx-x" aria-label="Tutup">✕</button><div class="lbx-n">${i + 1} / ${P.length}</div>
+      <div class="lbx-img"><img src="${phSrc(p)}" alt=""></div>
+      ${p.cap || PH_TAGS[p.tag] ? `<div class="lbx-cap">${phTag(p)}${p.cap ? ` <span>${esc(p.cap)}</span>` : ''}</div>` : ''}
+      ${P.length > 1 ? `<button type="button" class="lbx-nav prev" aria-label="Sebelum">‹</button><button type="button" class="lbx-nav next" aria-label="Seterusnya">›</button>` : ''}`;
+    el.querySelector('.lbx-x').onclick = close;
+    el.querySelector('.prev')?.addEventListener('click', e => { e.stopPropagation(); go(-1); });
+    el.querySelector('.next')?.addEventListener('click', e => { e.stopPropagation(); go(1); });
+  };
+  const go = d => { i = (i + d + P.length) % P.length; draw(); };
+  const key = e => { if (e.key === 'Escape') close(); else if (e.key === 'ArrowLeft') go(-1); else if (e.key === 'ArrowRight') go(1); };
+  function close() { el.remove(); document.removeEventListener('keydown', key); document.body.style.overflow = ''; }
+  let x0 = null;
+  el.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
+  el.addEventListener('touchend', e => { if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null; if (Math.abs(dx) > 50 && P.length > 1) go(dx < 0 ? 1 : -1); });
+  el.addEventListener('click', e => { if (e.target === el || e.target.classList.contains('lbx-img')) close(); });
+  document.addEventListener('keydown', key); document.body.style.overflow = 'hidden';
+  draw(); document.body.appendChild(el);
 }
 function wirePhotos(t) {
   const up = document.getElementById('phUp');
@@ -3162,6 +3221,9 @@ function wirePhotos(t) {
   $app.querySelectorAll('[data-phcap]').forEach(el => el.onchange = async () => {
     try { await cloud.setPhotoMeta(t.id, el.dataset.phcap, { cap: el.value.trim().slice(0, 80) }); toast('Kapsyen disimpan'); } catch (e) { toast('Gagal: ' + (e.code || e.message), 4000); }
   });
+  $app.querySelectorAll('[data-phtag]').forEach(el => el.onchange = async () => {
+    try { await cloud.setPhotoMeta(t.id, el.dataset.phtag, { tag: el.value }); toast(el.value ? 'Label disimpan' : 'Label dibuang'); } catch (e) { toast('Gagal: ' + (e.code || e.message), 4000); }
+  });
   $app.querySelectorAll('[data-phup]').forEach(b => b.onclick = async () => {
     const P = [...photosOf(t)], i = +b.dataset.phup; if (i < 1) return;
     [P[i - 1], P[i]] = [P[i], P[i - 1]];
@@ -3174,7 +3236,7 @@ function wirePhotos(t) {
 }
 function galleryHtml(t) {
   const P = photosOf(t).filter(phSrc); if (!P.length) return '';
-  return `<section class="rp-sec pb rp-gal"><h3>📸 Galeri</h3><div class="gal-grid">${P.map(p => `<figure><img src="${phSrc(p)}" alt="">${p.cap ? `<figcaption>${esc(p.cap)}</figcaption>` : ''}</figure>`).join('')}</div></section>`;
+  return `<section class="rp-sec pb rp-gal"><h3>📸 Galeri</h3><div class="gal-grid">${P.map(p => `<figure><img src="${phSrc(p)}" alt="">${phTag(p)}${p.cap ? `<figcaption>${esc(p.cap)}</figcaption>` : ''}</figure>`).join('')}</div></section>`;
 }
 // muatkan gambar untuk video (dikecilkan ≤720px supaya ringan dilukis setiap bingkai)
 async function recapPhotos(t, max = 8) {
@@ -3182,7 +3244,7 @@ async function recapPhotos(t, max = 8) {
   const out = await Promise.all(P.map(p => new Promise(r => { const im = new Image(); im.onload = () => {
     const k = Math.min(1, 720 / Math.max(im.width, im.height)), cv = document.createElement('canvas');
     cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k); cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
-    r({ im: cv, cap: p.cap || '' }); }; im.onerror = () => r(null); im.src = phSrc(p); })));
+    r({ im: cv, cap: p.cap || '', tag: PH_TAGS[p.tag] ? PH_TAGS[p.tag].replace(/^\S+\s/, '').toUpperCase() : '' }); }; im.onerror = () => r(null); im.src = phSrc(p); })));
   return out.filter(Boolean);
 }
 // ---------- 🎬 Video ringkasan pertandingan ----------

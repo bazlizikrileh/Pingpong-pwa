@@ -266,9 +266,16 @@ export function buildRecap(d) {
         const z = 1 + 0.08 * cl(lt / PER);
         c.save(); c.beginPath(); c.rect(-w / 2, -h / 2, w, h); c.clip(); c.drawImage(im, -w * z / 2, -h * z / 2, w * z, h * z); c.restore();
         c.restore();
+        let yC = cy + h / 2 + pad + 70;
+        if (p.tag) {   // label 🥇 JOHAN / NAIB JOHAN: pil emas di bawah gambar
+          const tq = cl((lt - 0.25) / 0.3) * (1 - o); c.save(); c.globalAlpha = tq; c.font = F(900, 30); c.textAlign = 'center';
+          const tw = c.measureText(p.tag).width + 56, ty = cy + h / 2 + pad + 26;
+          c.fillStyle = GOLD; rr(c, W / 2 - tw / 2, ty, tw, 50, 25); c.fill(); c.fillStyle = '#2a1600'; c.fillText(p.tag, W / 2, ty + 36);
+          c.restore(); c.textAlign = 'left'; yC += 62;
+        }
         if (p.cap) {
           const cq = cl((lt - 0.35) / 0.35) * (1 - o); c.save(); c.globalAlpha = cq; c.textAlign = 'center';
-          const ls = wrap(c, p.cap, W - 120, 34, 800, 2, true), y0 = cy + h / 2 + pad + 70;
+          const ls = wrap(c, p.cap, W - 120, 34, 800, 2, true), y0 = yC;
           ls.forEach((ln, j) => { c.font = F(800, 34, true); c.fillStyle = HOT; c.fillText(ln, W / 2 + 3, y0 + j * 44 + 3); c.fillStyle = WHITE; c.fillText(ln, W / 2, y0 + j * 44); });
           c.restore(); c.textAlign = 'left';
         }

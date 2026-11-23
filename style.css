@@ -867,3 +867,35 @@ body.tv .as-bar { display:none; }
 .report .gal-grid img { width:100%; height:220px; object-fit:contain; background:#f1f3f7; border-radius:8px; display:block; }
 .report .gal-grid figcaption { font-size:12px; color:var(--muted, #666); margin-top:3px; text-align:center; }
 @media print { .report .gal-grid img { height:75mm; -webkit-print-color-adjust:exact; print-color-adjust:exact; } .report .gal-grid figcaption { color:#444; } }
+/* 🏆 Kad juara di halaman pertandingan */
+.champ-hero { text-align:center; margin:4px 0 12px; padding:18px 14px 16px; border-radius:20px; color:#fff;
+  background: radial-gradient(120% 90% at 50% 0%, rgba(255,207,90,.28), transparent 60%), linear-gradient(160deg, var(--hd1, #16244a), var(--hd2, #0c1430));
+  box-shadow: 0 0 0 2px rgba(255,190,70,.75), 0 10px 26px rgba(255,150,40,.25); }
+.champ-hero .ch-cup { font-size:34px; line-height:1; }
+.champ-hero small { display:block; letter-spacing:.25em; font-size:11px; opacity:.85; margin-top:6px; }
+.champ-hero > b { display:block; font-size:26px; font-weight:900; color:#ffc94d; line-height:1.15; margin-top:2px; }
+.champ-hero .ch-sub { display:flex; flex-wrap:wrap; justify-content:center; gap:4px 14px; margin-top:8px; font-size:13px; opacity:.92; }
+/* 📸 Galeri halaman pertandingan */
+.gbx-h { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:8px; }
+.gbx-h small { display:block; letter-spacing:.2em; font-size:10.5px; color:var(--muted, #888); }
+.gbx-h b { font-size:17px; }
+.gbx-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.gbx-it { position:relative; padding:0; border:0; border-radius:10px; overflow:hidden; aspect-ratio:1; background:#e9edf3; cursor:zoom-in; display:block; }
+.gbx-it.big { grid-column:1 / -1; aspect-ratio:16/10; }
+.gbx-it img { width:100%; height:100%; object-fit:cover; display:block; }
+.gbx-more { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(10,16,35,.55); color:#fff; font-size:26px; font-weight:900; }
+.gbx-ed { margin-top:10px; }
+.ph-tag { display:inline-block; font-size:11px; font-weight:800; padding:2px 8px; border-radius:999px; background:#ffcf5a; color:#2a1600; white-space:nowrap; }
+.gbx-it .ph-tag { position:absolute; left:6px; top:6px; box-shadow:0 2px 6px rgba(0,0,0,.25); }
+.ph-it select { font-size:13px; padding:4px 6px; margin:0; }
+.report .gal-grid figure { position:relative; }
+.report .gal-grid .ph-tag { position:absolute; left:6px; top:6px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+/* paparan penuh gambar */
+.lbx { position:fixed; inset:0; z-index:9999; background:rgba(5,8,18,.94); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:52px 10px calc(24px + env(safe-area-inset-bottom, 0px)); }
+.lbx-img { flex:1; min-height:0; width:100%; display:flex; align-items:center; justify-content:center; }
+.lbx-img img { max-width:100%; max-height:100%; object-fit:contain; border-radius:6px; }
+.lbx-cap { color:#fff; text-align:center; font-size:15px; padding:10px 12px 0; max-width:640px; }
+.lbx-x { position:absolute; top:10px; right:12px; width:40px; height:40px; border-radius:50%; border:0; background:rgba(255,255,255,.15); color:#fff; font-size:20px; }
+.lbx-n { position:absolute; top:18px; left:16px; color:rgba(255,255,255,.75); font-size:13px; font-weight:700; }
+.lbx-nav { position:absolute; top:50%; transform:translateY(-50%); width:44px; height:64px; border:0; border-radius:12px; background:rgba(255,255,255,.12); color:#fff; font-size:34px; line-height:1; }
+.lbx-nav.prev { left:6px; } .lbx-nav.next { right:6px; }
