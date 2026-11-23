@@ -5,7 +5,7 @@ import { firebaseConfig } from './firebase-config.js';
 
 const BASE = 45, LONG = 5;
 // Kolar: nama → caj tambahan (order lama tanpa kolar = Round neck)
-const COLLARS = [['Round neck', 0], ['V neck', 3], ['Polo button', 6], ['Polo V / Retro', 12]];
+const COLLARS = [['Round neck', 0], ['V neck', 3], ['Polo button', 5], ['Polo V / Retro', 12]];
 const collarOf = o => (COLLARS.some(c => c[0] === o.collar) ? o.collar : 'Round neck');
 const collarExtra = o => COLLARS.find(c => c[0] === collarOf(o))[1];
 // Saiz dewasa + saiz budak (disimpan K20 … K36)
@@ -61,7 +61,7 @@ function shell() {
       <tr><td>6XL – 7XL</td><td class="n">+RM 7</td></tr>
       <tr><td>8XL – 10XL</td><td class="n">+RM 10</td></tr>
     </table>
-    <p class="note">Contoh: Polo button, lengan panjang, 6XL = 45 + 6 + 5 + 7 = <b>RM 63</b></p>
+    <p class="note">Contoh: Polo button, lengan panjang, 6XL = 45 + 5 + 5 + 7 = <b>RM 62</b></p>
     <details style="margin-top:10px"><summary style="font-weight:600;cursor:pointer">👔 Rupa kolar</summary>
       <img src="baju/kolar.jpg" alt="Jenis kolar baju" style="width:100%;border-radius:12px;margin-top:8px">
       <p class="note">Pilihan yang ada: <b>Round neck</b>, <b>V neck</b>, <b>Polo</b> (button) dan <b>Premium Retro</b> (Polo V / Retro).</p>
