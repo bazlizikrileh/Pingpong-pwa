@@ -157,8 +157,16 @@ function renderLists() {
   // Senarai awam
   const paid = orders.filter(o => o.status === 'paid').length, claimed = orders.filter(o => o.status === 'claimed').length;
   const shown = orders.filter(o => filter === 'all' || o.status === filter);
-  $('#listCard').hidden = !adm();
-  if (!adm()) { renderAdmin(); bindActs(); return; }
+  $('#listCard').hidden = !adm() && !publicList;
+  if (!adm()) {
+    // Paparan ahli: nama & status bayaran sahaja
+    if (publicList) $('#listCard').innerHTML = `
+      <h2>👥 Senarai order (${orders.length})</h2>
+      ${!loaded ? '<p class="muted">Memuatkan…</p>' : !orders.length ? '<p class="muted">Belum ada order. Jadilah yang pertama! 🐯</p>' : `<ul class="list">${orders.map((o, i) => `
+        <li><span class="no">${i + 1}.</span><div class="who"><b>${esc(o.name)}</b></div><span class="st ${o.status}">${STATUS[o.status]}</span></li>`).join('')}</ul>`}
+      <p class="note">✅ disahkan · 💰 dah bayar, menunggu semakan · ⏳ belum bayar</p>`;
+    renderAdmin(); bindActs(); return;
+  }
   $('#listCard').innerHTML = `
     <h2>📋 Senarai order (${orders.length})</h2>
     <div class="stats"><div><b>${paid}</b><span>✅ Disahkan</span></div><div><b>${claimed}</b><span>💰 Dah bayar</span></div><div><b>${orders.length - paid - claimed}</b><span>⏳ Belum bayar</span></div></div>
@@ -488,18 +496,21 @@ const toOrder = d => { const x = d.data(); return { id: d.id, ...x, status: STAT
 function watchOrders() {
   unsubOrders.forEach(f => f()); unsubOrders = []; orders = []; loaded = false;
   const done = () => { orders.sort((a, b) => a.t - b.t); loaded = true; renderLists(); };
-  if (owner) {
-    unsubOrders.push(F.onSnapshot(F.collection(db, COL), snap => { orders = []; snap.forEach(d => orders.push(toOrder(d))); done(); },
-      e => { console.warn(e); loaded = true; renderLists(); toast('Tidak dapat memuatkan senarai order'); }));
-    return;
-  }
-  if (!user) { loaded = true; renderLists(); return; }
-  const mine = new Map();
-  for (const id of [user.uid, ...Array.from({ length: 9 }, (_, i) => `${user.uid}_${i + 1}`)]) {
-    unsubOrders.push(F.onSnapshot(F.doc(db, COL, id), d => { if (d.exists()) mine.set(id, toOrder(d)); else mine.delete(id); orders = [...mine.values()]; done(); },
-      e => { console.warn(id, e); done(); }));
-  }
+  // Senarai penuh (admin; dan ahli jika peraturan membenarkan bacaan awam). Jika ditolak → ahli baca order sendiri sahaja.
+  const ownOnly = () => {
+    if (!user) { publicList = false; loaded = true; renderLists(); return; }
+    const mine = new Map();
+    for (const id of [user.uid, ...Array.from({ length: 9 }, (_, i) => `${user.uid}_${i + 1}`)]) {
+      unsubOrders.push(F.onSnapshot(F.doc(db, COL, id), d => { if (d.exists()) mine.set(id, toOrder(d)); else mine.delete(id); orders = [...mine.values()]; done(); },
+        e => { console.warn(id, e); done(); }));
+    }
+  };
+  let first = true;
+  const un = F.onSnapshot(F.collection(db, COL), snap => { first = false; publicList = true; orders = []; snap.forEach(d => orders.push(toOrder(d))); done(); },
+    e => { console.warn(e); publicList = false; if (owner) { loaded = true; renderLists(); toast('Tidak dapat memuatkan senarai order'); } else if (first) ownOnly(); });
+  unsubOrders.push(un);
 }
+let publicList = false;
 
 async function start() {
   shell(); renderLists();
