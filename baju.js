@@ -210,6 +210,7 @@ function renderAdmin() {
     </div>
     <div class="acts" style="margin-top:10px">
       <button class="btn sm${pushIsOn(T_ADMIN) ? ' ok' : ''}" id="admPush">${pushIsOn(T_ADMIN) ? '🔔 Notifikasi order baru: HIDUP' : '🔕 Hidupkan notifikasi order baru'}</button>
+      ${pushIsOn(T_ADMIN) ? '<button class="btn sm" id="admTest">🧪 Uji notifikasi</button>' : ''}
       <button class="btn sm" id="viewAsBtn">👁 Lihat sebagai ahli</button>
     </div>
     <p class="note">Admin boleh tambah order bagi pihak ahli (guna borang di atas) dan masih boleh tambah/ubah selepas order ditutup.</p>
@@ -220,6 +221,11 @@ function renderAdmin() {
       <button class="btn sm on" id="aAdd" style="margin-top:10px">➕ Tambah admin</button>
       <p class="note">Admin tambahan boleh sah bayaran, ubah/padam order dan muat turun senarai, tetapi tidak boleh urus senarai admin. Mereka log masuk dengan akaun Google e-mel tersebut.</p>` : ''}`;
   $('#admPush').onclick = () => (pushIsOn(T_ADMIN) ? pushOff(T_ADMIN) : pushOn(T_ADMIN));
+  if ($('#admTest')) $('#admTest').onclick = async () => {
+    if (!P) P = await import('./push.js');
+    const r = await P.sendNow([T_ADMIN], '🧪 Ujian notifikasi order baju', 'Jika anda nampak ini, notifikasi order baru berfungsi ✅', NLINK, 'baju-test');
+    toast(r.error ? 'Gagal: ' + r.error : `Dihantar ke ${r.sent || 0} peranti${r.sent ? '' : ' — hidupkan notifikasi dahulu'}`);
+  };
   $('#viewAsBtn').onclick = () => { viewAs = true; if (!editing) renderForm(); renderLists(); scrollTo({ top: 0, behavior: 'smooth' }); };
   if (realOwner) {
     $('#aEmail').value = keep[0]; $('#aName').value = keep[1];
@@ -292,7 +298,8 @@ async function pushOn(topic) {
 }
 async function pushOff(topic) { await syncBaju(bajuTopics().filter(t => t !== topic)); renderLists(); toast('🔕 Notifikasi dimatikan'); }
 const pushIsOn = topic => bajuTopics().includes(topic) && 'Notification' in window && Notification.permission === 'granted';
-async function notify(topics, title, body, tag) { try { const m = await pushMod(); if (m) m.send(topics, title, body, NLINK, tag); } catch {} }
+// Penghantar TIDAK perlu sokong push (cth. iPhone Safari / pelayar dalam WhatsApp) — hanya penerima. Jadi jangan semak pushAvailable di sini.
+async function notify(topics, title, body, tag) { try { if (!P) P = await import('./push.js'); P.send(topics, title, body, NLINK, tag); } catch (e) { console.warn('notify', e); } }
 
 // ---------- Mesej WhatsApp untuk group (pratonton sebelum hantar) ----------
 const ORGANISER = 'Ahmad', LINK = 'https://pingpongsantai-portal.pages.dev/baju.html';
