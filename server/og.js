@@ -1,5 +1,5 @@
 // Pratonton pautan (WhatsApp, Telegram, Facebook): Cloudflare Pages Functions untuk /t/<id>… dan /daftar/<id>.
-// Pelayar biasa: index.html yang sama + <base href="/"> + skrip kecil yang tukar alamat kepada /#/t/<id>… (app biasa).
+// Pelayar biasa: index.html yang sama + skrip kecil yang tukar alamat kepada /#/t/<id>… (app biasa).
 // Pembaca pautan: <title>, og:title, og:description & og:image ikut pertandingan.
 import { firebaseConfig } from '../firebase-config.js';
 import * as E from '../engine.js';
@@ -66,7 +66,8 @@ export async function ogPage(ctx, kind) {
     } catch (e) { console.log('og', e && e.message); }
   }
   const hash = '/#/' + [kind, ...parts].join('/');
-  const head = `<base href="/"><script>history.replaceState(null,'',${JSON.stringify(hash)})</script>`;
+  // <base href="/">: fail relatif (style.css, app.js) dimuat dari / walaupun pelayar memuat awal sebelum skrip berjalan
+  const head = `<base href="/"><script>history.replaceState(null,'',${JSON.stringify(hash)})</script>`;   // mesti paling awal: fail relatif (style.css, app.js) kemudian dimuat dari /
   const og = `<meta property="og:type" content="website"><meta property="og:site_name" content="Pingpong Portal">
 <meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(desc)}">
 <meta property="og:url" content="${esc(url.origin + url.pathname)}"><meta property="og:image" content="${esc(img)}">

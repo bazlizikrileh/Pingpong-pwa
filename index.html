@@ -2,6 +2,7 @@
 <html lang="ms">
 <head>
   <meta charset="utf-8">
+  <script>/* pautan /t/<id>… & /daftar/<id> → app biasa (#/…), walaupun tanpa fungsi pratonton; mesti sebelum fail lain supaya alamat relatif ikut / */(function(l){var m=/^\/(t|daftar)(\/[\w\/-]*)?$/.exec(l.pathname);if(m&&!l.hash)history.replaceState(null,'','/#/'+m[1]+(m[2]||'').replace(/\/+$/,''))})(location)</script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Pingpong Portal</title>
   <meta name="description" content="Portal pertandingan pingpong: cabutan, jadual, skor dan kedudukan.">
