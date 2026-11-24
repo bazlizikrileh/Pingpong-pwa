@@ -299,16 +299,19 @@ const ORGANISER = 'Ahmad', LINK = 'https://pingpongsantai-portal.pages.dev/baju.
 // Nama dalam mesej WhatsApp = nama atas baju (jika ada), bukan nama penuh
 const bn = o => o.print || o.name;
 const ICON = { paid: '✅', claimed: '💰', unpaid: '⏳' };
+// Baris ringkas: "1) HANIF – M ✅" — kolar/lengan hanya jika bukan Round neck / Pendek.
+// "1)" bukan "1." supaya WhatsApp tidak jadikan senarai bernombor (inden & baris jadi sempit).
+const shortDesc = o => [sz(o.size), collarOf(o) !== 'Round neck' ? collarOf(o) : '', o.sleeve === 'Panjang' ? 'Lengan panjang' : ''].filter(Boolean).join(' · ');
 function buildMsg(kind) {
   const n = orders.length, ok = orders.filter(o => o.status === 'paid').length;
   const head = `🐯 *Order Baju Rasmi KSAS Rimau*\n_Anjuran ${ORGANISER}_\n━━━━━━━━━━━━━━\n⏰ Tutup order & bayaran: Sabtu, 12 Dis 2026\n🎯 Pakai pada game Januari 2027\n`;
   if (kind === 'owe') {
     const l = orders.filter(o => o.status !== 'paid');
-    return head + `\n⏳ *Belum disahkan bayaran (${l.length})*\n` + (l.length ? l.map((o, i) => `${i + 1}. ${bn(o)} – ${rm(price(o))} ${ICON[o.status]}`).join('\n') : '_Semua bayaran telah disahkan_ 🎉') +
-      `\n\n💳 AmBank · AHMAD BAZLI BIN AHMAD ZIKRILEH\n*${ACC}*\n📎 Muat naik resit dalam link 👇\n🔗 ${LINK}\n_💰 resit diterima, menunggu semakan · ⏳ belum bayar_`;
+    return head + `\n⏳ *Belum disahkan bayaran (${l.length})*\n` + (l.length ? l.map((o, i) => `${i + 1}) ${bn(o)} – ${rm(price(o))} ${ICON[o.status]}`).join('\n') : 'Semua bayaran telah disahkan 🎉') +
+      `\n\n💳 AmBank · AHMAD BAZLI BIN AHMAD ZIKRILEH\n*${ACC}*\n📎 Muat naik resit dalam link:\n${LINK}\n\n💰 = resit diterima, menunggu semakan\n⏳ = belum bayar`;
   }
-  return head + `\n👕 *Senarai order (${n} helai)*\n` + (n ? orders.map((o, i) => `${i + 1}. ${bn(o)} – ${desc(o, ' – ')} ${ICON[o.status]}`).join('\n') : '_Belum ada order_') +
-    `\n\n✅ Disahkan bayar: ${ok}/${n}\n🔗 ${LINK}\n_✅ disahkan · 💰 menunggu semakan · ⏳ belum bayar_`;
+  return head + `\n👕 *Senarai order (${n} helai)*\n` + (n ? orders.map((o, i) => `${i + 1}) ${bn(o)} – ${shortDesc(o)} ${ICON[o.status]}`).join('\n') : 'Belum ada order') +
+    `\n\n✅ Disahkan bayar: ${ok}/${n}\n📝 Order & bayar di sini:\n${LINK}\n\n✅ = disahkan · 💰 = menunggu semakan · ⏳ = belum bayar`;
 }
 // *tebal* _condong_ ~coret~ → HTML untuk pratonton ala WhatsApp
 const waHtml = t => esc(t).replace(/\*([^*\n]+)\*/g, '<b>$1</b>').replace(/(^|[\s(])_([^_\n]+)_/g, '$1<i>$2</i>').replace(/~([^~\n]+)~/g, '<s>$1</s>')
