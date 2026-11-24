@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.55.0';
+const VERSION = '3.56.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1749,13 +1749,13 @@ const regOn = t => !!t.regOpen && t.stage === 'setup' && !(t.matches || []).leng
 const regLive = t => regOn(t) && !regFull(t);
 // wa.me di komputer merosakkan emoji (jadi �); guna WhatsApp Web terus
 const waLink = (text, num = '') => (/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) ? `https://wa.me/${num}?text=` : `https://web.whatsapp.com/send?${num ? 'phone=' + num + '&' : ''}text=`) + encodeURIComponent(text);
-const shareUrl = t => `${location.origin}${location.pathname}#/${regLive(t) ? 'daftar/' + t.id : 't/' + t.id + '/pemain'}`;
+const shareUrl = t => appUrl(regLive(t) ? 'daftar/' + t.id : 't/' + t.id + '/pemain');
 // Mesej WhatsApp untuk group peserta: pautan, 👤 Saya, notifikasi, cara jaga skor + PIN
 function pinMessage(t, pin) {
   const d = t.date ? new Date(t.date + 'T00:00') : null, team = E.isTeam(t);
   const when = [d && !isNaN(d) ? `${HARI[d.getDay()]}, ${fmtDate(t.date)}` : '', t.startTime ? E.sessionTime(t, 1) : ''].filter(Boolean).join(' · ');
   const where = t.venue === 'X' ? t.venueName || '' : E.VENUES[t.venue] || '';
-  const url = `${location.origin}${location.pathname}#/t/${t.id}/langsung`;
+  const url = appUrl(`t/${t.id}/langsung`);
   return [`🏓 *${t.name}*`, [when && '📅 ' + when, where && '📍 ' + where].filter(Boolean).join('\n'), '',
     `🔗 *Portal pertandingan:*\n${url}`, '_Tip: tambah ke skrin utama (menu ⋮ → Add to Home screen) supaya mudah dibuka._', '',
     '👤 *1. Kenal pasti diri anda*', 'Buka tab 🟢 *Langsung* → tekan *👤 Saya* → pilih nama anda. Telefon akan ingat pilihan ini (jika anda mendaftar melalui portal, nama dikesan sendiri).',
@@ -2298,7 +2298,9 @@ function viewStatus(t) {
 }
 
 // ---------- Kod QR untuk dicetak: skor langsung (penonton) + setiap meja (pengadil) ----------
-const appUrl = h => `${location.origin}${location.pathname}#/${h}`;
+// pautan kongsi pertandingan/pendaftaran: /t/<id>… & /daftar/<id> (tanpa #) supaya WhatsApp papar nama, keterangan & gambar pertandingan
+// (Cloudflare Pages Functions dalam functions/ — server/og.js); hos lain (ujian tempatan) kekal dengan #/
+const appUrl = h => (/^(t|daftar)\//.test(h) && location.pathname === '/' && /\.pages\.dev$/.test(location.hostname) ? `${location.origin}/${h}` : `${location.origin}${location.pathname}#/${h}`);
 // QR meja: buka terus 🎯 Jaga skor bagi perlawanan yang sedang di meja itu
 function gotoTable(t, k) {
   const { occ, xr } = LV.liveState(t), m = occ[k];
@@ -2478,7 +2480,7 @@ async function viewKadSkor(t) {
   const ms = t.matches.filter(m => m.a && m.b && m.a !== 'BYE' && m.b !== 'BYE' && m.status !== 'bye' && (_kdSel === 'all' || m.status !== 'done'))
     .sort((x, y) => ((x.session || 999) - (y.session || 999)) || String(x.table || '').localeCompare(String(y.table || ''), 'ms', { numeric: true }));
   const U = LV.umpirePlan(t);
-  const c = clubOf(t), team = E.isTeam(t), base = `${location.origin}${location.pathname}#/t/${t.id}/m/`;
+  const c = clubOf(t), team = E.isTeam(t), base = appUrl(`t/${t.id}/m/`);
   const card = m => {
     const f = E.fmtFor(t, m.stage), cols = f.bo, h = !team ? E.handicapInfo(t, m.a, m.b) : null;
     const grid = (i) => { const [an, bn] = rubberNames(t, m, i); return `<table class="ks-grid"><tr><th></th>${Array.from({ length: cols }, (_, k) => `<th>Set ${k + 1}</th>`).join('')}</tr>
@@ -2513,7 +2515,7 @@ async function shareResultCard(t, m, treat) {
     win: r.winner === m.a ? 'a' : r.winner === m.b ? 'b' : null, draw: r.draw,
     big: ssd ? [r.ma, r.mb] : team ? [r.ra, r.rb] : [r.sa, r.sb], bigLabel: ssd ? 'Markah' : team ? 'Perlawanan' : 'Set',
     rows: m.rubbers.map((rb, i) => { const [an, bn] = rubberNames(t, m, i), ev = r.rubbers[i] || {}; return { label: team ? E.rubberLabel(t, i) : 'Skor setiap set', a: team ? an : '', b: team ? bn : '', sets: rb.sets, w: team ? ev.winner : null }; }),
-    url: `${location.origin}${location.pathname}#/t/${t.id}/m/${m.id}`,
+    url: appUrl(`t/${t.id}/m/${m.id}`),
   };
   const treats = 'ABCDEFGHIJ'; treat = treat || treats[Math.floor(Math.random() * 10)];
   const md = document.getElementById('modal');
