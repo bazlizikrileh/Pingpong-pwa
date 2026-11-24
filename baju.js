@@ -135,7 +135,7 @@ function renderForm(o = null) {
   if (o) $('#fCancel').onclick = () => { editing = ''; renderForm(); };
 }
 
-const line = (o, i) => `${i + 1}. ${o.name} – ${desc(o, ' – ')}${o.print ? ' – ' + o.print : ''}${o.status === 'paid' ? ' 💰✅' : o.status === 'claimed' ? ' 💰' : ''}`;
+const line = (o, i) => `${i + 1}. ${o.print || o.name} – ${desc(o, ' – ')}${o.status === 'paid' ? ' 💰✅' : o.status === 'claimed' ? ' 💰' : ''}`;
 
 function renderLists() {
   const mine = orders.filter(o => user && o.uid === user.uid);
@@ -296,16 +296,18 @@ async function notify(topics, title, body, tag) { try { const m = await pushMod(
 
 // ---------- Mesej WhatsApp untuk group (pratonton sebelum hantar) ----------
 const ORGANISER = 'Ahmad', LINK = 'https://pingpongsantai-portal.pages.dev/baju.html';
+// Nama dalam mesej WhatsApp = nama atas baju (jika ada), bukan nama penuh
+const bn = o => o.print || o.name;
 const ICON = { paid: '✅', claimed: '💰', unpaid: '⏳' };
 function buildMsg(kind) {
   const n = orders.length, ok = orders.filter(o => o.status === 'paid').length;
   const head = `🐯 *Order Baju Rasmi KSAS Rimau*\n_Anjuran ${ORGANISER}_\n━━━━━━━━━━━━━━\n⏰ Tutup order & bayaran: Sabtu, 12 Dis 2026\n🎯 Pakai pada game Januari 2027\n`;
   if (kind === 'owe') {
     const l = orders.filter(o => o.status !== 'paid');
-    return head + `\n⏳ *Belum disahkan bayaran (${l.length})*\n` + (l.length ? l.map((o, i) => `${i + 1}. ${o.name} – ${rm(price(o))} ${ICON[o.status]}`).join('\n') : '_Semua bayaran telah disahkan_ 🎉') +
+    return head + `\n⏳ *Belum disahkan bayaran (${l.length})*\n` + (l.length ? l.map((o, i) => `${i + 1}. ${bn(o)} – ${rm(price(o))} ${ICON[o.status]}`).join('\n') : '_Semua bayaran telah disahkan_ 🎉') +
       `\n\n💳 AmBank · AHMAD BAZLI BIN AHMAD ZIKRILEH\n*${ACC}*\n📎 Muat naik resit dalam link 👇\n🔗 ${LINK}\n_💰 resit diterima, menunggu semakan · ⏳ belum bayar_`;
   }
-  return head + `\n👕 *Senarai order (${n} helai)*\n` + (n ? orders.map((o, i) => `${i + 1}. ${o.name} – ${desc(o, ' – ')} ${ICON[o.status]}`).join('\n') : '_Belum ada order_') +
+  return head + `\n👕 *Senarai order (${n} helai)*\n` + (n ? orders.map((o, i) => `${i + 1}. ${bn(o)} – ${desc(o, ' – ')} ${ICON[o.status]}`).join('\n') : '_Belum ada order_') +
     `\n\n✅ Disahkan bayar: ${ok}/${n}\n🔗 ${LINK}\n_✅ disahkan · 💰 menunggu semakan · ⏳ belum bayar_`;
 }
 // *tebal* _condong_ ~coret~ → HTML untuk pratonton ala WhatsApp
