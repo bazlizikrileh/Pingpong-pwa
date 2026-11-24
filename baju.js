@@ -302,33 +302,36 @@ const ICON = { paid: '✅', claimed: '💰', unpaid: '⏳' };
 // Baris ringkas: "1) HANIF – M ✅" — kolar/lengan hanya jika bukan Round neck / Pendek.
 // "1)" bukan "1." supaya WhatsApp tidak jadikan senarai bernombor (inden & baris jadi sempit).
 const shortDesc = o => [sz(o.size), collarOf(o) !== 'Round neck' ? collarOf(o) : '', o.sleeve === 'Panjang' ? 'Lengan panjang' : ''].filter(Boolean).join(' · ');
-function buildMsg(kind) {
+function buildMsg(kind, withLink = false) {
+  const linkTxt = t => (withLink ? `${t}\n${LINK}` : `${t}: link di 📌 pin atas group`);
   const n = orders.length, ok = orders.filter(o => o.status === 'paid').length;
   const head = `🐯 *Order Baju Rasmi KSAS Rimau*\n_Anjuran ${ORGANISER}_\n━━━━━━━━━━━━━━\n⏰ Tutup order & bayaran: Sabtu, 12 Dis 2026\n🎯 Pakai pada game Januari 2027\n`;
   if (kind === 'owe') {
     const l = orders.filter(o => o.status !== 'paid');
     return head + `\n⏳ *Belum disahkan bayaran (${l.length})*\n` + (l.length ? l.map((o, i) => `${i + 1}) ${bn(o)} – ${rm(price(o))} ${ICON[o.status]}`).join('\n') : 'Semua bayaran telah disahkan 🎉') +
-      `\n\n💳 AmBank · AHMAD BAZLI BIN AHMAD ZIKRILEH\n*${ACC}*\n📎 Muat naik resit dalam link:\n${LINK}\n\n💰 = resit diterima, menunggu semakan\n⏳ = belum bayar`;
+      `\n\n💳 AmBank · AHMAD BAZLI BIN AHMAD ZIKRILEH\n*${ACC}*\n📎 ${linkTxt('Muat naik resit dalam link')}\n\n💰 = resit diterima, menunggu semakan\n⏳ = belum bayar`;
   }
   return head + `\n👕 *Senarai order (${n} helai)*\n` + (n ? orders.map((o, i) => `${i + 1}) ${bn(o)} – ${shortDesc(o)} ${ICON[o.status]}`).join('\n') : 'Belum ada order') +
-    `\n\n✅ Disahkan bayar: ${ok}/${n}\n📝 Order & bayar di sini:\n${LINK}\n\n✅ = disahkan · 💰 = menunggu semakan · ⏳ = belum bayar`;
+    `\n\n✅ Disahkan bayar: ${ok}/${n}\n📝 ${linkTxt('Order & bayar')}\n\n✅ = disahkan · 💰 = menunggu semakan · ⏳ = belum bayar`;
 }
 // *tebal* _condong_ ~coret~ → HTML untuk pratonton ala WhatsApp
 const waHtml = t => esc(t).replace(/\*([^*\n]+)\*/g, '<b>$1</b>').replace(/(^|[\s(])_([^_\n]+)_/g, '$1<i>$2</i>').replace(/~([^~\n]+)~/g, '<s>$1</s>')
   .replace(/(https?:\/\/[^\s<]+)/g, '<span style="color:#53bdeb">$1</span>').replace(/\n/g, '<br>');
-function showMsg(kind) {
-  const text = buildMsg(kind), z = $('#zoom');
+function showMsg(kind, withLink = false) {
+  const text = buildMsg(kind, withLink), z = $('#zoom');
   z.innerHTML = `<div style="width:100%;max-width:420px;max-height:100%;display:flex;flex-direction:column;gap:10px" onclick="event.stopPropagation()">
     <div style="color:#fff;font-weight:700;text-align:center">👁 Pratonton mesej — ${kind === 'owe' ? 'peringatan bayar' : 'senarai order'}</div>
     <div style="background:#0b141a;border-radius:14px;padding:12px;overflow:auto;flex:1">
       <div style="background:#005c4b;color:#e9edef;border-radius:10px 0 10px 10px;padding:8px 10px;font:14.5px/1.4 system-ui,sans-serif;margin-left:24px;word-break:break-word">${waHtml(text)}</div>
     </div>
+    <label style="display:flex;gap:8px;align-items:center;color:#fff;font-size:13px;font-weight:500;margin:0"><input type="checkbox" id="mLink" style="width:auto"${withLink ? ' checked' : ''}> Sertakan link (WhatsApp akan tunjuk kad pratonton &amp; mesej jadi sempit — tekan ✕ pada kad sebelum hantar)</label>
     <div style="display:flex;gap:8px">
       <button class="btn" id="mCopy" style="flex:1">📋 Salin</button>
       <button class="btn on" id="mWa" style="flex:1;background:#25d366;border-color:#25d366">Hantar ke WhatsApp</button>
     </div>
     <button class="btn" id="mClose">Tutup</button></div>`;
   z.hidden = false;
+  $('#mLink').onchange = () => showMsg(kind, $('#mLink').checked);
   $('#mCopy').onclick = () => copy(text, 'Mesej disalin');
   $('#mWa').onclick = () => window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
   $('#mClose').onclick = () => (z.hidden = true);
