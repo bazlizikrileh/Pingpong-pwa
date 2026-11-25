@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.58.0';
+const VERSION = '3.58.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2973,7 +2973,9 @@ function tvSlides(t) {
   const S = [];
   const { live, cand } = LV.liveState(t);
   if (live.length || cand.length) S.push({ k: 'live', sec: 20 });
-  for (let i = 0; i < t.groups.length; i += 2) S.push({ k: 'groups', g: t.groups.slice(i, i + 2), sec: 15 });
+  // kedudukan kumpulan boleh disorok (butang 📊 di bawah skrin TV); potret: satu kumpulan setiap slaid supaya tidak terpotong
+  const per = window.matchMedia && matchMedia('(orientation: portrait)').matches ? 1 : 2;
+  if (ls.get('pingpong:tvGroups:' + t.id) !== '0') for (let i = 0; i < t.groups.length; i += per) S.push({ k: 'groups', g: t.groups.slice(i, i + per), sec: 15 });
   if (t.rounds.ko) S.push({ k: 'ko', sec: 18 });
   if (t.rounds.pool) S.push({ k: 'pool', sec: 15 });
   if (t.stage === 'done' && t.format !== 'rr') S.push({ k: 'champ', sec: 15 });
@@ -3011,28 +3013,32 @@ function viewTV(t) {
   document.body.classList.add('tv');
   if (store.isCloud(t.id)) cloud.watchLive(t.id, 10000);
   const c = clubOf(t), S = tvSlides(t);
-  if (_tv.id !== t.id) { stopTV(); _tv.id = t.id; _tv.i = 0; }
+  if (_tv.id !== t.id) { stopTV(); _tv.id = t.id; _tv.i = 0; _tv.until = 0; }
   const sl = S[_tv.i % S.length];
+  // masa slaid disimpan: lukisan semula (skor disimpan, data dikemas kini) tidak lagi memulakan kiraan dari awal
+  if (!_tv.until || _tv.sk !== sl.k + (_tv.i % S.length)) { _tv.until = Date.now() + sl.sec * 1000; _tv.sk = sl.k + (_tv.i % S.length); }
+  const hasG = t.groups.length > 0, gOn = ls.get('pingpong:tvGroups:' + t.id) !== '0';
   const play = t.matches.filter(m => m.status !== 'bye' && m.a !== 'BYE' && m.b !== 'BYE'), done = play.filter(m => m.status === 'done').length;
   $app.innerHTML = `<div class="tv-wrap">
     <div class="tv-top">${c.logos.map(x => `<img src="${esc(x)}" alt="">`).join('')}<div class="tv-title"><b>${esc(t.name)}</b><span>${esc(c.short || '')}${t.date ? ' · ' + esc(fmtDate(t.date)) : ''}</span></div>
       <div class="tv-stat"><small>Perlawanan</small><b>${done}<em>/${play.length}</em></b></div><div class="tv-clock" id="tvClock"></div></div>
     <div class="tv-body" id="tvBody">${tvSlideHtml(t, sl)}</div>
     <div class="tv-foot">${sponsorStrip(t)}<span class="tv-dots">${S.map((_, i) => `<i class="${i === _tv.i % S.length ? 'on' : ''}"></i>`).join('')}</span>
-      <span class="tv-ctl"><button id="tvPrev">◀</button><button id="tvNext">▶</button><button id="tvFs">⛶ Skrin penuh</button><a href="#/t/${t.id}/langsung">✕ Keluar</a></span></div></div>`;
+      ${S.length > 1 ? `<i class="tv-prog" style="--d:${sl.sec}s;--p:${Math.max(0, Math.min(1, 1 - (_tv.until - Date.now()) / (sl.sec * 1000)))}"></i>` : ''}<span class="tv-ctl">${hasG ? `<button id="tvGrp" title="Papar / sorok kedudukan kumpulan">📊 Kedudukan: ${gOn ? 'Papar' : 'Sorok'}</button>` : ''}<button id="tvPrev">◀</button><button id="tvNext">▶</button><button id="tvFs">⛶ Skrin penuh</button><a href="#/t/${t.id}/langsung">✕ Keluar</a></span></div></div>`;
   const fit = $app.querySelector('.tv-fit');
   if (fit) { const inner = fit.querySelector('.tv-scale'); if (inner) { const sc = Math.min(1.6, (fit.clientWidth - 30) / inner.scrollWidth, (fit.clientHeight - 30) / inner.scrollHeight); inner.style.transform = `scale(${sc})`; inner.style.transformOrigin = 'top center'; } }
   const clock = () => { const el = document.getElementById('tvClock'); if (el) el.textContent = new Date().toLocaleTimeString('ms-MY', { hour: 'numeric', minute: '2-digit' }); };
   clock();
-  const go = d => { _tv.i = (_tv.i + d + S.length) % S.length; viewTV(load(t.id) || t); };
+  const go = d => { _tv.i = (_tv.i + d + S.length) % S.length; _tv.until = 0; viewTV(load(t.id) || t); };
+  const gb = document.getElementById('tvGrp');
+  if (gb) gb.onclick = () => { ls.set('pingpong:tvGroups:' + t.id, gOn ? '0' : null); _tv.i = 0; _tv.until = 0; viewTV(load(t.id) || t); };
   document.getElementById('tvPrev').onclick = () => go(-1);
   document.getElementById('tvNext').onclick = () => go(1);
   document.getElementById('tvFs').onclick = () => { const el = document.documentElement; (document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen && el.requestFullscreen()).catch?.(() => {}); };
   clearInterval(_tv.timer);
-  let left = sl.sec;
   _tv.timer = setInterval(() => {
     clock(); const cd = document.getElementById('cdown'); if (cd) cd.innerHTML = cdText(t);
-    if (--left <= 0) go(1);
+    if (S.length > 1 && Date.now() >= _tv.until) go(1);
   }, 1000);
 }
 document.addEventListener('keydown', e => { if (!document.body.classList.contains('tv')) return; if (e.key === 'ArrowRight') document.getElementById('tvNext')?.click(); if (e.key === 'ArrowLeft') document.getElementById('tvPrev')?.click(); });

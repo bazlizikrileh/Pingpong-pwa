@@ -903,3 +903,9 @@ body.tv .as-bar { display:none; }
 .lbx-n { position:absolute; top:18px; left:16px; color:rgba(255,255,255,.75); font-size:13px; font-weight:700; }
 .lbx-nav { position:absolute; top:50%; transform:translateY(-50%); width:44px; height:64px; border:0; border-radius:12px; background:rgba(255,255,255,.12); color:#fff; font-size:34px; line-height:1; }
 .lbx-nav.prev { left:6px; } .lbx-nav.next { right:6px; }
+
+/* Mod TV: bar kemajuan slaid (bila slaid seterusnya) */
+.tv-foot { position:relative; }
+.tv-prog { position:absolute; left:0; right:0; top:0; height:3px; background:rgba(255,255,255,.08); overflow:hidden; }
+.tv-prog::after { content:''; position:absolute; inset:0; background:#ffb02e; transform-origin:left; transform:scaleX(var(--p, 0)); animation: tvProg calc(var(--d) * (1 - var(--p, 0))) linear forwards; }
+@keyframes tvProg { to { transform:scaleX(1); } }
