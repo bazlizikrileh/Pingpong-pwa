@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.57.0';
+const VERSION = '3.57.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2572,6 +2572,13 @@ const LS_STALE = 10 * 60e3, LS_FRESH = 12 * 3600e3, _lsHist = {};   // skor lang
 let _lsTimer = null, _lsOnLive = null, _lsAuto = null; const _lsAutoOff = {};
 LV.setLiveRi((t, m) => { const x = store.isCloud(t.id) ? liveOf(t, m) : null; return x ? x.ri : null; });
 function liveOf(t, m, id = m.id) {
+  // pertandingan ujian (telefon ini sahaja): skor Jaga skor dibaca terus daripada telefon ini
+  if (!store.isCloud(t.id)) {
+    let S = null; try { S = JSON.parse(ls.get('pingpong:ls:' + id) || 'null'); } catch {}
+    if (!S || !Array.isArray(S.cur) || !Array.isArray(S.rs)) return null;
+    const x = { rs: S.rs, cur: S.sd === 0 || S.sd === 1 ? [...S.cur, S.sd] : [...S.cur], ri: S.ri | 0, sw: !!S.swap, at: S.at || Date.now(), uid: 'local', by: '' };
+    return m.status !== 'done' && Date.now() - x.at < LS_FRESH ? x : null;
+  }
   const x = ((cloud.state.live || {})[t.id] || {})[id];
   return x && m.status !== 'done' && Date.now() - x.at < LS_FRESH ? x : null;
 }
@@ -2736,6 +2743,7 @@ function viewLiveScore(t, mid0) {
   };
   const push = () => {
     takeNote = '';
+    S.at = Date.now(); S.sd = allDone() ? null : srvNow().side;   // masa & sisi servis untuk paparan Langsung/TV (mod ujian)
     ls.set(key, JSON.stringify(S));
     if (!cloudOn) return;
     clearTimeout(_lsTimer);
