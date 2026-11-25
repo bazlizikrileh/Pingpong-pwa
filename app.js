@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.56.1';
+const VERSION = '3.56.2';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -388,10 +388,14 @@ function cdText(t) {
 let _cdTimer = null;
 // Latar banner: gambar poster realistik sahaja (tiada teks), saiz lebar. Gaya = gaya poster yang dikunci, jika tiada ikut id pertandingan.
 const _hbg = {};
+// kunci gaya poster: disimpan dalam data pertandingan (t.posterStyle → awan, sama di semua telefon); kunci telefon lama sebagai sandaran
+const posterLock = t => t.posterStyle || ls.get('pingpong:posterLock:' + t.id) || '';
+// gaya poster lalai bila tiada kunci: pemandangan realistik ikut id pertandingan (sama seperti latar banner)
+const posterDefault = t => 'R' + (1 + [...t.id].reduce((a, ch) => a + ch.charCodeAt(0), 0) % 8);
 function headBg(t) {
   const el = $head; el.dataset.tid = t.id;
-  const locked = ls.get('pingpong:posterLock:' + t.id);
-  const n = locked && locked[0] === 'R' ? +locked.slice(1) : 1 + [...t.id].reduce((a, ch) => a + ch.charCodeAt(0), 0) % 8;
+  const locked = posterLock(t);
+  const n = +(locked && locked[0] === 'R' ? locked : posterDefault(t)).slice(1);
   const key = `${n}|${getComputedStyle(document.documentElement).getPropertyValue('--hd1').trim()}`;
   const set = url => { if (el.dataset.tid !== t.id) return; el.style.setProperty('--hbg', `url("${url}")`); el.classList.add('has-bg'); };
   if (_hbg[key]) return set(_hbg[key]);
@@ -399,6 +403,7 @@ function headBg(t) {
   import('./poster-real.js').then(m => m.makeScene(n)).then(cv => { _hbg[key] = cv.toDataURL('image/jpeg', 0.7); set(_hbg[key]); }).catch(() => {});
 }
 function renderHead(t, page) {
+  { const old = ls.get('pingpong:posterLock:' + t.id); if (old && !t.posterStyle && canAdmin(t)) { t.posterStyle = old; ls.set('pingpong:posterLock:' + t.id, null); save(t); } }
   clearInterval(_cdTimer);
   _cdTimer = setInterval(() => { const el = document.getElementById('cdown'); if (!el) return clearInterval(_cdTimer); if (startAt(t) <= Date.now()) { clearInterval(_cdTimer); renderHead(t, page); } else el.innerHTML = cdText(t); }, 1000);
   const c = clubOf(t);
@@ -1850,6 +1855,23 @@ function wirePosterAdmin(t) {
   };
   if (del) del.onclick = async () => { if (!confirm('Buang poster sendiri? Poster automatik akan digunakan semula.')) return; await cloud.delPoster(t.id).catch(e => toast('Gagal: ' + (e.code || e.message))); };
 }
+// 🖼️ WhatsApp + poster: terus ke senarai kongsi (poster + mesej sebagai kapsyen); sandaran: muat turun + salin mesej
+async function sharePosterWA(t, btn) {
+  const lab = btn && btn.innerHTML; if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Menyediakan poster…'; }
+  try {
+    const m = await import('./reg-poster.js'), own = posterOf(t), nm = (t.name || 'pertandingan').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-');
+    let blob, name;
+    if (own) { blob = await (await fetch(own)).blob(); name = `Poster-${nm}.${blob.type.includes('webp') ? 'webp' : 'jpg'}`; }
+    else {
+      const K = await import('./poster-kit.js'), PR = await import('./poster-real.js');
+      const lk = posterLock(t), st = lk && (/^R[1-8]$/.test(lk) || K.COMBOS.includes(lk)) ? lk : posterDefault(t);
+      blob = await K.withSponsors(st[0] === 'R' ? await PR.makeRealPoster(regPosterData(t), +st.slice(1)) : await K.makeKitPoster(regPosterData(t), st), sponsorsOf(t)); name = `Poster-${nm}.png`;
+    }
+    const r = await m.shareBlob(blob, name, t.name, waText(t));
+    if (r === 'download') { try { await navigator.clipboard.writeText(waText(t)); } catch {} toast('Poster dimuat turun & mesej disalin. Buka WhatsApp, lampirkan poster dan tampal mesej.', 6000); }
+  } catch (e) { toast('Gagal: ' + (e.message || e), 4000); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = lab; } }
+}
 async function showRegPoster(t, auto = false, combo = null) {
   const own = !auto && posterOf(t);
   if (own) {
@@ -1862,7 +1884,7 @@ async function showRegPoster(t, auto = false, combo = null) {
     document.getElementById('rpAuto').onclick = () => showRegPoster(t, true);
     document.getElementById('rpShare').onclick = async () => {
       const blob = await (await fetch(own)).blob(), m = await import('./reg-poster.js');
-      const r = await m.shareBlob(blob, `Poster-${t.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-')}.${blob.type.includes('webp') ? 'webp' : 'jpg'}`, t.name);
+      const r = await m.shareBlob(blob, `Poster-${t.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-')}.${blob.type.includes('webp') ? 'webp' : 'jpg'}`, t.name, waText(t));
       if (r === 'download') toast('Poster dimuat turun ke telefon');
     };
     return;
@@ -1874,30 +1896,34 @@ async function showRegPoster(t, auto = false, combo = null) {
   md.hidden = false; md.onclick = e => { if (e.target === md || e.target.id === 'mx') md.hidden = true; };
   try {
     const K = await import('./poster-kit.js'), m = await import('./reg-poster.js'), PR = await import('./poster-real.js');
-    const lockKey = 'pingpong:posterLock:' + t.id, locked = ls.get(lockKey);
+    const lockKey = 'pingpong:posterLock:' + t.id, locked = posterLock(t), adm = canAdmin(t);
     // dua jenis: 🏓 Realistik (R1–R8: meja, raket & bola seperti foto) atau 🎨 Grafik (100 gabungan)
-    const REAL = PR.REAL_NAMES.map((_, i) => 'R' + (i + 1)), mode = combo ? (combo[0] === 'R' ? 'real' : 'graf') : ls.get('pingpong:posterMode') || 'real';
-    const pool = mode === 'real' ? REAL : K.COMBOS, all = [...REAL, ...K.COMBOS];
-    if (!combo) combo = locked && all.includes(locked) && (locked[0] === 'R') === (mode === 'real') ? locked : pool[Math.floor(Math.random() * pool.length)];
+    const REAL = PR.REAL_NAMES.map((_, i) => 'R' + (i + 1)), all = [...REAL, ...K.COMBOS];
+    if (!combo && locked && all.includes(locked)) combo = locked;   // gaya dikunci penganjur sentiasa diutamakan (Realistik atau Grafik)
+    const mode = combo ? (combo[0] === 'R' ? 'real' : 'graf') : ls.get('pingpong:posterMode') || 'real';
+    const pool = mode === 'real' ? REAL : K.COMBOS;
+    if (!combo) combo = pool[Math.floor(Math.random() * pool.length)];
     const label = combo[0] === 'R' ? `Realistik ${combo.slice(1)} · ${PR.REAL_NAMES[+combo.slice(1) - 1]}` : `Gaya ${combo} · ${K.LAYOUT_NAMES[combo.slice(0, -1)]} · ${K.TREAT_NAMES[combo.slice(-1)]}`;
     document.getElementById('rpBar').innerHTML = `<div class="row" style="gap:6px;width:100%"><button type="button" class="pill-btn small ${mode === 'real' ? 'brand' : 'light'}" data-pm="real">🏓 Realistik</button><button type="button" class="pill-btn small ${mode === 'graf' ? 'brand' : 'light'}" data-pm="graf">🎨 Grafik</button></div>
       <button type="button" class="pill-btn small orange" id="rpRand">🎲 ${mode === 'real' ? 'Gaya seterusnya' : 'Rawak lagi'}</button>
-      <button type="button" class="pill-btn small ${locked === combo ? 'brand' : 'light'}" id="rpLock">${locked === combo ? '📌 Dikunci' : '📌 Kunci gaya ini'}</button>
+      ${adm ? `<button type="button" class="pill-btn small ${locked === combo ? 'brand' : 'light'}" id="rpLock">${locked === combo ? '📌 Dikunci' : '📌 Kunci gaya ini'}</button>` : locked === combo ? '<span class="muted small" style="align-self:center">📌 Gaya penganjur</span>' : ''}
       <span class="muted small" style="align-self:center">${esc(label)}</span>`;
     document.querySelectorAll('[data-pm]').forEach(b => (b.onclick = () => { ls.set('pingpong:posterMode', b.dataset.pm); const P = b.dataset.pm === 'real' ? REAL : K.COMBOS; showRegPoster(t, true, P[Math.floor(Math.random() * P.length)]); }));
     document.getElementById('rpRand').onclick = () => { let n; if (mode === 'real') n = REAL[(REAL.indexOf(combo) + 1) % REAL.length]; else do n = K.COMBOS[Math.floor(Math.random() * K.COMBOS.length)]; while (n === combo); showRegPoster(t, true, n); };
-    document.getElementById('rpLock').onclick = () => { ls.set(lockKey, locked === combo ? null : combo); showRegPoster(t, true, combo); };
+    const lk = document.getElementById('rpLock');
+    if (lk) lk.onclick = () => { if (locked === combo) delete t.posterStyle; else t.posterStyle = combo; ls.set(lockKey, null); save(t); toast(t.posterStyle ? '📌 Gaya poster dikunci untuk semua' : 'Kunci gaya dibuang'); showRegPoster(t, true, combo); };
     const blob = await K.withSponsors(combo[0] === 'R' ? await PR.makeRealPoster(regPosterData(t), +combo.slice(1)) : await K.makeKitPoster(regPosterData(t), combo), sponsorsOf(t));
     const name = `Poster-${(t.name || 'pertandingan').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-')}.png`;
     document.getElementById('rpBox').innerHTML = `<img src="${URL.createObjectURL(blob)}" alt="Poster" class="rp-img">
       <div class="btn-stack" style="margin-top:10px"><button class="pill-btn orange" id="rpShare"><span class="dot"></span>📤 Kongsi poster</button></div>
       <p class="muted small" style="text-align:center">Kod QR membawa terus ke halaman ${regLive(t) ? 'pendaftaran' : 'pertandingan'}. Jana semula untuk kemas kini bilangan tempat.</p>`;
-    document.getElementById('rpShare').onclick = async () => { const r = await m.shareBlob(blob, name, t.name); if (r === 'download') toast('Poster dimuat turun ke telefon'); };
+    document.getElementById('rpShare').onclick = async () => { const r = await m.shareBlob(blob, name, t.name, waText(t)); if (r === 'download') toast('Poster dimuat turun ke telefon'); };
   } catch (e) { document.getElementById('rpBox').innerHTML = `<p>Gagal menjana poster: ${esc(e.message || String(e))}</p>`; }
 }
 function shareRow(t) {
   return `<div class="share-row"><span class="muted small">🔗 Kongsi:</span>
-    <a class="pill-btn small" style="background:#25d366;color:#fff" target="_blank" rel="noopener" href="${waLink(waText(t))}">WhatsApp</a>
+    <button type="button" class="pill-btn small" style="background:#25d366;color:#fff" data-share="wapost">🖼️ WhatsApp + poster</button>
+    <a class="pill-btn small light" target="_blank" rel="noopener" href="${waLink(waText(t))}">💬 Teks sahaja</a>
     <button type="button" class="pill-btn light small" data-share="msg">📋 Salin mesej</button>
     <button type="button" class="pill-btn light small" data-share="copy">🔗 Salin pautan</button>
     <button type="button" class="pill-btn light small" data-share="preview">👁️ Lihat mesej</button>
@@ -1909,6 +1935,7 @@ function wireShare(t) {
   $app.querySelectorAll('[data-share]').forEach(b => (b.onclick = async () => {
     const k = b.dataset.share;
     if (k === 'poster') return showRegPoster(t);
+    if (k === 'wapost') return sharePosterWA(t, b);   // terus ke senarai kongsi: poster + mesej sebagai kapsyen
     const txt = k === 'copy' ? shareUrl(t) : waText(t);
     if (k === 'preview') {
       const md = document.getElementById('modal');
