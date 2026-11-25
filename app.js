@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.56.4';
+const VERSION = '3.57.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2726,7 +2726,13 @@ function viewLiveScore(t, mid0) {
   const srvKey = () => `${S.ri}:${(S.rs[S.ri] || []).length}`;
   const srvNow = () => {
     const g = (S.rs[S.ri] || []).length, D = dblNames(S.ri);
-    return { ...LV.serveAt(S.cur, lsStart(t, m, S.ri), LV.serveCfg(S.sv, S.ri, g), !!D, (S.x5 || {})[srvKey()]), D, g, cfg: LV.serveCfg(S.sv, S.ri, g), chosen: !!(S.sv && S.sv[`${S.ri}:0`]) };
+    // Handicap: pihak kuat (mula 0) servis dahulu setiap set (kecuali dipilih sendiri), dan giliran servis dikira daripada
+    // JUMLAH mata termasuk mata handicap — cth. mula 1-0: pembuat servis pertama ada 1 servis sahaja; mula 4-0: 2 servis.
+    const st = lsStart(t, m, S.ri), hc = st[0] !== st[1], own = S.sv && S.sv[`${S.ri}:${g}`];
+    let cfg = LV.serveCfg(S.sv, S.ri, g);
+    if (hc && !own) cfg = { ...cfg, s: st[0] < st[1] ? 0 : 1 };
+    const r = Math.max(0, S.cur[0] + S.cur[1] - st[0] - st[1]);   // rali yang telah dimainkan dalam set ini
+    return { ...LV.serveAt(S.cur, st, cfg, !!D, (S.x5 || {})[srvKey()]), r, hc, D, g, cfg, chosen: !!(S.sv && S.sv[`${S.ri}:0`]) };
   };
   const push = () => {
     takeNote = '';
@@ -2744,7 +2750,7 @@ function viewLiveScore(t, mid0) {
     const pmax = Math.max(...S.cur);
     S.cur[k] = Math.max(0, S.cur[k] + d);
     if (d > 0 && !gameOver(...S.cur) && pmax < 5 && Math.max(...S.cur) >= 5 && !fmt.full && (S.rs[S.ri] || []).length === fmt.bo - 1 && !(S.x5 || {})[srvKey()]) {
-      const st = lsStart(t, m, S.ri); S.x5 = { ...(S.x5 || {}), [srvKey()]: S.cur[0] + S.cur[1] - st[0] - st[1] };
+      S.x5 = { ...(S.x5 || {}), [srvKey()]: S.cur[0] + S.cur[1] };   // giliran servis dikira daripada jumlah mata (termasuk handicap)
       setTimeout(() => toast(`⇄ Set penentu: pemain tukar hujung meja${dblNames(S.ri) ? ' · pasangan penerima tukar giliran menerima' : ''}`, 4500), 50);
     }
     if (d > 0 && gameOver(...S.cur)) {
@@ -2766,7 +2772,7 @@ function viewLiveScore(t, mid0) {
   };
   if ('wakeLock' in navigator && !window._lsWake) navigator.wakeLock.request('screen').then(w => { window._lsWake = w; w.addEventListener('release', () => (window._lsWake = null)); }).catch(() => {});
   const srvPanel = sv => {
-    const { D, cfg, g } = sv, fresh = sv.n === 0;
+    const { D, cfg, g } = sv, fresh = sv.r === 0;
     const who = (p) => (D ? esc(D[p[0]][p[1]]) : esc(p[0] ? B : A));
     const line = D ? `<b>${who(sv.sv)}</b> servis kepada <b>${who(sv.rv)}</b>` : `<b>${who([sv.side])}</b> servis`;
     const note = sv.deuce ? ' · deuce: bertukar setiap mata' : ` · bertukar selepas ${sv.left} mata lagi`;
@@ -2777,7 +2783,7 @@ function viewLiveScore(t, mid0) {
       <div class="srv-row"><span>Penerima</span>${D[1 - cfg.s].map((n, i) => b(esc(n), cfg.rc === i, `data-sv-rc="${i}"`)).join('')}</div>` : ''}`;
     const auto = g > 0 && !(S.sv || {})[`${S.ri}:${g}`];
     return `<details class="card soft srv-card" ${g === 0 && !sv.chosen ? 'open' : ''}><summary>🏓 ${line}${g === 0 && !sv.chosen ? ' <span class="muted small">(pilih sebelum mula)</span>' : auto ? ' <span class="muted small">(automatik · tekan untuk ubah)</span>' : ''}</summary>${pick}
-      <p class="muted small" style="margin:6px 0 0">Servis bertukar setiap 2 mata; dari 10-10 setiap mata. Set seterusnya: pihak lain servis dahulu${D ? ', dan penerima pertama set ini membuat servis kepada pembuat servis pertama' : ''}.</p></details>`;
+      <p class="muted small" style="margin:6px 0 0">${sv.hc ? '<b>Handicap:</b> pihak kuat (mula 0) servis dahulu setiap set (boleh ditukar di atas); giliran dikira daripada jumlah mata termasuk handicap (mula 1-0 → 1 servis, mula 4-0 → 2 servis). ' : ''}Servis bertukar setiap 2 mata; dari 10-10 setiap mata. ${sv.hc ? (D ? 'Set seterusnya: penerima pertama set ini membuat servis kepada pembuat servis pertama.' : '') : `Set seterusnya: pihak lain servis dahulu${D ? ', dan penerima pertama set ini membuat servis kepada pembuat servis pertama' : ''}.`}</p></details>`;
   };
   const draw = () => {
     const sets = S.rs[S.ri] || [], wa = sets.filter(s => s[0] > s[1]).length, wb = sets.filter(s => s[1] > s[0]).length;
@@ -2962,7 +2968,7 @@ function tvSlides(t) {
 function tvSlideHtml(t, sl) {
   if (sl.k === 'live') {
     const { occ, xr } = LV.liveState(t), nx = LV.nextUp(t), U = LV.umpirePlan(t);
-    return `<h2 class="tv-h">🟢 Sedang berlangsung</h2><div class="tv-tables" style="--tvc:${(n => (n <= 1 ? 1 : n <= 4 ? 2 : n <= 6 ? 3 : 4))(LV.tableList(t).length)}">${LV.tableList(t).map(({ k }) => {
+    return `<h2 class="tv-h">🟢 Sedang berlangsung</h2><div class="tv-tables" style="--tvc:${(n => (n <= 1 ? 1 : n <= 4 ? 2 : n <= 6 ? 3 : 4))(LV.tableList(t).length)};--tvcp:${LV.tableList(t).length <= 3 ? 1 : 2}">${LV.tableList(t).map(({ k }) => {
       const m = occ[k], ri = xr[k], u = m && ri == null ? LV.umpireOf(t, m, U) : '', x = m ? liveOf(t, m, m.id + (ri != null ? '~' + ri : '')) : null;
       return `<div class="tv-tt ${m ? '' : 'free'}"><div class="tv-tno">MEJA ${k}</div>
         ${m ? `<div class="tv-court${x ? ' live' : ''}">${x && x.sw ? courtSide(t, m, 1, x) : courtSide(t, m, 0, x)}<i></i>${x && x.sw ? courtSide(t, m, 0, x) : courtSide(t, m, 1, x)}</div>

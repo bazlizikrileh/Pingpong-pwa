@@ -543,7 +543,7 @@ body.tv main#app { max-width:none; padding:0; margin:0; }
 .tv-foot { display:flex; justify-content:space-between; align-items:center; padding:.6vw 2vw; background: rgba(0,0,0,.25); }
 .tv-dots i { display:inline-block; width:.8vw; height:.8vw; border-radius:50%; background: rgba(255,255,255,.3); margin-right:.4vw; } .tv-dots i.on { background:#ffb02e; }
 .tv-ctl { display:flex; gap:.6vw; } .tv-ctl button, .tv-ctl a { background: rgba(255,255,255,.12); color:#fff; border:0; border-radius:99px; padding:.4vw 1vw; font-size:1vw; text-decoration:none; cursor:pointer; }
-@media (orientation: portrait) { .tv-wrap { font-size:2.4vw; } .tv-tables { grid-template-columns: 1fr; } .tv-cols { grid-template-columns: 1fr; } }
+@media (orientation: portrait) { .tv-wrap { font-size:2.4vw; } .tv-tables { grid-template-columns: repeat(var(--tvcp, 1), minmax(0, 1fr)); } .tv-cols { grid-template-columns: 1fr; } }
 
 .tv-fit { display:flex; justify-content:center; } .tv-scale { width:max-content; } .tv-scale * { overflow:visible !important; }
 
@@ -814,7 +814,11 @@ table.rp-mx td.sets span { white-space:nowrap; display:inline-block; margin-righ
 
 /* Mod TV: meja melintang ikut nisbah meja sebenar (274 × 152.5 cm), jaring tebal menegak, garis tengah halus melintang.
    Saiz meja & tulisan dikira daripada ruang kad (container query), jadi muat untuk 1–8 meja. */
-.tv-tt { container-type: size; justify-content:center; --W: min(100cqw - 1.6vw, 72cqh * 1.797); }
+.tv-tt { container-type: size; justify-content:center; overflow:hidden; --W: min(100cqw - 1.6vw, 72cqh * 1.797); }
+/* kad kecil (telefon potret / banyak meja): kurangkan ruang meja supaya nombor meja & maklumat bawah muat, satu baris setiap satu */
+@container (max-height: 220px) { .tv-tt > * { --W: min(100cqw - 1.6vw, 58cqh * 1.797); } }
+@container (max-height: 150px) { .tv-tt > * { --W: min(100cqw - 1.6vw, 48cqh * 1.797); } }
+.tv-tt .tv-sub { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .tv-tt > * { width: var(--W); margin: 0 auto; flex:none; }
 .tv-tt .tv-court { aspect-ratio: 274 / 152.5; min-height:0; grid-template-columns: 1fr auto 1fr; }
 .tv-tt .tv-tno { font-size: max(12px, calc(var(--W) * .04)); }
