@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.57.1';
+const VERSION = '3.58.0';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -1989,14 +1989,15 @@ function regCard(t) {
   if (!regOn(t) && !regs.length) return `<div class="card">${shareRow(t)}</div>`;
   const rows = [...rosterOf(t), ...(admin ? regs.filter(r => r.status === 'no') : [])];
   const mine = regs.find(r => r.uid === uid), ok = regs.filter(r => r.status === 'ok');
-  const S = E.HC_SCHEMES[t.hcMode], lvName = c => { const L = E.levelInfo(t, c); return L ? L[1] : ''; };
+  const S = E.HC_SCHEMES[t.hcMode], lv1 = c => { const L = E.levelInfo(t, c); return L ? L[1] : ''; }, lvName = c => lvBoth(t, c, lv1);
   const notIn = ok.filter(r => !personsOf(t).some(n => n.toLowerCase() === r.name.toLowerCase()));
   const formHtml = r => `<div class="reg-form" id="regForm" ${mine && !r ? 'hidden' : ''}>
       <label>Nama penuh</label><input id="rgFull" maxlength="80" value="${esc(r ? r.full || '' : cloud.state.user?.name || '')}" placeholder="cth. Mohd Hazlan bin Mohd Haliman">
       <div class="grid2"><div><label>Nama panggilan <small class="muted">(untuk jadual & undian)</small></label><input id="rgName" maxlength="40" value="${esc(r ? r.name : (cloud.state.user?.name || '').split(' ').slice(0, 2).join(' '))}" placeholder="cth. Hazlan"></div>
       <div><label>Unit / Jabatan / Kumpulan</label><input id="rgUnit" maxlength="40" value="${esc(r ? r.unit : '')}"></div></div>
-      ${S ? `<label>Tahap</label><select id="rgLv">${opt({ '': '— pilih tahap —', ...Object.fromEntries(S.levels.map(l => [l[0], l[1]])) }, r ? r.level : '')}</select>` : ''}
+      ${S ? `<label>Tahap</label><select id="rgLv">${opt({ '': '— pilih tahap —', ...Object.fromEntries(S.levels.map(l => [l[0], l[1]])) }, r ? lvParts(r.level)[0] : '')}</select>` : ''}
       ${t.entryMode === 'double' ? `<label>Nama pasangan</label><input id="rgPartner" maxlength="40" value="${esc(r ? r.partner : '')}" placeholder="pasangan anda">` : ''}
+      ${pairLv(t) ? `<label>Tahap pasangan</label><select id="rgLv2">${opt({ '': '— pilih tahap pasangan —', ...Object.fromEntries(S.levels.map(l => [l[0], l[1]])) }, r ? lvParts(r.level)[1] || '' : '')}</select>` : ''}
       <label>Catatan (pilihan)</label><input id="rgNote" maxlength="140" value="${esc(r ? r.note : '')}">
       <div class="row" style="margin-top:10px"><button type="button" class="pill-btn orange" id="rgSave"><span class="dot"></span>${r ? 'Simpan perubahan' : 'Daftar'}</button></div></div>`;
   return `<div class="card reg-card">
@@ -2034,14 +2035,15 @@ function wireReg(t) {
     if (!name) return toast('Isi nama paparan');
     if ($('rgLv') && !$('rgLv').value) return toast('Pilih tahap anda');
     if ($('rgPartner') && !$('rgPartner').value.trim()) return toast('Isi nama pasangan');
+    if ($('rgLv2') && !$('rgLv2').value) return toast('Pilih tahap pasangan');
     if ($('rgCond') && !$('rgCond').checked) return toast('Sila sahkan anda memenuhi syarat penyertaan');
     $('rgSave').disabled = true;
     try {
       const editId = _rgEdit && _rgEdit !== 'new' ? _rgEdit : '', isNew = !editId;
       const firstReg = !(cloud.state.regs[t.id] || []).some(r => r.uid === cloud.myUid());
-      const data = { name, full: $('rgFull') ? $('rgFull').value.trim() : '', unit: $('rgUnit').value.trim(), level: $('rgLv') ? $('rgLv').value : '', partner: $('rgPartner') ? $('rgPartner').value.trim() : '', note: $('rgNote').value.trim() };
+      const data = { name, full: $('rgFull') ? $('rgFull').value.trim() : '', unit: $('rgUnit').value.trim(), level: $('rgLv') ? $('rgLv').value + ($('rgLv2') && $('rgLv2').value ? '/' + $('rgLv2').value : '') : '', partner: $('rgPartner') ? $('rgPartner').value.trim() : '', note: $('rgNote').value.trim() };
       await cloud.register(t.id, data, editId);
-      if (firstReg || (editId && editId === cloud.myUid())) setProfile({ name: data.name, full: data.full, unit: data.unit, level: data.level, partner: data.partner || profile().partner || '' });
+      if (firstReg || (editId && editId === cloud.myUid())) setProfile({ name: data.name, full: data.full, unit: data.unit, level: lvParts(data.level)[0], partner: data.partner || profile().partner || '' });
       ls.set('pingpong:myRegs', JSON.stringify([...new Set([t.id, ...myRegTids()])].slice(0, 30)));
       try { const L = JSON.parse(ls.get('pingpong:regn:' + t.id) || '[]'); if (!L.includes(data.name)) L.push(data.name); ls.set('pingpong:regn:' + t.id, JSON.stringify(L.slice(-10))); } catch {}
       _rgEdit = null;
@@ -2073,7 +2075,7 @@ function wireReg(t) {
     const regs = (cloud.state.regs[t.id] || []).filter(r => r.status === 'ok' && !personsOf(t).some(n => n.toLowerCase() === r.name.toLowerCase()));
     if (t.matches.length) return toast('Jadual sudah dijana. Gunakan ↺ Reset jadual dahulu untuk menambah peserta.', 4000);
     regs.forEach(r => {
-      if (r.level) { E.setLevel(t, r.name, r.level); }
+      if (r.level) { const [a, b] = lvParts(r.level); if (a) E.setLevel(t, r.name, a); if (b && r.partner) E.setLevel(t, r.partner, b); }
       if (E.usesDraw(t)) t.individuals.push({ id: E.uid(), name: r.name, unit: r.unit || '' });
       else if (t.entryMode === 'double') t.participants.push({ id: E.uid(), name: `${r.name} & ${r.partner}`, unit: r.unit || '', hc: 0, members: [r.name, r.partner] });
       else t.participants.push({ id: E.uid(), name: r.name, unit: r.unit || '', hc: 0, members: [r.name] });
@@ -2115,6 +2117,10 @@ function wireProfileCard(root = document) {
     catch (e) { toast('Gagal: ' + (e.code === 'auth/popup-closed-by-user' ? 'dibatalkan' : e.code || e.message)); b.disabled = false; }
   }));
 }
+// Tahap pendaftaran regu berhandicap: "<tahap sendiri>/<tahap pasangan>" dalam medan level (cth. "N/S")
+const lvParts = v => String(v || '').split('/');
+const lvBoth = (t, v, one) => lvParts(v).map(c => one(c)).filter(Boolean).join(' + ');
+const pairLv = t => t.entryMode === 'double' && !!E.HC_SCHEMES[t.hcMode];
 const myRegTids = () => { try { return JSON.parse(ls.get('pingpong:myRegs') || '[]'); } catch { return []; } };
 let _rgEdit = null;
 function condTags(t) {
@@ -2128,11 +2134,11 @@ function viewDaftar(t) {
   cloud.watchRegistrations(t.id);
   const uid = cloud.myUid(), mineList = (cloud.state.regs[t.id] || []).filter(r => uid && r.uid === uid), regs = rosterOf(t), ok = regs.filter(r => r.status === 'ok');
   const mine = mineList[0] || null;
-  const lvName = x => { const L = E.levelInfo(t, x); return L ? L[1] : ''; };
+  const lv1 = x => { const L = E.levelInfo(t, x); return L ? L[1] : ''; }, lvName = x => lvBoth(t, x, lv1);
   if (_rgEdit && _rgEdit !== 'new' && !mineList.some(x => x.id === _rgEdit)) _rgEdit = null;
   const r = _rgEdit && _rgEdit !== 'new' ? mineList.find(x => x.id === _rgEdit) : null;
   const prof = profile(), first = !mineList.length;
-  const lvOpts = S ? S.levels.filter(l => !(t.regLevels || []).length || t.regLevels.includes(l[0]) || (r && r.level === l[0])) : [];
+  const lvOpts = S ? S.levels.filter(l => !(t.regLevels || []).length || t.regLevels.includes(l[0]) || (r && lvParts(r.level).includes(l[0]))) : [];
   const quick = first && !r && prof.name && (!S || !(t.regLevels || []).length || !prof.level || t.regLevels.includes(prof.level));
   const form = `<div class="reg-form" id="regForm">
       ${!first && !r ? '<div class="section-title" style="margin-top:0">➕ Daftar orang lain</div>' : ''}
@@ -2143,10 +2149,11 @@ function viewDaftar(t) {
       <label>Nama penuh</label><input id="rgFull" maxlength="80" value="${esc(r ? r.full || '' : first ? prof.full || '' : '')}" placeholder="cth. Mohd Hazlan bin Mohd Haliman" autocomplete="${first ? 'name' : 'off'}">
       <label>Nama panggilan <small class="muted">(dipapar dalam jadual, undian & keputusan)</small></label><input id="rgName" maxlength="40" value="${esc(r ? r.name : first ? prof.name || '' : '')}" placeholder="cth. Hazlan">
       <label>Unit / Jabatan / Kumpulan (pilihan)</label><input id="rgUnit" maxlength="40" value="${esc(r ? r.unit : first ? prof.unit || '' : '')}">
-      ${S ? `<label>Tahap</label><select id="rgLv">${opt({ '': '— pilih tahap —', ...Object.fromEntries(lvOpts.map(l => [l[0], l[1]])) }, r ? r.level : first ? prof.level || '' : '')}</select>` : ''}
+      ${S ? `<label>Tahap${pairLv(t) ? ' anda' : ''}</label><select id="rgLv">${opt({ '': '— pilih tahap —', ...Object.fromEntries(lvOpts.map(l => [l[0], l[1]])) }, r ? lvParts(r.level)[0] : first ? prof.level || '' : '')}</select>` : ''}
       <label>Catatan (pilihan)</label><input id="rgNote" maxlength="140" value="${esc(r ? r.note : '')}" placeholder="cth. no. telefon / saiz baju">
       </div>
       ${t.entryMode === 'double' ? `<label>Nama pasangan</label><input id="rgPartner" maxlength="40" value="${esc(r ? r.partner : first ? prof.partner || '' : '')}">` : ''}
+      ${pairLv(t) ? `<label>Tahap pasangan <small class="muted">(untuk kiraan handicap regu)</small></label><select id="rgLv2">${opt({ '': '— pilih tahap pasangan —', ...Object.fromEntries(lvOpts.map(l => [l[0], l[1]])) }, r ? lvParts(r.level)[1] || '' : '')}</select>` : ''}
       ${t.regCond ? `<label class="check" style="margin-top:10px"><input type="checkbox" id="rgCond" ${r ? 'checked' : ''}> <span>Saya memenuhi syarat penyertaan:<br><b style="white-space:pre-line">${esc(t.regCond)}</b></span></label>` : ''}
       <button type="button" class="pill-btn orange big" id="rgSave" style="margin-top:14px;width:100%"><span class="dot"></span>${r ? 'Simpan perubahan' : quick ? `Daftar sebagai ${esc(prof.name)}` : 'Daftar sekarang'}</button>
       ${_rgEdit ? '<button type="button" class="pill-btn light small" id="rgBack" style="margin-top:8px">Batal</button>' : ''}
