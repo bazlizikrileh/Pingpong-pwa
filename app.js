@@ -5,13 +5,15 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.56.2';
+const VERSION = '3.56.3';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ENTRY = { single: 'Perseorangan', double: 'Regu (pasangan pilihan)', double_draw: 'Regu (pasangan diundi)', mixer: 'Regu bertukar (pasangan bertukar setiap perlawanan)', team: 'Trio / Kuartet (diundi)' };
+// jenis mata handicap tahap bagi format pertandingan: perseorangan → Single; regu (pilihan/diundi/bertukar) → Double; trio/kuartet → kedua-dua
+const hcKinds = t => (E.isTeam(t) ? [...new Set(E.rubberTypes(t))] : [t.entryMode === 'single' ? 'S' : 'D']);
 const ENTRY_SHORT = { single: 'Perseorangan', double: 'Regu', double_draw: 'Regu diundi', mixer: 'Regu bertukar', team: 'Trio' };
 const UNIT = t => t.entryMode === 'single' || t.entryMode === 'mixer' ? 'Pemain' : t.entryMode === 'team' ? E.teamWord(t) : t.entryMode === 'double_draw' ? 'Regu' : 'Pasangan';
 const FORMAT = { group_ko: 'Kumpulan + kalah mati', rr: 'Liga (semua lawan semua)', ko: 'Kalah mati sahaja' };
@@ -1685,7 +1687,13 @@ function rulesOf(t) {
   if (!E.isMixer(t)) rules.push('Jika mata sama, susunan ditentukan mengikut turutan: (1) beza menang-kalah bilangan perlawanan, (2) beza menang-kalah bilangan set, (3) keputusan bersemuka (pertemuan sesama peserta yang masih sama; jika tiga atau lebih, bilangan kemenangan sesama mereka), (4) beza menang-kalah bilangan mata permainan. Contoh: 5-2 (+3).');
   const HS = E.HC_SCHEMES[t.hcMode];
   if (t.hcMode === 'manual') rules.push('Handicap (mata mula): angka dalam kurungan ialah mata yang diberi kepada pihak lawan, maksimum 5. Mata mula = beza antara angka kedua-dua pihak. Pihak dengan angka lebih rendah mula dengan mata tersebut pada setiap game.');
-  else if (HS) rules.push(`Handicap ${HS.name} (mata mula setiap game). Nilai single: ${HS.levels.map(l => `${l[1]} ${l[2]}`).join(', ')}. Single: pihak bernilai rendah mula dengan beza nilai (cth. ${HS.levels[HS.levels.length - 1][1]} lwn ${HS.levels[0][1]}: mula ${HS.levels[0][2] - HS.levels[HS.levels.length - 1][2]}-0). Nilai double: ${HS.levels.map(l => `${l[1]} ${l[3]}`).join(', ')}. Double: nilai dua ahli dijumlahkan, beza maksimum ${HS.capD} mata.`);
+  else if (HS) {
+    // hanya nilai bagi format yang dipilih (single / double); trio/kuartet: kedua-duanya
+    const K = hcKinds(t), lo = HS.levels[HS.levels.length - 1], hi = HS.levels[0];
+    const sTxt = `${K.length > 1 ? 'Nilai single' : 'Nilai'}: ${HS.levels.map(l => `${l[1]} ${l[2]}`).join(', ')}. ${K.length > 1 ? 'Single: p' : 'P'}ihak bernilai rendah mula dengan beza nilai (cth. ${lo[1]} lwn ${hi[1]}: mula ${hi[2] - lo[2]}-0).`;
+    const dTxt = `${K.length > 1 ? 'Nilai double' : 'Nilai setiap pemain'}: ${HS.levels.map(l => `${l[1]} ${l[3]}`).join(', ')}. ${K.length > 1 ? 'Double: n' : 'N'}ilai dua ahli dijumlahkan; pasangan bernilai rendah mula dengan beza nilai, maksimum ${HS.capD} mata (cth. ${lo[1]} + ${lo[1]} lwn ${hi[1]} + ${hi[1]}: mula ${Math.min(HS.capD, 2 * (hi[3] - lo[3]))}-0).`;
+    rules.push(`Handicap ${HS.name} (mata mula setiap game, ${K.length > 1 ? 'single & double' : K[0] === 'S' ? 'perseorangan' : 'regu'}). ${K.map(k => (k === 'S' ? sTxt : dTxt)).join(' ')}`);
+  }
   rules.push('Jika kaedah di atas gagal, penganjur berhak menggunakan kaedah yang difikirkan perlu dan munasabah. Keputusan penganjur adalah muktamad.');
   return rules;
 }
@@ -1737,13 +1745,13 @@ function rosterOf(t) {
 function levelsCard(t) {
   const S = E.HC_SCHEMES[E.lvScheme(t)]; if (!S) return '';
   const P = personsOf(t); if (!P.length) return '';
-  const hcOn = !!E.HC_SCHEMES[t.hcMode];   // tahap untuk handicap, atau hanya untuk imbang regu (regu bertukar)
+  const hcOn = !!E.HC_SCHEMES[t.hcMode], K = hcKinds(t);   // tahap untuk handicap, atau hanya untuk imbang regu (regu bertukar)
   const admin = canAdmin(t), missing = P.filter(n => !E.levelOf(t, n)).length;
   const chip = c => { const L = E.levelInfo(t, c); return L ? `<span class="lv lv-${c}">${esc(L[1])}</span>` : '<span class="lv none">—</span>'; };
   return `<details class="card fold" data-fold="lv" ${missing && admin ? 'open' : ''}><summary>🎚️ ${hcOn ? 'Tahap handicap' : 'Tahap pemain (imbang regu)'} · ${esc(S.name)}${missing ? ` <span class="role-chip">${missing} belum</span>` : ''}</summary>
-    <table class="lv-tab"><tr><th></th>${S.levels.map(l => `<th>${esc(l[1])}</th>`).join('')}</tr><tr><td>Single</td>${S.levels.map(l => `<td>${l[2]}</td>`).join('')}</tr><tr><td>Double</td>${S.levels.map(l => `<td>${l[3]}</td>`).join('')}</tr></table>
-    <p class="muted small">${hcOn ? `Pihak bernilai rendah mula dengan beza nilai. Double: jumlah dua ahli, maks. ${S.capD}.` : 'Tahap digunakan untuk mengimbangkan regu semasa undian (tiada mata handicap). Mod meja pantas menggunakannya serta-merta; jadual penuh perlu dijana semula selepas tahap diubah.'}</p>
-    <div class="lv-list">${P.map(n => `<div class="lv-row"><span>${esc(n)}</span>${admin ? `<select data-lvn="${esc(n)}">${opt({ '': '— tahap —', ...Object.fromEntries(S.levels.map(l => [l[0], `${l[1]} (S${l[2]} · D${l[3]})`])) }, E.levelOf(t, n))}</select>` : chip(E.levelOf(t, n))}</div>`).join('')}</div></details>`;
+    ${hcOn ? `<table class="lv-tab"><tr><th></th>${S.levels.map(l => `<th>${esc(l[1])}</th>`).join('')}</tr>${K.map(k => `<tr><td>${K.length > 1 ? (k === 'S' ? 'Single' : 'Double') : 'Mata'}</td>${S.levels.map(l => `<td>${k === 'S' ? l[2] : l[3]}</td>`).join('')}</tr>`).join('')}</table>` : ''}
+    <p class="muted small">${hcOn ? (K.length > 1 ? `Pihak bernilai rendah mula dengan beza nilai. Double: jumlah dua ahli, maks. ${S.capD}.` : K[0] === 'S' ? 'Format perseorangan: pihak bernilai rendah mula dengan beza nilai.' : `Format regu: nilai dua ahli dijumlahkan; pasangan bernilai rendah mula dengan beza nilai, maks. ${S.capD}.`) : 'Tahap digunakan untuk mengimbangkan regu semasa undian (tiada mata handicap). Mod meja pantas menggunakannya serta-merta; jadual penuh perlu dijana semula selepas tahap diubah.'}</p>
+    <div class="lv-list">${P.map(n => `<div class="lv-row"><span>${esc(n)}</span>${admin ? `<select data-lvn="${esc(n)}">${opt({ '': '— tahap —', ...Object.fromEntries(S.levels.map(l => [l[0], hcOn ? `${l[1]} (${K.length > 1 ? `S${l[2]} · D${l[3]}` : K[0] === 'S' ? l[2] : l[3]})` : l[1]])) }, E.levelOf(t, n))}</select>` : chip(E.levelOf(t, n))}</div>`).join('')}</div></details>`;
 }
 // ---------- Pautan kongsi ----------
 // Tempat hanya dikira bila penganjur sahkan (atau nama ditambah sendiri oleh penganjur)
