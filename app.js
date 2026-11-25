@@ -5,7 +5,7 @@ import * as cloud from './cloud.js';
 import * as LV from './live.js';
 import * as PUSH from './push.js';
 
-const VERSION = '3.56.0';
+const VERSION = '3.56.1';
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 const $head = document.getElementById('thead');
@@ -2574,7 +2574,19 @@ function tick(kind) {
   try {
     _ac = _ac || new (window.AudioContext || window.webkitAudioContext)();
     if (_ac.state === 'suspended') _ac.resume();
-    const o = _ac.createOscillator(), g = _ac.createGain(), t0 = _ac.currentTime;
+    const t0 = _ac.currentTime;
+    // set tamat: tiga nada naik; perlawanan tamat: fanfara (lebih "ultimate") — berbeza daripada bunyi setiap mata (sama seperti Portal Carrom C1.16.2)
+    const seq = kind === 'game' ? [[784, 0, 0.12], [988, 0.11, 0.12], [1319, 0.22, 0.45]]
+      : kind === 'match' ? [[523, 0, 0.14], [659, 0.13, 0.14], [784, 0.26, 0.14], [1047, 0.39, 0.3], [784, 0.62, 0.12], [1047, 0.74, 0.9]] : null;
+    if (seq) {
+      for (const [f, at, d] of seq) for (const [type, mul, vol] of [['triangle', 1, 0.32], ['square', 2, 0.06]]) {
+        const o = _ac.createOscillator(), g = _ac.createGain(); o.type = type; o.frequency.value = f * mul;
+        g.gain.setValueAtTime(0.0001, t0 + at); g.gain.exponentialRampToValueAtTime(vol, t0 + at + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + d);
+        o.connect(g).connect(_ac.destination); o.start(t0 + at); o.stop(t0 + at + d + 0.05);
+      }
+      return;
+    }
+    const o = _ac.createOscillator(), g = _ac.createGain();
     o.type = 'square'; o.frequency.value = kind === 'down' ? 330 : kind === 'set' ? 990 : 660;
     g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.35, t0 + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t0 + (kind === 'set' ? 0.35 : 0.08));
     o.connect(g).connect(_ac.destination); o.start(t0); o.stop(t0 + 0.4);
@@ -2585,7 +2597,7 @@ const VIB = { soft: ['🫧 Lembut', 30], strong: ['📳 Kuat', 90], off: ['📴 
 const vibMode = () => (VIB[ls.get('pingpong:lsVib')] ? ls.get('pingpong:lsVib') : 'soft');
 function buzz(n = 1) {
   const ms = VIB[vibMode()][1]; if (!ms) return;
-  try { navigator.vibrate && navigator.vibrate(n > 1 ? [ms, 70, ms] : ms); } catch {}
+  try { navigator.vibrate && navigator.vibrate(n > 2 ? [ms, 60, ms, 60, ms * 3] : n > 1 ? [ms, 70, ms] : ms); } catch {}
 }
 const gameOver = (a, b) => (a >= 11 || b >= 11) && Math.abs(a - b) >= 2;
 function lsStart(t, m, ri) {
@@ -2709,9 +2721,10 @@ function viewLiveScore(t, mid0) {
       } else toast(`Set ${g} tamat · ${S.cur[0]}–${S.cur[1]}`, 1800);
       S.cur = allDone() ? [0, 0] : lsStart(t, m, S.ri);
     }
-    buzz(d > 0 ? 1 : 2);
-    const setEnd = d > 0 && JSON.parse(H[H.length - 1]).rs.flat().length !== S.rs.flat().length;
-    tick(d < 0 ? 'down' : setEnd ? 'set' : 'up');
+    const setEnd = d > 0 && JSON.parse(H[H.length - 1]).rs.flat().length !== S.rs.flat().length, matchEnd = setEnd && allDone();
+    buzz(d < 0 ? 2 : matchEnd ? 3 : setEnd ? 2 : 1);
+    tick(d < 0 ? 'down' : matchEnd ? 'match' : setEnd ? 'game' : 'up');
+    if (matchEnd) setTimeout(() => { if (ls.get('pingpong:lsSound') !== '0') import('./sound.js').then(S => S.sfx('done')).catch(() => {}); }, 1500);
     push(); draw();
     const el = $app.querySelector(`.sb-side.s${k}`); if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
   };
